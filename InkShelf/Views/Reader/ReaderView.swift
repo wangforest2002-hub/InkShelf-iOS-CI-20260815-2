@@ -5,14 +5,19 @@ struct ReaderView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(LibraryStore.self) private var library
+    @Environment(AICompanionStore.self) private var companion
     let book: Book
 
     @State private var currentPage: Int
     @State private var pageCount: Int
     @State private var imageURLs: [URL] = []
+    @State private var ebookPackage: EBookPackage?
+    @State private var ebookProgress: Double
     @State private var controlsVisible = true
     @State private var showSettings = false
     @State private var showThumbnails = false
+    @State private var showAICompanion = false
+    @State private var showEndComments = false
     @State private var pdfLocked = false
     @State private var passwordDraft = ""
     @State private var pdfPassword = ""
@@ -25,24 +30,57 @@ struct ReaderView: View {
     @AppStorage("reader.backdrop") private var backdropRaw = ReaderBackdrop.black.rawValue
     @AppStorage("reader.coverSingle") private var coverSingle = true
     @AppStorage("reader.keepAwake") private var keepAwake = true
+    @AppStorage("ai.enabled") private var aiEnabled = false
+    @AppStorage("ai.autoDanmaku") private var autoDanmaku = true
+    @AppStorage("ai.autoShowEnd") private var autoShowEnd = true
+    @AppStorage("ebook.flow") private var ebookFlowRaw = EBookFlow.paged.rawValue
+    @AppStorage("ebook.theme") private var ebookThemeRaw = EBookTheme.paper.rawValue
+    @AppStorage("ebook.font") private var ebookFontRaw = EBookFont.serif.rawValue
+    @AppStorage("ebook.fontSize") private var ebookFontSize = 19.0
+    @AppStorage("ebook.lineHeight") private var ebookLineHeight = 1.72
+    @AppStorage("ebook.margin") private var ebookMargin = 24.0
 
     init(book: Book) {
         self.book = book
         _currentPage = State(initialValue: min(max(0, book.currentPage), max(0, book.pageCount - 1)))
         _pageCount = State(initialValue: max(1, book.pageCount))
+        _ebookProgress = State(initialValue: book.ebookChapterProgress ?? 0)
     }
 
     private var layout: ReaderLayout { ReaderLayout(rawValue: layoutRaw) ?? .single }
     private var flow: ReaderFlow { ReaderFlow(rawValue: flowRaw) ?? .horizontal }
     private var order: ReadingOrder { ReadingOrder(rawValue: orderRaw) ?? .leftToRight }
     private var backdrop: ReaderBackdrop { ReaderBackdrop(rawValue: backdropRaw) ?? .black }
+    private var ebookFlow: EBookFlow { EBookFlow(rawValue: ebookFlowRaw) ?? .paged }
+    private var ebookTheme: EBookTheme { EBookTheme(rawValue: ebookThemeRaw) ?? .paper }
+    private var ebookFont: EBookFont { EBookFont(rawValue: ebookFontRaw) ?? .serif }
 
     var body: some View {
         ZStack {
-            backdrop.color.ignoresSafeArea()
+            (book.kind == .ebook ? ebookTheme.color : backdrop.color).ignoresSafeArea()
 
             readerContent
                 .ignoresSafeArea()
+
+            if aiEnabled,
+               autoDanmaku,
+               let reaction = companion.currentReaction,
+               reaction.page == currentPage {
+                DanmakuOverlay(
+                    messages: reaction.danmaku,
+                    pageToken: "\(book.id)-\(currentPage)-\(reaction.id)"
+                )
+                .transition(.opacity)
+            }
+
+            if companion.activity.isBusy, companion.currentBookID == book.id {
+                VStack {
+                    AIReadingPill(activity: companion.activity)
+                        .padding(.top, 62)
+                    Spacer()
+                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
 
             if pdfLocked {
                 PDFPasswordOverlay(
@@ -60,10 +98,14 @@ struct ReaderView: View {
                     currentPage: $currentPage,
                     pageCount: pageCount,
                     layout: layout,
+                    ebookFlow: ebookFlow,
+                    isEBook: book.kind == .ebook,
+                    aiEnabled: aiEnabled && companion.hasAPIKey,
                     isFavorite: favoriteState,
                     dismiss: { dismiss() },
                     toggleFavorite: { library.toggleFavorite(book.id) },
                     toggleLayout: toggleLayout,
+                    showAICompanion: openAICompanion,
                     showThumbnails: { showThumbnails = true },
                     showSettings: { showSettings = true }
                 )
@@ -74,26 +116,40 @@ struct ReaderView: View {
         .toolbar(.hidden, for: .tabBar)
         .statusBarHidden(!controlsVisible)
         .persistentSystemOverlays(controlsVisible ? .automatic : .hidden)
-        .preferredColorScheme(.dark)
+        .preferredColorScheme(book.kind == .ebook ? (ebookTheme == .night ? .dark : .light) : .dark)
         .sensoryFeedback(.selection, trigger: currentPage)
         .onAppear {
             library.markOpened(book.id)
-            if book.kind != .pdf {
+            if book.kind == .ebook {
+                ebookPackage = library.ebookPackage(for: book)
+                pageCount = max(1, ebookPackage?.chapters.count ?? book.pageCount)
+            } else if book.kind != .pdf {
                 imageURLs = library.pageURLs(for: book)
                 pageCount = max(1, imageURLs.count)
             }
             UIApplication.shared.isIdleTimerDisabled = keepAwake
             scheduleControlsHide()
+            if book.kind != .pdf { prepareAIPage() }
         }
         .onChange(of: currentPage) { _, newPage in
-            library.updateProgress(bookID: book.id, page: newPage)
+            if book.kind == .ebook {
+                library.updateEBookProgress(bookID: book.id, chapter: newPage, progression: ebookProgress)
+            } else {
+                library.updateProgress(bookID: book.id, page: newPage)
+            }
             if controlsVisible { scheduleControlsHide() }
+            prepareAIPage()
+        }
+        .onChange(of: ebookProgress) { _, newValue in
+            guard book.kind == .ebook else { return }
+            library.updateEBookProgress(bookID: book.id, chapter: currentPage, progression: newValue)
         }
         .onChange(of: keepAwake) { _, newValue in
             UIApplication.shared.isIdleTimerDisabled = newValue
         }
         .onDisappear {
             hideControlsTask?.cancel()
+            companion.cancelAll()
             library.flushProgress()
             UIApplication.shared.isIdleTimerDisabled = false
         }
@@ -104,26 +160,76 @@ struct ReaderView: View {
                 orderRaw: $orderRaw,
                 backdropRaw: $backdropRaw,
                 coverSingle: $coverSingle,
-                keepAwake: $keepAwake
+                keepAwake: $keepAwake,
+                isEBook: book.kind == .ebook,
+                ebookFlowRaw: $ebookFlowRaw,
+                ebookThemeRaw: $ebookThemeRaw,
+                ebookFontRaw: $ebookFontRaw,
+                ebookFontSize: $ebookFontSize,
+                ebookLineHeight: $ebookLineHeight,
+                ebookMargin: $ebookMargin
             )
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showThumbnails) {
-            ThumbnailBrowser(
-                book: book,
-                pdfURL: book.kind == .pdf ? library.contentURL(for: book) : nil,
-                imageURLs: imageURLs,
-                password: pdfPassword,
-                totalPageCount: pageCount,
-                currentPage: $currentPage
+            if let ebookPackage, book.kind == .ebook {
+                EBookNavigatorView(package: ebookPackage, chapterIndex: $currentPage)
+            } else {
+                ThumbnailBrowser(
+                    book: book,
+                    pdfURL: book.kind == .pdf ? library.contentURL(for: book) : nil,
+                    imageURLs: imageURLs,
+                    password: pdfPassword,
+                    totalPageCount: pageCount,
+                    currentPage: $currentPage
+                )
+            }
+        }
+        .sheet(isPresented: $showAICompanion) {
+            AICompanionPanel(
+                bookTitle: book.title,
+                page: currentPage,
+                pageCount: pageCount,
+                isLastPage: currentPage >= pageCount - 1,
+                showEndDiscussion: {
+                    showAICompanion = false
+                    showEndComments = true
+                }
             )
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $showEndComments) {
+            AIEndDiscussionView(bookTitle: book.title)
+        }
+        .onChange(of: companion.endDiscussion?.id) { _, newValue in
+            guard newValue != nil,
+                  autoShowEnd,
+                  currentPage >= pageCount - 1,
+                  !showAICompanion
+            else { return }
+            showEndComments = true
         }
     }
 
     @ViewBuilder
     private var readerContent: some View {
-        if book.kind == .pdf {
+        if book.kind == .ebook, let ebookPackage {
+            EBookReaderView(
+                packageURL: library.contentURL(for: book),
+                package: ebookPackage,
+                chapterIndex: $currentPage,
+                chapterProgress: $ebookProgress,
+                flow: ebookFlow,
+                theme: ebookTheme,
+                font: ebookFont,
+                fontSize: ebookFontSize,
+                lineHeight: ebookLineHeight,
+                margin: ebookMargin,
+                onTap: toggleControls
+            )
+        } else if book.kind == .pdf {
             PDFKitReaderView(
                 url: library.contentURL(for: book),
                 currentPage: $currentPage,
@@ -168,6 +274,10 @@ struct ReaderView: View {
                 pdfLocked = locked
             }
         }
+        if !locked,
+           (companion.currentBookID != book.id || companion.currentReaction?.page != currentPage) {
+            prepareAIPage()
+        }
     }
 
     private func unlockPDF() {
@@ -177,6 +287,13 @@ struct ReaderView: View {
     }
 
     private func toggleLayout() {
+        if book.kind == .ebook {
+            withAnimation(reduceMotion ? nil : .snappy) {
+                ebookFlowRaw = ebookFlow == .paged ? EBookFlow.scroll.rawValue : EBookFlow.paged.rawValue
+            }
+            showControlsTemporarily()
+            return
+        }
         withAnimation(reduceMotion ? nil : .snappy) {
             layoutRaw = layout == .single ? ReaderLayout.spread.rawValue : ReaderLayout.single.rawValue
         }
@@ -200,6 +317,36 @@ struct ReaderView: View {
         scheduleControlsHide()
     }
 
+    private func openAICompanion() {
+        if companion.currentBookID != book.id || companion.currentReaction?.page != currentPage {
+            prepareAIPage(force: true)
+        }
+        showAICompanion = true
+    }
+
+    private func prepareAIPage(force: Bool = false) {
+        guard aiEnabled, companion.hasAPIKey, force || autoDanmaku else { return }
+        let source: AIPageSource?
+        switch book.kind {
+        case .pdf:
+            guard !pdfLocked else { return }
+            source = .pdf(library.contentURL(for: book), password: pdfPassword)
+        case .archive, .imageCollection:
+            source = imageURLs.indices.contains(currentPage) ? .image(imageURLs[currentPage]) : nil
+        case .ebook:
+            if let ebookPackage, ebookPackage.chapters.indices.contains(currentPage) {
+                source = .ebookText(
+                    ebookPackage.chapters[currentPage].searchText,
+                    format: ebookPackage.format.rawValue
+                )
+            } else {
+                source = nil
+            }
+        }
+        guard let source else { return }
+        companion.preparePage(book: book, page: currentPage, pageCount: pageCount, source: source, force: force)
+    }
+
     private func scheduleControlsHide() {
         hideControlsTask?.cancel()
         hideControlsTask = Task {
@@ -218,10 +365,14 @@ private struct ReaderControls: View {
     @Binding var currentPage: Int
     let pageCount: Int
     let layout: ReaderLayout
+    let ebookFlow: EBookFlow
+    let isEBook: Bool
+    let aiEnabled: Bool
     let isFavorite: Bool
     let dismiss: () -> Void
     let toggleFavorite: () -> Void
     let toggleLayout: () -> Void
+    let showAICompanion: () -> Void
     let showThumbnails: () -> Void
     let showSettings: () -> Void
 
@@ -249,6 +400,14 @@ private struct ReaderControls: View {
                     .inkGlass(cornerRadius: 22)
 
                     Spacer(minLength: 4)
+
+                    Button(action: showAICompanion) {
+                        Image(systemName: "sparkles")
+                            .foregroundStyle(aiEnabled ? AppTheme.accent : .secondary)
+                            .frame(width: 34, height: 34)
+                    }
+                    .adaptiveGlassButton()
+                    .accessibilityLabel(aiEnabled ? "打开 AI 陪读" : "配置 AI 陪读")
 
                     Button(action: toggleFavorite) {
                         Image(systemName: isFavorite ? "star.fill" : "star")
@@ -297,14 +456,17 @@ private struct ReaderControls: View {
 
                 HStack(spacing: 14) {
                     Button(action: showThumbnails) {
-                        Label("缩略图", systemImage: "square.grid.3x3")
+                        Label(isEBook ? "目录" : "缩略图", systemImage: isEBook ? "list.bullet.indent" : "square.grid.3x3")
                     }
                     .frame(maxWidth: .infinity)
 
                     Divider().frame(height: 22)
 
                     Button(action: toggleLayout) {
-                        Label(layout == .single ? "单页" : "双页", systemImage: layout.systemImage)
+                        Label(
+                            isEBook ? ebookFlow.title : (layout == .single ? "单页" : "双页"),
+                            systemImage: isEBook ? ebookFlow.systemImage : layout.systemImage
+                        )
                     }
                     .frame(maxWidth: .infinity)
 

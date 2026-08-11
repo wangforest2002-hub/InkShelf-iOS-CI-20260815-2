@@ -98,6 +98,17 @@ final class LibraryStore {
         scheduleSave()
     }
 
+    func updateEBookProgress(bookID: UUID, chapter: Int, progression: Double) {
+        guard let index = books.firstIndex(where: { $0.id == bookID }), books[index].kind == .ebook else { return }
+        let chapterIndex = min(max(0, chapter), max(0, books[index].pageCount - 1))
+        let chapterProgress = min(max(0, progression), 1)
+        guard books[index].currentPage != chapterIndex || books[index].ebookChapterProgress != chapterProgress else { return }
+        books[index].currentPage = chapterIndex
+        books[index].ebookChapterProgress = chapterProgress
+        books[index].lastOpenedAt = .now
+        scheduleSave()
+    }
+
     func toggleFavorite(_ id: UUID) {
         guard let index = books.firstIndex(where: { $0.id == id }) else { return }
         books[index].isFavorite.toggle()
@@ -143,8 +154,15 @@ final class LibraryStore {
             .filter { fileManager.fileExists(atPath: $0.path) }
     }
 
+    func ebookPackage(for book: Book) -> EBookPackage? {
+        guard book.kind == .ebook,
+              let data = try? Data(contentsOf: contentURL(for: book))
+        else { return nil }
+        return try? JSONDecoder().decode(EBookPackage.self, from: data)
+    }
+
     func pageURLs(for book: Book) -> [URL] {
-        guard book.kind != .pdf else { return [] }
+        guard book.kind == .archive || book.kind == .imageCollection else { return [] }
         let folder = contentURL(for: book)
         let urls = (try? fileManager.contentsOfDirectory(
             at: folder,

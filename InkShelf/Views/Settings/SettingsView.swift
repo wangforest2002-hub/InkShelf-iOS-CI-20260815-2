@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @Environment(LibraryStore.self) private var library
+    @Environment(AICompanionStore.self) private var companion
     @AppStorage("appearance") private var appearance = AppAppearance.light.rawValue
     @AppStorage("reader.layout") private var layout = ReaderLayout.single.rawValue
     @AppStorage("reader.flow") private var flow = ReaderFlow.horizontal.rawValue
@@ -9,6 +10,9 @@ struct SettingsView: View {
     @AppStorage("reader.backdrop") private var backdrop = ReaderBackdrop.black.rawValue
     @AppStorage("reader.coverSingle") private var coverSingle = true
     @AppStorage("reader.keepAwake") private var keepAwake = true
+    @AppStorage("ebook.flow") private var ebookFlow = EBookFlow.paged.rawValue
+    @AppStorage("ebook.theme") private var ebookTheme = EBookTheme.paper.rawValue
+    @AppStorage("ebook.font") private var ebookFont = EBookFont.serif.rawValue
     @AppStorage("hasSeenWelcome") private var hasSeenWelcome = true
 
     var body: some View {
@@ -56,6 +60,35 @@ struct SettingsView: View {
                     Toggle("阅读时保持屏幕常亮", isOn: $keepAwake)
                 }
 
+                Section("电子书") {
+                    Picker("阅读方式", selection: $ebookFlow) {
+                        ForEach(EBookFlow.allCases) { item in
+                            Label(item.title, systemImage: item.systemImage).tag(item.rawValue)
+                        }
+                    }
+                    Picker("默认字体", selection: $ebookFont) {
+                        ForEach(EBookFont.allCases) { item in
+                            Text(item.title).tag(item.rawValue)
+                        }
+                    }
+                    Picker("默认主题", selection: $ebookTheme) {
+                        ForEach(EBookTheme.allCases) { item in
+                            Text(item.title).tag(item.rawValue)
+                        }
+                    }
+                }
+
+                Section("AI 陪读") {
+                    NavigationLink {
+                        AISettingsView()
+                    } label: {
+                        LabeledContent("DeepSeek 陪读") {
+                            Text(companion.hasAPIKey ? "已配置" : "未配置")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+
                 Section("存储与隐私") {
                     LabeledContent("源文件占用") {
                         Text(AppFormatters.fileSize(library.storageUsage))
@@ -65,7 +98,7 @@ struct SettingsView: View {
                     }
 
                     Label {
-                        Text("所有文件与阅读记录只保存在本机，不上传、不分析。封面缓存仅用于书架显示，源文件不会被修改。")
+                        Text("源文件与阅读记录只保存在本机，封面缓存仅用于书架显示，原文件不会被修改。启用 AI 后，仅将本机识别出的文字和粗略画面标签发送给 DeepSeek。")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     } icon: {

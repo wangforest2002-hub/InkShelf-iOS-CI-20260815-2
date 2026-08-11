@@ -99,7 +99,7 @@ struct LibraryView: View {
                         } label: {
                             Label("导入", systemImage: "plus")
                         }
-                        .accessibilityHint("从文件 App 导入 PDF、CBZ、ZIP 或图片")
+                        .accessibilityHint("从文件 App 导入 PDF、EPUB、电子书、CBZ、ZIP 或图片")
                     }
                 }
             }
@@ -161,7 +161,7 @@ struct LibraryView: View {
 
     @ViewBuilder
     private func bookContextMenu(_ book: Book) -> some View {
-        if book.kind != .pdf {
+        if book.kind == .archive || book.kind == .imageCollection {
             Button {
                 previewingBook = book
             } label: {

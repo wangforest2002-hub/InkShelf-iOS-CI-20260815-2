@@ -24,7 +24,7 @@ struct BookCard: View {
                         .accessibilityLabel("已收藏")
                 }
 
-                Text("\(book.pageCount)P")
+                Text(book.kind == .ebook ? "\(book.pageCount)章" : "\(book.pageCount)P")
                     .font(.caption2.monospacedDigit().weight(.bold))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 8)
@@ -122,6 +122,7 @@ private struct PlaceholderCover: View {
         case .pdf: [Color(red: 0.78, green: 0.91, blue: 1), Color(red: 0.86, green: 0.81, blue: 1)]
         case .archive: [Color(red: 1, green: 0.84, blue: 0.82), Color(red: 0.88, green: 0.82, blue: 1)]
         case .imageCollection: [Color(red: 0.75, green: 0.96, blue: 0.89), Color(red: 0.76, green: 0.90, blue: 1)]
+        case .ebook: [Color(red: 1.0, green: 0.91, blue: 0.72), Color(red: 0.78, green: 0.91, blue: 1.0)]
         }
     }
 }
@@ -145,7 +146,7 @@ struct BookPreview: View {
                 .foregroundStyle(.secondary)
             HStack(spacing: 10) {
                 Label(book.kind.label, systemImage: book.kind.systemImage)
-                Text("\(book.pageCount) 页")
+                Text(book.kind == .ebook ? "\(book.pageCount) 章" : "\(book.pageCount) 页")
                 Text(AppFormatters.fileSize(book.fileSize))
             }
             .font(.caption2)

@@ -69,7 +69,13 @@ enum BookImporter {
                         try importArchive(url, into: libraryURL)
                     }
                 default:
-                    throw BookImportError.unsupportedFile(url.lastPathComponent)
+                    if EBookImporter.supportedExtensions.contains(ext) {
+                        result = try withSecurityScopedAccess(to: url) {
+                            try EBookImporter.importBook(url, into: libraryURL)
+                        }
+                    } else {
+                        throw BookImportError.unsupportedFile(url.lastPathComponent)
+                    }
                 }
                 imported.append(result.0)
                 createdFolders.append(result.1)
