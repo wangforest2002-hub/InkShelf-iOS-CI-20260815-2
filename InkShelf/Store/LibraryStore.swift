@@ -1,0 +1,202 @@
+import Foundation
+import Observation
+
+struct LibraryAlert: Identifiable {
+    let id = UUID()
+    let title: String
+    let message: String
+}
+
+@MainActor
+@Observable
+final class LibraryStore {
+    private(set) var books: [Book] = []
+    private(set) var isImporting = false
+    var alert: LibraryAlert?
+
+    @ObservationIgnored private let fileManager = FileManager.default
+    @ObservationIgnored private let metadataURL: URL
+    @ObservationIgnored private var saveTask: Task<Void, Never>?
+    let libraryURL: URL
+
+    init() {
+        let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        libraryURL = documents.appendingPathComponent("InkShelf Library", isDirectory: true)
+        metadataURL = libraryURL.appendingPathComponent("library.json")
+        try? FileManager.default.createDirectory(at: libraryURL, withIntermediateDirectories: true)
+        load()
+    }
+
+    var storageUsage: Int64 {
+        books.reduce(0) { $0 + $1.fileSize }
+    }
+
+    func filteredBooks(scope: LibraryScope, query: String) -> [Book] {
+        books
+            .filter { scope == .all || $0.isFavorite }
+            .filter { query.isEmpty || $0.title.localizedCaseInsensitiveContains(query) }
+            .sorted {
+                let left = $0.lastOpenedAt ?? $0.importedAt
+                let right = $1.lastOpenedAt ?? $1.importedAt
+                return left > right
+            }
+    }
+
+    func importFiles(_ urls: [URL], cleanupDirectory: URL? = nil) {
+        guard !urls.isEmpty else {
+            if let cleanupDirectory { try? fileManager.removeItem(at: cleanupDirectory) }
+            return
+        }
+        guard !isImporting else {
+            if let cleanupDirectory { try? fileManager.removeItem(at: cleanupDirectory) }
+            alert = LibraryAlert(title: "正在导入", message: "请等待当前导入完成后再试。")
+            return
+        }
+        isImporting = true
+        let destination = libraryURL
+
+        Task {
+            defer {
+                if let cleanupDirectory {
+                    try? fileManager.removeItem(at: cleanupDirectory)
+                }
+            }
+            do {
+                let imported = try await BookImporter.importBooks(from: urls, into: destination)
+                books.append(contentsOf: imported)
+                saveImmediately()
+            } catch {
+                alert = LibraryAlert(
+                    title: "导入失败",
+                    message: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                )
+            }
+            isImporting = false
+        }
+    }
+
+    func markOpened(_ id: UUID) {
+        guard let index = books.firstIndex(where: { $0.id == id }) else { return }
+        books[index].lastOpenedAt = .now
+        scheduleSave()
+    }
+
+    func updateProgress(bookID: UUID, page: Int) {
+        guard let index = books.firstIndex(where: { $0.id == bookID }) else { return }
+        let clamped = min(max(0, page), max(0, books[index].pageCount - 1))
+        guard books[index].currentPage != clamped else { return }
+        books[index].currentPage = clamped
+        books[index].lastOpenedAt = .now
+        scheduleSave()
+    }
+
+    func updatePageCount(bookID: UUID, pageCount: Int) {
+        guard pageCount > 0, let index = books.firstIndex(where: { $0.id == bookID }) else { return }
+        guard books[index].pageCount != pageCount else { return }
+        books[index].pageCount = pageCount
+        books[index].currentPage = min(books[index].currentPage, pageCount - 1)
+        scheduleSave()
+    }
+
+    func toggleFavorite(_ id: UUID) {
+        guard let index = books.firstIndex(where: { $0.id == id }) else { return }
+        books[index].isFavorite.toggle()
+        saveImmediately()
+    }
+
+    func rename(_ id: UUID, to newTitle: String) {
+        let title = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty, let index = books.firstIndex(where: { $0.id == id }) else { return }
+        books[index].title = title
+        saveImmediately()
+    }
+
+    func delete(_ book: Book) {
+        let folder = libraryURL.appendingPathComponent(book.folderName, isDirectory: true)
+        do {
+            if fileManager.fileExists(atPath: folder.path) {
+                try fileManager.removeItem(at: folder)
+            }
+            books.removeAll { $0.id == book.id }
+            saveImmediately()
+        } catch {
+            alert = LibraryAlert(title: "无法删除", message: error.localizedDescription)
+        }
+    }
+
+    func contentURL(for book: Book) -> URL {
+        libraryURL.appendingPathComponent(book.contentRelativePath)
+    }
+
+    func sourceURL(for book: Book) -> URL? {
+        book.sourceRelativePath.map { libraryURL.appendingPathComponent($0) }
+    }
+
+    func coverURL(for book: Book) -> URL? {
+        book.coverRelativePath.map { libraryURL.appendingPathComponent($0) }
+    }
+
+    func previewURLs(for book: Book) -> [URL] {
+        let paths = book.previewRelativePaths ?? book.coverRelativePath.map { [$0] } ?? []
+        return paths
+            .map { libraryURL.appendingPathComponent($0) }
+            .filter { fileManager.fileExists(atPath: $0.path) }
+    }
+
+    func pageURLs(for book: Book) -> [URL] {
+        guard book.kind != .pdf else { return [] }
+        let folder = contentURL(for: book)
+        let urls = (try? fileManager.contentsOfDirectory(
+            at: folder,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        )) ?? []
+        return NaturalSort.urls(urls.filter { url in
+            let isFile = (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) ?? false
+            return isFile
+        })
+    }
+
+    func flushProgress() {
+        saveTask?.cancel()
+        saveImmediately()
+    }
+
+    private func load() {
+        guard let data = try? Data(contentsOf: metadataURL) else { return }
+        do {
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            books = try decoder.decode([Book].self, from: data)
+                .filter { fileManager.fileExists(atPath: contentURL(for: $0).path) }
+        } catch {
+            alert = LibraryAlert(title: "书架数据需要修复", message: "本地文件仍然保留，但书架索引无法读取：\(error.localizedDescription)")
+        }
+    }
+
+    private func scheduleSave() {
+        saveTask?.cancel()
+        saveTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(450))
+            guard !Task.isCancelled else { return }
+            self?.saveImmediately()
+        }
+    }
+
+    private func saveImmediately() {
+        do {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            encoder.dateEncodingStrategy = .iso8601
+            let data = try encoder.encode(books)
+            try data.write(to: metadataURL, options: .atomic)
+        } catch {
+            alert = LibraryAlert(title: "无法保存书架", message: error.localizedDescription)
+        }
+    }
+}
+
+enum LibraryScope: Equatable {
+    case all
+    case favorites
+}
