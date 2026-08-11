@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct RootView: View {
+    @Environment(RemoteLibraryStore.self) private var remoteLibrary
     @AppStorage("hasSeenWelcome") private var hasSeenWelcome = false
     @State private var showWelcome = false
 
@@ -8,6 +9,7 @@ struct RootView: View {
         MainTabView()
             .task {
                 showWelcome = !hasSeenWelcome
+                await remoteLibrary.restoreIfNeeded()
             }
             .onChange(of: hasSeenWelcome) { _, hasSeen in
                 if !hasSeen { showWelcome = true }
@@ -42,6 +44,10 @@ private struct MainTabView: View {
 
             Tab("收藏", systemImage: "star.fill") {
                 LibraryView(scope: .favorites)
+            }
+
+            Tab("云书库", systemImage: "externaldrive.fill.badge.icloud") {
+                RemoteLibraryView()
             }
 
             Tab("设置", systemImage: "gearshape.fill") {

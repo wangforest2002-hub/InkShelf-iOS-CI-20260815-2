@@ -44,8 +44,8 @@ targets:
       path: InkShelf/Resources/Info.plist
       properties:
         CFBundleDisplayName: 墨阅
-        CFBundleShortVersionString: "1.1.0"
-        CFBundleVersion: "2"
+        CFBundleShortVersionString: "1.2.0"
+        CFBundleVersion: "3"
         LSRequiresIPhoneOS: true
         LSSupportsOpeningDocumentsInPlace: true
         UIFileSharingEnabled: true

@@ -1,35 +1,59 @@
 # 墨阅 InkShelf
 
-墨阅是一款面向 iPhone 与 iPad 的原生漫画、画集和 PDF 阅读器。项目使用 SwiftUI、PDFKit 与 UIKit 构建，最低支持 iOS 18；工程按 Xcode 27 整理，使用 iOS 26/27 SDK 构建时自动采用 Liquid Glass、浮动标签栏和最新系统控件。
+墨阅是一款面向 iPhone 与 iPad 的原生漫画、画集、PDF 和电子书阅读器。项目使用 SwiftUI、PDFKit、Vision、WebKit 与 UIKit 构建，最低支持 iOS 18；在最新 SDK 上会自动采用 Liquid Glass、浮动标签栏和新的系统动效。
 
-## 已实现
+## 阅读格式
 
-- PDF 原文件导入与 PDFKit 矢量/原始页面渲染，不重新压缩 PDF
-- CBZ、ZIP 图片漫画导入；保留原压缩包，并生成独立阅读页
-- 多选 JPG、PNG、HEIC、WebP、GIF、TIFF、BMP、AVIF 组成画集
-- 使用系统 PhotosPicker 从照片图库批量导入，并优先保留当前原始编码
-- 直接选择整个文件夹创建独立画集，递归收集子文件夹图片并保持自然排序
-- 文件夹/漫画多图拼贴封面、完整图片总览与系统 Quick Look 单张预览
-- 单页/双页、封面单独显示、横向/纵向翻页、从左到右/日漫顺序
-- PDF 与图片双指缩放；图片双击放大/还原
-- 书架、封面缓存、搜索、收藏、重命名、原文件导出与阅读进度
-- PDF 密码解锁、缩略图跳页、屏幕常亮与多种阅读背景
-- 本机离线存储，无账号、无网络请求、无分析 SDK
-- 动态字体、VoiceOver 标签、减少动态效果适配、iPad 指针悬停效果
+- PDF：保留并打开原文件，使用 PDFKit 矢量/原始页面渲染，不重新压缩。
+- 漫画与画集：CBZ、ZIP、JPG、PNG、HEIC、WebP、GIF、TIFF、BMP、AVIF 等常用图片格式。
+- 电子书：EPUB、TXT、HTML/HTM、Markdown、RTF、FB2。
+- 导入方式：文件、整个文件夹、照片图库，以及私人服务器云书库。
 
-“无损”指源文件按字节复制保存，应用不会对 PDF 或导入图片进行转码。书架封面是单独生成的轻量缓存，不会替换或修改源文件。
+暂不支持带 DRM 的电子书，也不绕过 DRM；CBR/RAR/7z、MOBI 与 AZW3 尚未加入。
+
+## 主要功能
+
+- 单页/双页、封面单独显示、横向/纵向翻页、从左到右/日漫顺序。
+- PDF 与图片双指缩放，图片双击放大/还原；PDF 密码解锁和缩略图跳页。
+- 电子书分页/滚动模式、目录、全文章节搜索、字体、字号、行距、页边距、纸张/护眼/夜间主题。
+- 文件夹与漫画多图拼贴封面、画集总览、Quick Look 单图预览。
+- 书架搜索、收藏、重命名、阅读进度、原文件导出与屏幕常亮。
+- 动态字体、VoiceOver、减少动态效果适配和 iPad 指针悬停效果。
+
+## AI 陪读
+
+- 使用 Apple Vision 在本机识别页面文字、人脸和粗略画面标签。
+- DeepSeek V4 Pro 根据这些摘要生成页面弹幕、陪读对话和片末模拟讨论。
+- AI 生成的虚拟评论会明确标示为模拟内容，不冒充真实用户。
+- DeepSeek 密钥只保存在 iOS Keychain；App 不把 PDF 或整页原图直接上传给 AI。
+- AI 是可选功能，关闭后阅读器完全不发起 DeepSeek 请求。
+
+## 私人云书库
+
+“云书库”标签页连接 `https://4-3rail.top/` 的独立私有书库服务，并复用文档中心账号：
+
+- 登录后才可查看、下载或同步阅读进度；管理员可流式上传和删除书籍。
+- 列表和小封面优先加载；原书首次打开时后台下载并显示进度。
+- 下载完成后导入本地原生阅读引擎，之后打开与本地书籍一致，断网也可继续阅读。
+- 服务器支持 HTTP Range、大文件流式传输和原文件字节级保存，不转码书籍。
+- 账号密码保存在本机 Keychain，代码仓库和 IPA 中不内置服务器密码。
+
+服务端扩展位于 `Server/`，线上以独立 systemd 服务运行在 `127.0.0.1:8001`，由 Nginx 仅代理 `/api/inkshelf/`。它与现有文档中心进程隔离，书籍存放在 `/home/admin/document-center/data/inkshelf/books`。
+
+## “无损”的含义
+
+导入、上传和缓存均复制源文件字节，不对 PDF、图片或电子书重新编码。书架封面是单独生成的轻量缓存，不会替换或修改源文件。漫画压缩包会为本地阅读展开独立页面，但原压缩包仍然保留。
 
 ## 云端生成 IPA（不需要本地 Mac）
 
-1. 将本目录提交到 GitHub 仓库。
-2. 打开仓库的 **Actions** 页面。
-3. 运行 **Build unsigned IPA**。
-4. 构建完成后下载 `InkShelf-unsigned-ipa` artifact。
-5. 使用你选择的证书或侧载工具对 IPA 签名安装。
+1. 打开 GitHub 仓库的 **Actions** 页面。
+2. 运行 **Build unsigned IPA**，或推送到 `main` 自动触发。
+3. 构建完成后下载 `InkShelf-unsigned-ipa` artifact。
+4. 使用个人证书或侧载工具为无签名 IPA 签名并安装。
 
-工作流使用 GitHub 的 macOS 26 runner、XcodeGen 和 runner 中可用的最新 Xcode SDK。生成的 IPA 故意不签名，便于后续使用个人证书处理。
+工作流使用 GitHub macOS runner、XcodeGen 和可用的最新 Xcode SDK；同时运行单元测试、模拟器构建和真机 Release 构建。
 
-## 在 Mac 上构建（可选）
+## 本地 Mac 构建（可选）
 
 ```sh
 brew install xcodegen
@@ -37,21 +61,16 @@ xcodegen generate
 open InkShelf.xcodeproj
 ```
 
-在 Xcode 的 Signing & Capabilities 中选择自己的 Team 后即可运行到设备。
+在 Xcode 的 Signing & Capabilities 中选择自己的 Team 后即可安装到设备。
 
-## 数据位置
+## 本机数据位置
 
-导入内容保存在应用 Documents 下的 `InkShelf Library`：
+导入和云端缓存内容保存在 App Documents 下的 `InkShelf Library`：
 
 - PDF：`<book-id>/source.pdf`
 - CBZ/ZIP：`<book-id>/source.cbz|zip` 与 `<book-id>/pages/`
 - 图片画集：`<book-id>/pages/`
+- 电子书：`<book-id>/source.*`、解析资源与 `ebook.json`
 - 元数据：`library.json`
 
-启用了文件共享，必要时可通过系统文件管理或设备备份取回内容。删除书架项目会同时删除该项目在应用内保存的副本。
-
-## 当前边界
-
-- 支持 ZIP 系列漫画包（CBZ/ZIP），暂不支持需要额外解码器的 CBR/RAR/7z。
-- 超大扫描图会按原图解码，极端尺寸可能受 iPhone 可用内存限制；PDF 由 PDFKit 分块渲染，更适合超大文档。
-- 当前为纯本地版本，不包含 iCloud、WebDAV 或局域网传书；这些可以在后续版本中加入。
+启用了文件共享，必要时可通过系统文件管理或设备备份取回内容。删除本地书架项目会删除该项目的本地副本；删除云端项目则会单独确认，而且不会删除已经缓存的本地副本。

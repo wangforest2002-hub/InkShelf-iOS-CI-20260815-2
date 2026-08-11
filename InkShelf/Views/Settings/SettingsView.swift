@@ -3,6 +3,7 @@ import SwiftUI
 struct SettingsView: View {
     @Environment(LibraryStore.self) private var library
     @Environment(AICompanionStore.self) private var companion
+    @Environment(RemoteLibraryStore.self) private var remoteLibrary
     @AppStorage("appearance") private var appearance = AppAppearance.light.rawValue
     @AppStorage("reader.layout") private var layout = ReaderLayout.single.rawValue
     @AppStorage("reader.flow") private var flow = ReaderFlow.horizontal.rawValue
@@ -89,6 +90,19 @@ struct SettingsView: View {
                     }
                 }
 
+                Section("云书库") {
+                    LabeledContent("私人服务器") {
+                        Text(remoteLibrary.isAuthenticated ? "已连接" : "未登录")
+                            .foregroundStyle(remoteLibrary.isAuthenticated ? .green : .secondary)
+                    }
+                    if let user = remoteLibrary.currentUser {
+                        LabeledContent("当前账号", value: user.title)
+                    }
+                    Text("服务器保存原文件；打开后会缓存到本机，离线时仍可从本地书架继续阅读。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
                 Section("存储与隐私") {
                     LabeledContent("源文件占用") {
                         Text(AppFormatters.fileSize(library.storageUsage))
@@ -98,7 +112,7 @@ struct SettingsView: View {
                     }
 
                     Label {
-                        Text("源文件与阅读记录只保存在本机，封面缓存仅用于书架显示，原文件不会被修改。启用 AI 后，仅将本机识别出的文字和粗略画面标签发送给 DeepSeek。")
+                        Text("本地导入与云端缓存不会修改原文件。启用云书库后，书籍原文件和阅读进度会在你的私人服务器保存；启用 AI 后，仅将本机识别出的文字和粗略画面标签发送给 DeepSeek，不上传整页原图。")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     } icon: {
@@ -108,7 +122,7 @@ struct SettingsView: View {
                 }
 
                 Section("关于") {
-                    LabeledContent("墨阅", value: "1.0.0")
+                    LabeledContent("墨阅", value: "1.2.0")
                     Button("重新查看欢迎页") {
                         hasSeenWelcome = false
                     }

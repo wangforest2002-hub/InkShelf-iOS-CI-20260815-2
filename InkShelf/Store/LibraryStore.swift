@@ -42,6 +42,12 @@ final class LibraryStore {
             }
     }
 
+    func cachedBook(remoteID: String, modifiedAt: String? = nil) -> Book? {
+        books.first {
+            $0.remoteSourceID == remoteID && (modifiedAt == nil || $0.remoteModifiedAt == modifiedAt)
+        }
+    }
+
     func importFiles(_ urls: [URL], cleanupDirectory: URL? = nil) {
         guard !urls.isEmpty else {
             if let cleanupDirectory { try? fileManager.removeItem(at: cleanupDirectory) }
@@ -73,6 +79,42 @@ final class LibraryStore {
             }
             isImporting = false
         }
+    }
+
+    func importRemoteFile(
+        _ url: URL,
+        remoteID: String,
+        remoteModifiedAt: String,
+        serverProgress: RemoteReadingProgress?
+    ) async throws -> Book {
+        guard !isImporting else { throw LibraryStoreError.importInProgress }
+        isImporting = true
+        defer { isImporting = false }
+
+        let imported = try await BookImporter.importBooks(from: [url], into: libraryURL)
+        guard var book = imported.first else { throw BookImportError.noImages }
+        book.remoteSourceID = remoteID
+        book.remoteModifiedAt = remoteModifiedAt
+
+        if let serverProgress {
+            let maximum = max(0, book.pageCount - 1)
+            book.currentPage = min(max(0, serverProgress.position), maximum)
+            if book.kind == .ebook, book.pageCount > 0 {
+                let exact = min(max(serverProgress.progress, 0), 1) * Double(book.pageCount)
+                book.currentPage = min(Int(exact.rounded(.down)), maximum)
+                book.ebookChapterProgress = min(max(exact - Double(book.currentPage), 0), 1)
+            }
+        }
+
+        if let old = books.first(where: { $0.remoteSourceID == remoteID }) {
+            book.isFavorite = old.isFavorite
+            let oldFolder = libraryURL.appendingPathComponent(old.folderName, isDirectory: true)
+            books.removeAll { $0.id == old.id }
+            try? fileManager.removeItem(at: oldFolder)
+        }
+        books.append(book)
+        saveImmediately()
+        return book
     }
 
     func markOpened(_ id: UUID) {
@@ -217,4 +259,10 @@ final class LibraryStore {
 enum LibraryScope: Equatable {
     case all
     case favorites
+}
+
+private enum LibraryStoreError: LocalizedError {
+    case importInProgress
+
+    var errorDescription: String? { "正在整理另一本书，请稍后再试。" }
 }

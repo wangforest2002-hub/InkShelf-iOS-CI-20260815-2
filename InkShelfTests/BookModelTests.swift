@@ -43,6 +43,36 @@ final class BookModelTests: XCTestCase {
         XCTAssertEqual(try JSONDecoder().decode(EBookPackage.self, from: data), package)
     }
 
+    func testRemoteBookPayloadDecodes() throws {
+        let json = """
+        {
+          "id": "0123456789abcdef",
+          "name": "画集.epub",
+          "size": 4096,
+          "format": "epub",
+          "content_type": "application/epub+zip",
+          "imported_at": "2026-08-11T12:00:00+07:00",
+          "modified_at": "2026-08-11T12:00:00+07:00",
+          "download_url": "/api/inkshelf/books/0123456789abcdef/file",
+          "cover_url": "/api/inkshelf/books/0123456789abcdef/cover",
+          "progress": {"progress": 0.42, "position": 3, "updated_at": "2026-08-11T12:30:00+07:00"}
+        }
+        """
+        let book = try JSONDecoder().decode(RemoteBook.self, from: Data(json.utf8))
+        XCTAssertEqual(book.title, "画集")
+        XCTAssertEqual(book.kind, .ebook)
+        XCTAssertEqual(book.progress?.position, 3)
+    }
+
+    func testRemoteOriginSurvivesBookMetadataRoundTrip() throws {
+        var book = makeBook(pageCount: 12, currentPage: 2)
+        book.remoteSourceID = "0123456789abcdef"
+        book.remoteModifiedAt = "2026-08-11T12:00:00+07:00"
+        let decoded = try JSONDecoder().decode(Book.self, from: JSONEncoder().encode(book))
+        XCTAssertEqual(decoded.remoteSourceID, book.remoteSourceID)
+        XCTAssertEqual(decoded.remoteModifiedAt, book.remoteModifiedAt)
+    }
+
     private func makeBook(pageCount: Int, currentPage: Int) -> Book {
         Book(
             title: "测试",

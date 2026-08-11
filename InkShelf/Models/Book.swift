@@ -42,6 +42,8 @@ struct Book: Identifiable, Codable, Hashable, Sendable {
     var fileSize: Int64
     var isFavorite: Bool
     var ebookChapterProgress: Double?
+    var remoteSourceID: String?
+    var remoteModifiedAt: String?
 
     init(
         id: UUID = UUID(),
@@ -58,7 +60,9 @@ struct Book: Identifiable, Codable, Hashable, Sendable {
         lastOpenedAt: Date? = nil,
         fileSize: Int64,
         isFavorite: Bool = false,
-        ebookChapterProgress: Double? = nil
+        ebookChapterProgress: Double? = nil,
+        remoteSourceID: String? = nil,
+        remoteModifiedAt: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -75,6 +79,8 @@ struct Book: Identifiable, Codable, Hashable, Sendable {
         self.fileSize = fileSize
         self.isFavorite = isFavorite
         self.ebookChapterProgress = ebookChapterProgress
+        self.remoteSourceID = remoteSourceID
+        self.remoteModifiedAt = remoteModifiedAt
     }
 
     var progress: Double {

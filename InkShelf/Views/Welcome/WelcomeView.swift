@@ -13,14 +13,26 @@ struct WelcomeView: View {
             colors: [AppTheme.cyan, AppTheme.accent]
         ),
         .init(
-            title: "属于你的离线书架",
-            subtitle: "漫画、文件夹画集和 PDF 全部保存在设备本地，多图预览让内容一目了然。",
+            title: "漫画与电子书，一架收好",
+            subtitle: "漫画、文件夹画集、PDF、EPUB 与常见文本电子书都能阅读，多图预览让内容一目了然。",
             symbol: "books.vertical.fill",
             colors: [AppTheme.accent, AppTheme.coral]
         ),
         .init(
+            title: "私人云书库，离线也能读",
+            subtitle: "连接你的私人服务器，原书首次下载后保存在本机；进度会同步，断网也能继续。",
+            symbol: "externaldrive.fill.badge.icloud",
+            colors: [AppTheme.cyan, AppTheme.accent]
+        ),
+        .init(
+            title: "阅读时，也有人陪你",
+            subtitle: "可选的 AI 陪读会识别文字和画面线索，生成自然弹幕、陪伴对话与片末模拟讨论。",
+            symbol: "sparkles",
+            colors: [AppTheme.coral, AppTheme.accent]
+        ),
+        .init(
             title: "按喜欢的方式阅读",
-            subtitle: "单页、双页、横向、纵向与日漫顺序自由切换，阅读进度自动记忆。",
+            subtitle: "单页、双页、横向、纵向、日漫顺序和电子书重排自由切换，阅读进度自动记忆。",
             symbol: "rectangle.split.2x1.fill",
             colors: [AppTheme.coral, AppTheme.cyan]
         )

@@ -6,6 +6,7 @@ struct ReaderView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(LibraryStore.self) private var library
     @Environment(AICompanionStore.self) private var companion
+    @Environment(RemoteLibraryStore.self) private var remoteLibrary
     let book: Book
 
     @State private var currentPage: Int
@@ -137,12 +138,14 @@ struct ReaderView: View {
             } else {
                 library.updateProgress(bookID: book.id, page: newPage)
             }
+            remoteLibrary.scheduleProgress(book: book, position: newPage, progress: readingProgress)
             if controlsVisible { scheduleControlsHide() }
             prepareAIPage()
         }
         .onChange(of: ebookProgress) { _, newValue in
             guard book.kind == .ebook else { return }
             library.updateEBookProgress(bookID: book.id, chapter: currentPage, progression: newValue)
+            remoteLibrary.scheduleProgress(book: book, position: currentPage, progress: readingProgress)
         }
         .onChange(of: keepAwake) { _, newValue in
             UIApplication.shared.isIdleTimerDisabled = newValue
@@ -151,6 +154,7 @@ struct ReaderView: View {
             hideControlsTask?.cancel()
             companion.cancelAll()
             library.flushProgress()
+            remoteLibrary.flushProgress(book: book, position: currentPage, progress: readingProgress)
             UIApplication.shared.isIdleTimerDisabled = false
         }
         .sheet(isPresented: $showSettings) {
@@ -261,6 +265,14 @@ struct ReaderView: View {
 
     private var favoriteState: Bool {
         library.books.first(where: { $0.id == book.id })?.isFavorite ?? book.isFavorite
+    }
+
+    private var readingProgress: Double {
+        if book.kind == .ebook, pageCount > 0 {
+            return min(max((Double(currentPage) + ebookProgress) / Double(pageCount), 0), 1)
+        }
+        guard pageCount > 1 else { return currentPage > 0 ? 1 : 0 }
+        return min(max(Double(currentPage) / Double(pageCount - 1), 0), 1)
     }
 
     private func handlePDFState(_ count: Int, _ locked: Bool) {
