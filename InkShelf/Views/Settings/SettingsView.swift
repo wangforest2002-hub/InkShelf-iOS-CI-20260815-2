@@ -91,14 +91,11 @@ struct SettingsView: View {
                 }
 
                 Section("云书库") {
-                    LabeledContent("私人服务器") {
-                        Text(remoteLibrary.isAuthenticated ? "已连接" : "未登录")
-                            .foregroundStyle(remoteLibrary.isAuthenticated ? .green : .secondary)
+                    LabeledContent("独立服务器") {
+                        Text(remoteLibrary.isOnline ? "已连接" : "未连接")
+                            .foregroundStyle(remoteLibrary.isOnline ? .green : .secondary)
                     }
-                    if let user = remoteLibrary.currentUser {
-                        LabeledContent("当前账号", value: user.title)
-                    }
-                    Text("服务器保存原文件；打开后会缓存到本机，离线时仍可从本地书架继续阅读。")
+                    Text("与文档中心完全分离，不需要账号或密码。服务器保存原文件；打开后会缓存到本机，离线时仍可继续阅读。")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -112,7 +109,7 @@ struct SettingsView: View {
                     }
 
                     Label {
-                        Text("本地导入与云端缓存不会修改原文件。启用云书库后，书籍原文件和阅读进度会在你的私人服务器保存；启用 AI 后，仅将本机识别出的文字和粗略画面标签发送给 DeepSeek，不上传整页原图。")
+                        Text("本地导入与云端缓存不会修改原文件。云书库不设密码，知道服务器地址的人都能管理其中的书籍；启用 AI 后，仅将本机识别出的文字和粗略画面标签发送给 DeepSeek，不上传整页原图。")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     } icon: {
@@ -122,7 +119,7 @@ struct SettingsView: View {
                 }
 
                 Section("关于") {
-                    LabeledContent("墨阅", value: "1.2.0")
+                    LabeledContent("墨阅", value: "1.2.1")
                     Button("重新查看欢迎页") {
                         hasSeenWelcome = false
                     }

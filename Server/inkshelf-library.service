@@ -1,21 +1,20 @@
 [Unit]
 Description=InkShelf Private Library
-After=network.target document-center.service
+After=network.target
 
 [Service]
 Type=simple
 User=admin
-WorkingDirectory=/home/admin/document-center
-EnvironmentFile=/home/admin/document-center/.env
+WorkingDirectory=/home/admin/inkshelf-server
 Environment=INKSHELF_HOST=127.0.0.1
 Environment=INKSHELF_PORT=8001
-ExecStart=/usr/bin/python3.11 /home/admin/document-center/inkshelf_server.py
+ExecStart=/usr/bin/python3.11 /home/admin/inkshelf-server/inkshelf_server.py
 Restart=always
 RestartSec=3
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full
-ReadWritePaths=/home/admin/document-center/data/inkshelf
+ReadWritePaths=/home/admin/inkshelf-server/data
 
 [Install]
 WantedBy=multi-user.target

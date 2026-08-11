@@ -3,7 +3,6 @@ import Foundation
 enum RemoteLibraryError: LocalizedError, Sendable {
     case invalidServer
     case invalidResponse
-    case authenticationRequired
     case server(status: Int, message: String?)
     case downloadFailed
 
@@ -11,7 +10,6 @@ enum RemoteLibraryError: LocalizedError, Sendable {
         switch self {
         case .invalidServer: return "服务器地址无效，请使用 HTTPS 地址。"
         case .invalidResponse: return "远程书库返回了无法识别的响应。"
-        case .authenticationRequired: return "登录已失效，请重新登录远程书库。"
         case .server(let status, let message):
             return message ?? "远程书库请求失败（\(status)）。"
         case .downloadFailed: return "书籍下载没有完成，请检查网络后重试。"
@@ -22,6 +20,14 @@ enum RemoteLibraryError: LocalizedError, Sendable {
 struct RemoteLibraryService: Sendable {
     let baseURL: URL
 
+    private static let session: URLSession = {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.httpCookieStorage = nil
+        configuration.httpShouldSetCookies = false
+        configuration.requestCachePolicy = .reloadRevalidatingCacheData
+        return URLSession(configuration: configuration)
+    }()
+
     init(serverAddress: String) throws {
         let value = serverAddress.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let url = URL(string: value),
@@ -31,33 +37,8 @@ struct RemoteLibraryService: Sendable {
         baseURL = url
     }
 
-    func login(username: String, password: String) async throws -> RemoteLibraryUser {
-        var request = URLRequest(url: try endpoint("/api/auth/login"))
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONSerialization.data(withJSONObject: [
-            "username": username,
-            "password": password,
-        ])
-        let data = try await data(for: request)
-        let envelope = try JSONDecoder().decode(RemoteLoginEnvelope.self, from: data)
-        guard let user = envelope.user else { throw RemoteLibraryError.authenticationRequired }
-        return user
-    }
-
-    func currentUser() async throws -> RemoteLibraryUser? {
-        let data = try await data(for: URLRequest(url: try endpoint("/api/auth/me")))
-        return try JSONDecoder().decode(RemoteLoginEnvelope.self, from: data).user
-    }
-
-    func logout() async throws {
-        var request = URLRequest(url: try endpoint("/api/auth/logout"))
-        request.httpMethod = "POST"
-        _ = try await data(for: request)
-    }
-
     func fetchBooks() async throws -> [RemoteBook] {
-        let data = try await data(for: URLRequest(url: try endpoint("/api/inkshelf/books")))
+        let data = try await data(for: URLRequest(url: try endpoint("/inkshelf-api/books")))
         return try JSONDecoder().decode(RemoteBooksEnvelope.self, from: data).books
     }
 
@@ -80,25 +61,25 @@ struct RemoteLibraryService: Sendable {
     }
 
     func upload(_ fileURL: URL) async throws -> RemoteBook {
-        var components = URLComponents(url: try endpoint("/api/inkshelf/upload"), resolvingAgainstBaseURL: false)
+        var components = URLComponents(url: try endpoint("/inkshelf-api/upload"), resolvingAgainstBaseURL: false)
         components?.queryItems = [URLQueryItem(name: "name", value: fileURL.lastPathComponent)]
         guard let url = components?.url else { throw RemoteLibraryError.invalidServer }
         var request = URLRequest(url: url)
         request.httpMethod = "PUT"
         request.setValue(contentType(for: fileURL), forHTTPHeaderField: "Content-Type")
-        let (data, response) = try await URLSession.shared.upload(for: request, fromFile: fileURL)
+        let (data, response) = try await Self.session.upload(for: request, fromFile: fileURL)
         try validate(response: response, data: data)
         return try JSONDecoder().decode(RemoteUploadEnvelope.self, from: data).book
     }
 
     func delete(_ book: RemoteBook) async throws {
-        var request = URLRequest(url: try endpoint("/api/inkshelf/books/\(book.id)"))
+        var request = URLRequest(url: try endpoint("/inkshelf-api/books/\(book.id)"))
         request.httpMethod = "DELETE"
         _ = try await data(for: request)
     }
 
     func updateProgress(bookID: String, progress: Double, position: Int) async throws {
-        var request = URLRequest(url: try endpoint("/api/inkshelf/progress/\(bookID)"))
+        var request = URLRequest(url: try endpoint("/inkshelf-api/progress/\(bookID)"))
         request.httpMethod = "PUT"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONSerialization.data(withJSONObject: [
@@ -122,7 +103,7 @@ struct RemoteLibraryService: Sendable {
     }
 
     private func data(for request: URLRequest) async throws -> Data {
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await Self.session.data(for: request)
         try validate(response: response, data: data)
         return data
     }
@@ -131,7 +112,6 @@ struct RemoteLibraryService: Sendable {
         guard let http = response as? HTTPURLResponse else { throw RemoteLibraryError.invalidResponse }
         guard (200..<300).contains(http.statusCode) else {
             let message = (try? JSONDecoder().decode(RemoteAPIError.self, from: data))?.error
-            if http.statusCode == 401 { throw RemoteLibraryError.authenticationRequired }
             throw RemoteLibraryError.server(status: http.statusCode, message: message)
         }
     }
@@ -181,8 +161,8 @@ private final class FileDownloadDelegate: NSObject, URLSessionDownloadDelegate, 
         try await withCheckedThrowingContinuation { continuation in
             self.continuation = continuation
             let configuration = URLSessionConfiguration.default
-            configuration.httpCookieStorage = .shared
-            configuration.httpShouldSetCookies = true
+            configuration.httpCookieStorage = nil
+            configuration.httpShouldSetCookies = false
             configuration.waitsForConnectivity = true
             let session = URLSession(configuration: configuration, delegate: self, delegateQueue: nil)
             self.session = session
@@ -211,9 +191,7 @@ private final class FileDownloadDelegate: NSObject, URLSessionDownloadDelegate, 
            !(200..<300).contains(response.statusCode) {
             let data = try? Data(contentsOf: location)
             let message = data.flatMap { try? JSONDecoder().decode(RemoteAPIError.self, from: $0).error }
-            resultError = response.statusCode == 401
-                ? RemoteLibraryError.authenticationRequired
-                : RemoteLibraryError.server(status: response.statusCode, message: message)
+            resultError = RemoteLibraryError.server(status: response.statusCode, message: message)
             return
         }
         do {

@@ -8,6 +8,7 @@ struct RemoteLibraryView: View {
 
     @State private var query = ""
     @State private var showUploader = false
+    @State private var showServerSettings = false
     @State private var openedBook: Book?
     @State private var pendingDeletion: RemoteBook?
     @Namespace private var coverTransition
@@ -27,11 +28,7 @@ struct RemoteLibraryView: View {
             ZStack {
                 AuroraBackground()
 
-                if remote.isAuthenticated {
-                    remoteContent
-                } else {
-                    RemoteLibraryLoginView()
-                }
+                remoteContent
 
                 if remote.isUploading || !remote.downloadProgress.isEmpty {
                     RemoteTransferOverlay(
@@ -61,6 +58,11 @@ struct RemoteLibraryView: View {
                 remote.alert = LibraryAlert(title: "无法选择书籍", message: error.localizedDescription)
             }
         }
+        .sheet(isPresented: $showServerSettings) {
+            RemoteServerSettingsView()
+                .presentationDetents([.medium])
+                .presentationDragIndicator(.visible)
+        }
         .alert(item: alertBinding) { alert in
             Alert(title: Text(alert.title), message: Text(alert.message), dismissButton: .default(Text("好")))
         }
@@ -88,7 +90,7 @@ struct RemoteLibraryView: View {
             } description: {
                 Text(query.isEmpty ? "把 PDF、画集或电子书上传到服务器，所有原文件都会按原样保存。" : "换个标题关键词试试。")
             } actions: {
-                if query.isEmpty, remote.currentUser?.isAdmin == true {
+                if query.isEmpty {
                     Button("上传第一本书") { showUploader = true }
                         .adaptiveProminentButton()
                 }
@@ -120,11 +122,9 @@ struct RemoteLibraryView: View {
                                     Label("下载并阅读", systemImage: "arrow.down.circle")
                                 }
                             }
-                            if remote.currentUser?.isAdmin == true {
-                                Divider()
-                                Button(role: .destructive) { pendingDeletion = book } label: {
-                                    Label("从服务器删除", systemImage: "trash")
-                                }
+                            Divider()
+                            Button(role: .destructive) { pendingDeletion = book } label: {
+                                Label("从服务器删除", systemImage: "trash")
                             }
                         }
                     }
@@ -148,37 +148,31 @@ struct RemoteLibraryView: View {
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
-        if remote.isAuthenticated {
-            ToolbarItem(placement: .topBarLeading) {
-                Menu {
-                    if let user = remote.currentUser {
-                        Label(user.title, systemImage: user.isAdmin ? "person.crop.circle.badge.checkmark" : "person.crop.circle")
-                    }
-                    Button {
-                        Task { await remote.refresh() }
-                    } label: {
-                        Label("刷新书库", systemImage: "arrow.clockwise")
-                    }
-                    Divider()
-                    Button(role: .destructive) {
-                        Task { await remote.logout() }
-                    } label: {
-                        Label("退出登录", systemImage: "rectangle.portrait.and.arrow.right")
-                    }
+        ToolbarItem(placement: .topBarLeading) {
+            Menu {
+                Label(
+                    remote.isOnline ? "独立服务已连接" : "独立服务未连接",
+                    systemImage: remote.isOnline ? "checkmark.icloud.fill" : "icloud.slash"
+                )
+                Button {
+                    Task { await remote.refresh() }
                 } label: {
-                    Image(systemName: "person.crop.circle")
+                    Label("刷新书库", systemImage: "arrow.clockwise")
                 }
-                .accessibilityLabel("云书库账号")
+                Button { showServerSettings = true } label: {
+                    Label("服务器地址", systemImage: "network")
+                }
+            } label: {
+                Image(systemName: remote.isOnline ? "externaldrive.fill.badge.icloud" : "externaldrive.badge.xmark")
             }
+            .accessibilityLabel("云书库状态")
+        }
 
-            if remote.currentUser?.isAdmin == true {
-                ToolbarItem(placement: .primaryAction) {
-                    Button { showUploader = true } label: {
-                        Label("上传书籍", systemImage: "plus")
-                    }
-                    .disabled(remote.isUploading)
-                }
+        ToolbarItem(placement: .primaryAction) {
+            Button { showUploader = true } label: {
+                Label("上传书籍", systemImage: "plus")
             }
+            .disabled(remote.isUploading)
         }
     }
 
@@ -206,89 +200,47 @@ struct RemoteLibraryView: View {
     }
 }
 
-private struct RemoteLibraryLoginView: View {
+private struct RemoteServerSettingsView: View {
     @Environment(RemoteLibraryStore.self) private var remote
-    @FocusState private var focusedField: Field?
-
-    private enum Field { case username, password }
+    @Environment(\.dismiss) private var dismiss
+    @State private var draftAddress = ""
 
     var body: some View {
-        @Bindable var remote = remote
-
-        ScrollView {
-            VStack(spacing: 22) {
-                ZStack {
-                    Circle()
-                        .fill(AppTheme.accent.opacity(0.14))
-                        .frame(width: 104, height: 104)
-                    Image(systemName: "externaldrive.fill.badge.icloud")
-                        .font(.system(size: 46, weight: .light))
-                        .symbolRenderingMode(.hierarchical)
-                        .foregroundStyle(AppTheme.accent)
-                }
-
-                VStack(spacing: 7) {
-                    Text("连接你的私人书库")
-                        .font(.title2.bold())
-                    Text("使用文档中心的账号登录。封面与目录先加载，原书下载后在本机流畅阅读。")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                }
-
-                VStack(spacing: 14) {
-                    TextField("网站账号", text: $remote.username)
-                        .textContentType(.username)
+        NavigationStack {
+            Form {
+                Section("独立服务器") {
+                    TextField("https://example.com", text: $draftAddress)
+                        .keyboardType(.URL)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
-                        .focused($focusedField, equals: .username)
-                        .submitLabel(.next)
-                        .onSubmit { focusedField = .password }
-
-                    SecureField("网站密码", text: $remote.password)
-                        .textContentType(.password)
-                        .focused($focusedField, equals: .password)
-                        .submitLabel(.go)
-                        .onSubmit { Task { await remote.login() } }
-
-                    DisclosureGroup("服务器") {
-                        TextField("https://example.com", text: $remote.serverAddress)
-                            .keyboardType(.URL)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .padding(.top, 10)
-                    }
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    Label("墨阅云书库与文档中心完全分离，直接连接，不需要账号或密码。", systemImage: "arrow.triangle.branch")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                 }
-                .textFieldStyle(.roundedBorder)
-                .padding(18)
-                .inkGlass(cornerRadius: 24)
 
-                Button {
-                    Task { await remote.login() }
-                } label: {
-                    HStack(spacing: 9) {
-                        if remote.isConnecting { ProgressView().tint(.white) }
-                        Text(remote.isConnecting ? "正在连接…" : "登录云书库")
-                    }
-                    .frame(maxWidth: .infinity)
+                Section {
+                    Label("此服务器没有访问密码，知道地址的人都可以查看、上传或删除书籍。", systemImage: "exclamationmark.shield")
+                        .font(.footnote)
+                        .foregroundStyle(.orange)
                 }
-                .adaptiveProminentButton()
-                .disabled(remote.isConnecting || remote.username.isEmpty || remote.password.isEmpty)
-
-                Label("账号和密码保存在本机钥匙串；服务器只接受 HTTPS 与已登录会话。", systemImage: "lock.shield.fill")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
             }
-            .frame(maxWidth: 430)
-            .padding(.horizontal, 28)
-            .padding(.top, 46)
-            .padding(.bottom, 80)
-            .frame(maxWidth: .infinity)
+            .navigationTitle("服务器")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("连接") {
+                        let address = draftAddress
+                        dismiss()
+                        Task { await remote.updateServerAddress(address) }
+                    }
+                    .disabled(draftAddress.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+            .onAppear { draftAddress = remote.serverAddress }
         }
-        .scrollIndicators(.hidden)
     }
 }
 

@@ -1,8 +1,9 @@
-"""InkShelf private remote-library service for document-center.
+"""Standalone InkShelf remote-library service.
 
 The service intentionally runs on a separate loopback port. Nginx exposes only
-``/api/inkshelf/`` and the existing document-center session cookie authenticates
-every library operation. Book files are stored byte-for-byte without conversion.
+``/inkshelf-api/``. It has its own metadata and storage, does not import or query
+document-center, and intentionally has no login. Book files are stored
+byte-for-byte without conversion.
 """
 from __future__ import annotations
 
@@ -20,17 +21,12 @@ import zipfile
 from datetime import datetime
 from email.utils import formatdate
 from http import HTTPStatus
-from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
-from core import auth
-from core import db as store
-
-
 BASE_DIR = Path(__file__).resolve().parent
-DATA_DIR = BASE_DIR / "data" / "inkshelf"
+DATA_DIR = BASE_DIR / "data"
 BOOK_DIR = DATA_DIR / "books"
 COVER_DIR = DATA_DIR / "covers"
 METADATA_PATH = DATA_DIR / "library.json"
@@ -116,17 +112,17 @@ def stored_path(record: dict) -> Path:
     return BOOK_DIR / Path(str(record.get("stored_name", ""))).name
 
 
-def public_book(record: dict, username: str) -> dict:
+def public_book(record: dict) -> dict:
     book_id = str(record.get("id", ""))
-    progress = read_json_file(PROGRESS_PATH, {}).get(username, {}).get(book_id)
+    progress = read_json_file(PROGRESS_PATH, {}).get(book_id)
     result = {
         key: record.get(key)
         for key in ("id", "name", "size", "format", "content_type", "imported_at", "modified_at")
     }
     result.update(
         {
-            "download_url": f"/api/inkshelf/books/{quote(book_id)}/file",
-            "cover_url": f"/api/inkshelf/books/{quote(book_id)}/cover",
+            "download_url": f"/inkshelf-api/books/{quote(book_id)}/file",
+            "cover_url": f"/inkshelf-api/books/{quote(book_id)}/cover",
             "progress": progress,
         }
     )
@@ -215,29 +211,6 @@ class InkShelfHandler(BaseHTTPRequestHandler):
     def send_error_json(self, status: HTTPStatus, message: str) -> None:
         self.send_json({"error": message}, status)
 
-    def session_token(self) -> str:
-        cookie = SimpleCookie(self.headers.get("Cookie", ""))
-        item = cookie.get(auth.SESSION_COOKIE)
-        return item.value if item else ""
-
-    def current_user(self) -> dict | None:
-        if not hasattr(self, "_user"):
-            self._user = store.get_session_user(self.session_token())
-        return self._user
-
-    def require_user(self) -> dict | None:
-        user = self.current_user()
-        if user is None:
-            self.send_error_json(HTTPStatus.UNAUTHORIZED, "请先登录远程书库")
-        return user
-
-    def require_admin(self) -> dict | None:
-        user = self.require_user()
-        if user is not None and user.get("role") != "admin":
-            self.send_error_json(HTTPStatus.FORBIDDEN, "需要管理员权限")
-            return None
-        return user
-
     def read_small_json(self) -> dict:
         length = int(self.headers.get("Content-Length", "0"))
         if length < 0 or length > 64 * 1024:
@@ -250,7 +223,7 @@ class InkShelfHandler(BaseHTTPRequestHandler):
 
     def do_HEAD(self) -> None:
         parsed = urlparse(self.path)
-        match = re.fullmatch(r"/api/inkshelf/books/([^/]+)/file", unquote(parsed.path))
+        match = re.fullmatch(r"/inkshelf-api/books/([^/]+)/file", unquote(parsed.path))
         if match:
             self.send_book_file(match.group(1), send_body=False)
             return
@@ -259,28 +232,25 @@ class InkShelfHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
         path = unquote(parsed.path)
-        if path == "/api/inkshelf/health":
-            self.send_json({"ok": True, "version": "1.0", "authenticated": self.current_user() is not None})
+        if path == "/inkshelf-api/health":
+            self.send_json({"ok": True, "version": "1.1", "access": "open", "standalone": True})
             return
-        user = self.require_user()
-        if user is None:
-            return
-        if path == "/api/inkshelf/books":
+        if path == "/inkshelf-api/books":
             records = []
             for item in load_books():
                 file_path = stored_path(item)
                 if file_path.exists() and file_path.is_file():
                     current = dict(item)
                     current["size"] = file_path.stat().st_size
-                    records.append(public_book(current, str(user["username"])))
+                    records.append(public_book(current))
             records.sort(key=lambda item: str(item.get("modified_at", "")), reverse=True)
             self.send_json({"books": records, "count": len(records)})
             return
-        file_match = re.fullmatch(r"/api/inkshelf/books/([^/]+)/file", path)
+        file_match = re.fullmatch(r"/inkshelf-api/books/([^/]+)/file", path)
         if file_match:
             self.send_book_file(file_match.group(1), send_body=True)
             return
-        cover_match = re.fullmatch(r"/api/inkshelf/books/([^/]+)/cover", path)
+        cover_match = re.fullmatch(r"/inkshelf-api/books/([^/]+)/cover", path)
         if cover_match:
             self.send_book_cover(cover_match.group(1))
             return
@@ -289,10 +259,10 @@ class InkShelfHandler(BaseHTTPRequestHandler):
     def do_PUT(self) -> None:
         parsed = urlparse(self.path)
         path = unquote(parsed.path)
-        if path == "/api/inkshelf/upload":
+        if path == "/inkshelf-api/upload":
             self.receive_upload(parse_qs(parsed.query).get("name", [""])[0])
             return
-        match = re.fullmatch(r"/api/inkshelf/progress/([^/]+)", path)
+        match = re.fullmatch(r"/inkshelf-api/progress/([^/]+)", path)
         if match:
             self.update_progress(match.group(1))
             return
@@ -300,12 +270,9 @@ class InkShelfHandler(BaseHTTPRequestHandler):
 
     def do_DELETE(self) -> None:
         parsed = urlparse(self.path)
-        match = re.fullmatch(r"/api/inkshelf/books/([^/]+)", unquote(parsed.path))
+        match = re.fullmatch(r"/inkshelf-api/books/([^/]+)", unquote(parsed.path))
         if not match:
             self.send_error_json(HTTPStatus.NOT_FOUND, "接口不存在")
-            return
-        user = self.require_admin()
-        if user is None:
             return
         book_id = clean_book_id(match.group(1))
         records = load_books()
@@ -318,17 +285,11 @@ class InkShelfHandler(BaseHTTPRequestHandler):
         save_books([item for item in records if item.get("id") != book_id])
         with metadata_lock:
             all_progress = read_json_file(PROGRESS_PATH, {})
-            for user_progress in all_progress.values():
-                if isinstance(user_progress, dict):
-                    user_progress.pop(book_id, None)
+            all_progress.pop(book_id, None)
             write_json_file(PROGRESS_PATH, all_progress)
-        store.add_audit(str(user["username"]), "inkshelf_delete", target=book_id, detail=str(target.get("name", "")))
         self.send_json({"deleted": book_id})
 
     def receive_upload(self, raw_name: str) -> None:
-        user = self.require_admin()
-        if user is None:
-            return
         name = safe_filename(raw_name or self.headers.get("X-Book-Filename", ""))
         suffix = Path(name).suffix.lower()
         if not name or suffix not in SUPPORTED_SUFFIXES:
@@ -376,19 +337,14 @@ class InkShelfHandler(BaseHTTPRequestHandler):
             "imported_at": stamp,
             "modified_at": stamp,
             "sha256": digest.hexdigest(),
-            "uploaded_by": str(user["username"]),
         }
         records = load_books()
         records.append(record)
         save_books(records)
-        store.add_audit(str(user["username"]), "inkshelf_upload", target=book_id, detail=name)
         threading.Thread(target=generate_cover, args=(record,), daemon=True).start()
-        self.send_json({"book": public_book(record, str(user["username"]))}, HTTPStatus.CREATED)
+        self.send_json({"book": public_book(record)}, HTTPStatus.CREATED)
 
     def update_progress(self, raw_book_id: str) -> None:
-        user = self.require_user()
-        if user is None:
-            return
         book_id = clean_book_id(raw_book_id)
         if not book_id or find_book(book_id) is None:
             self.send_error_json(HTTPStatus.NOT_FOUND, "书籍不存在")
@@ -402,8 +358,7 @@ class InkShelfHandler(BaseHTTPRequestHandler):
         position = max(int(payload.get("position", 0)), 0)
         with metadata_lock:
             all_progress = read_json_file(PROGRESS_PATH, {})
-            username = str(user["username"])
-            all_progress.setdefault(username, {})[book_id] = {
+            all_progress[book_id] = {
                 "progress": progress,
                 "position": position,
                 "updated_at": now_iso(),
@@ -432,8 +387,6 @@ class InkShelfHandler(BaseHTTPRequestHandler):
             shutil.copyfileobj(file, self.wfile, length=256 * 1024)
 
     def send_book_file(self, raw_book_id: str, send_body: bool) -> None:
-        if self.require_user() is None:
-            return
         record = find_book(raw_book_id)
         if record is None:
             self.send_error_json(HTTPStatus.NOT_FOUND, "书籍不存在")
@@ -499,7 +452,6 @@ class InkShelfHandler(BaseHTTPRequestHandler):
 
 def main() -> None:
     ensure_storage()
-    store.init_db()
     server = ThreadingHTTPServer((HOST, PORT), InkShelfHandler)
     server.daemon_threads = True
     print(f"InkShelf private library listening on http://{HOST}:{PORT}")

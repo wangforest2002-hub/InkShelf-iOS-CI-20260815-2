@@ -9,7 +9,7 @@ struct RootView: View {
         MainTabView()
             .task {
                 showWelcome = !hasSeenWelcome
-                await remoteLibrary.restoreIfNeeded()
+                await remoteLibrary.loadIfNeeded()
             }
             .onChange(of: hasSeenWelcome) { _, hasSeen in
                 if !hasSeen { showWelcome = true }

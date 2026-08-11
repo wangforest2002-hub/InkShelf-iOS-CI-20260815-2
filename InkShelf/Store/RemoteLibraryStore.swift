@@ -6,96 +6,51 @@ import Observation
 final class RemoteLibraryStore {
     static let defaultServerAddress = "https://4-3rail.top"
     private static let serverDefaultsKey = "remote.serverAddress"
-    private static let usernameAccount = "remote-library-username"
-    private static let passwordAccount = "remote-library-password"
 
     var books: [RemoteBook] = []
-    var currentUser: RemoteLibraryUser?
     var serverAddress: String
-    var username: String
-    var password: String
-    var isConnecting = false
     var isLoading = false
     var isUploading = false
+    var isOnline = false
     var downloadProgress: [String: Double] = [:]
     var alert: LibraryAlert?
 
-    @ObservationIgnored private var didAttemptRestore = false
+    @ObservationIgnored private var didInitialLoad = false
     @ObservationIgnored private var progressTasks: [String: Task<Void, Never>] = [:]
     @ObservationIgnored private let fileManager = FileManager.default
 
     init() {
         serverAddress = UserDefaults.standard.string(forKey: Self.serverDefaultsKey)
             ?? Self.defaultServerAddress
-        username = KeychainStore.read(account: Self.usernameAccount) ?? ""
-        password = KeychainStore.read(account: Self.passwordAccount) ?? ""
+        // One-time cleanup for credentials saved by the short-lived coupled prototype.
+        try? KeychainStore.delete(account: "remote-library-username")
+        try? KeychainStore.delete(account: "remote-library-password")
     }
 
-    var isAuthenticated: Bool { currentUser != nil }
-    var hasSavedLogin: Bool { !username.isEmpty && !password.isEmpty }
-
-    func restoreIfNeeded() async {
-        guard !didAttemptRestore else { return }
-        didAttemptRestore = true
-        isConnecting = true
-        defer { isConnecting = false }
-
-        do {
-            let service = try makeService()
-            if let user = try await service.currentUser() {
-                currentUser = user
-                await refresh(showErrors: false)
-                return
-            }
-            if hasSavedLogin {
-                try await authenticate(using: service, saveCredentials: false)
-            }
-        } catch {
-            currentUser = nil
-        }
+    func loadIfNeeded() async {
+        guard !didInitialLoad else { return }
+        didInitialLoad = true
+        await refresh(showErrors: false)
     }
 
-    func login() async {
-        let cleanUsername = username.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !cleanUsername.isEmpty, !password.isEmpty else {
-            alert = LibraryAlert(title: "还不能登录", message: "请填写网站账号和密码。")
-            return
-        }
-        isConnecting = true
-        defer { isConnecting = false }
-        do {
-            let service = try makeService()
-            username = cleanUsername
-            try await authenticate(using: service, saveCredentials: true)
-        } catch {
-            currentUser = nil
-            alert = LibraryAlert(title: "远程书库登录失败", message: errorMessage(error))
-        }
-    }
-
-    func logout() async {
-        if let service = try? makeService() {
-            try? await service.logout()
-        }
-        currentUser = nil
+    func updateServerAddress(_ value: String) async {
+        serverAddress = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        UserDefaults.standard.set(serverAddress, forKey: Self.serverDefaultsKey)
         books = []
-        password = ""
-        try? KeychainStore.delete(account: Self.passwordAccount)
+        isOnline = false
+        await refresh()
     }
 
     func refresh(showErrors: Bool = true) async {
-        guard currentUser != nil else { return }
         isLoading = true
         defer { isLoading = false }
         do {
             books = try await makeService().fetchBooks()
+            isOnline = true
         } catch {
-            if let remoteError = error as? RemoteLibraryError,
-               case .authenticationRequired = remoteError {
-                currentUser = nil
-            }
+            isOnline = false
             if showErrors {
-                alert = LibraryAlert(title: "无法刷新云书库", message: errorMessage(error))
+                alert = LibraryAlert(title: "无法连接云书库", message: errorMessage(error))
             }
         }
     }
@@ -140,7 +95,7 @@ final class RemoteLibraryStore {
     }
 
     func upload(_ urls: [URL]) async {
-        guard currentUser?.isAdmin == true, !urls.isEmpty else { return }
+        guard !urls.isEmpty else { return }
         guard !isUploading else {
             alert = LibraryAlert(title: "正在上传", message: "请等待当前上传完成。")
             return
@@ -161,7 +116,6 @@ final class RemoteLibraryStore {
     }
 
     func delete(_ book: RemoteBook) async {
-        guard currentUser?.isAdmin == true else { return }
         do {
             try await makeService().delete(book)
             books.removeAll { $0.id == book.id }
@@ -171,7 +125,7 @@ final class RemoteLibraryStore {
     }
 
     func scheduleProgress(book: Book, position: Int, progress: Double) {
-        guard let remoteID = book.remoteSourceID, currentUser != nil else { return }
+        guard let remoteID = book.remoteSourceID else { return }
         progressTasks[remoteID]?.cancel()
         progressTasks[remoteID] = Task { [weak self] in
             try? await Task.sleep(for: .seconds(1.2))
@@ -181,7 +135,7 @@ final class RemoteLibraryStore {
     }
 
     func flushProgress(book: Book, position: Int, progress: Double) {
-        guard let remoteID = book.remoteSourceID, currentUser != nil else { return }
+        guard let remoteID = book.remoteSourceID else { return }
         progressTasks[remoteID]?.cancel()
         progressTasks[remoteID] = Task { [weak self] in
             guard let self else { return }
@@ -189,27 +143,12 @@ final class RemoteLibraryStore {
         }
     }
 
-    private func authenticate(using service: RemoteLibraryService, saveCredentials: Bool) async throws {
-        let user = try await service.login(username: username, password: password)
-        currentUser = user
-        if saveCredentials {
-            UserDefaults.standard.set(serverAddress, forKey: Self.serverDefaultsKey)
-            try KeychainStore.save(username, account: Self.usernameAccount)
-            try KeychainStore.save(password, account: Self.passwordAccount)
-        }
-        await refresh(showErrors: false)
-    }
-
     private func sendProgress(remoteID: String, position: Int, progress: Double) async {
-        do {
-            try await makeService().updateProgress(
-                bookID: remoteID,
-                progress: progress,
-                position: position
-            )
-        } catch {
-            // Reading must never be interrupted by a background sync failure.
-        }
+        try? await makeService().updateProgress(
+            bookID: remoteID,
+            progress: progress,
+            position: position
+        )
     }
 
     private func makeService() throws -> RemoteLibraryService {

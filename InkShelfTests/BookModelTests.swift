@@ -53,8 +53,8 @@ final class BookModelTests: XCTestCase {
           "content_type": "application/epub+zip",
           "imported_at": "2026-08-11T12:00:00+07:00",
           "modified_at": "2026-08-11T12:00:00+07:00",
-          "download_url": "/api/inkshelf/books/0123456789abcdef/file",
-          "cover_url": "/api/inkshelf/books/0123456789abcdef/cover",
+          "download_url": "/inkshelf-api/books/0123456789abcdef/file",
+          "cover_url": "/inkshelf-api/books/0123456789abcdef/cover",
           "progress": {"progress": 0.42, "position": 3, "updated_at": "2026-08-11T12:30:00+07:00"}
         }
         """

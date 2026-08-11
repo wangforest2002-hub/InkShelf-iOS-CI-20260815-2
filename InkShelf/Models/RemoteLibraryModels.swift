@@ -1,23 +1,5 @@
 import Foundation
 
-struct RemoteLibraryUser: Codable, Hashable, Sendable {
-    let username: String
-    let displayName: String?
-    let role: String
-
-    enum CodingKeys: String, CodingKey {
-        case username, role
-        case displayName = "display_name"
-    }
-
-    var title: String {
-        let value = displayName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return value.isEmpty ? username : value
-    }
-
-    var isAdmin: Bool { role == "admin" }
-}
-
 struct RemoteReadingProgress: Codable, Hashable, Sendable {
     let progress: Double
     let position: Int
@@ -83,10 +65,6 @@ struct RemoteBook: Identifiable, Codable, Hashable, Sendable {
 
 struct RemoteBooksEnvelope: Decodable, Sendable {
     let books: [RemoteBook]
-}
-
-struct RemoteLoginEnvelope: Decodable, Sendable {
-    let user: RemoteLibraryUser?
 }
 
 struct RemoteUploadEnvelope: Decodable, Sendable {
