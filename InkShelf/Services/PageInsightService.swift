@@ -126,9 +126,9 @@ private enum PageInsightError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .unreadablePage: "无法读取这一页的画面。"
-        case .unreadablePDF: "无法打开 PDF。"
-        case .lockedPDF: "请先解锁 PDF，再让 AI 阅读。"
+        case .unreadablePage: return "无法读取这一页的画面。"
+        case .unreadablePDF: return "无法打开 PDF。"
+        case .lockedPDF: return "请先解锁 PDF，再让 AI 阅读。"
         }
     }
 }

@@ -13,11 +13,11 @@ enum BookImportError: LocalizedError, Sendable {
 
     var errorDescription: String? {
         switch self {
-        case .unsupportedFile(let name): "暂不支持“\(name)”的文件格式。"
-        case .unreadablePDF(let name): "无法读取 PDF“\(name)”。文件可能已损坏。"
-        case .emptyArchive(let name): "压缩包“\(name)”中没有可读取的图片。"
-        case .archiveTooLarge: "压缩包展开后过大或页面过多，已停止导入以保护设备存储空间。"
-        case .noImages: "没有选择可读取的图片。"
+        case .unsupportedFile(let name): return "暂不支持“\(name)”的文件格式。"
+        case .unreadablePDF(let name): return "无法读取 PDF“\(name)”。文件可能已损坏。"
+        case .emptyArchive(let name): return "压缩包“\(name)”中没有可读取的图片。"
+        case .archiveTooLarge: return "压缩包展开后过大或页面过多，已停止导入以保护设备存储空间。"
+        case .noImages: return "没有选择可读取的图片。"
         }
     }
 }

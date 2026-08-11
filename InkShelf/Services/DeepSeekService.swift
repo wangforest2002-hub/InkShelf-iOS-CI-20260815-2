@@ -270,10 +270,10 @@ enum DeepSeekError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .missingKey: "请先在设置中填写 DeepSeek API 密钥。"
-        case .invalidResponse: "DeepSeek 返回了无法识别的响应。"
-        case .emptyResponse: "AI 这次没有生成内容，请稍后重试。"
-        case .invalidJSON: "AI 返回的内容格式不完整，请重试。"
+        case .missingKey: return "请先在设置中填写 DeepSeek API 密钥。"
+        case .invalidResponse: return "DeepSeek 返回了无法识别的响应。"
+        case .emptyResponse: return "AI 这次没有生成内容，请稍后重试。"
+        case .invalidJSON: return "AI 返回的内容格式不完整，请重试。"
         case .server(let status, let message):
             if status == 401 { return "DeepSeek 密钥无效或已失效，请重新填写。" }
             if status == 402 { return "DeepSeek 账户余额不足。" }

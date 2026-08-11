@@ -10,11 +10,11 @@ enum EBookImportError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .invalidEPUB: "EPUB 结构不完整或文件已损坏。"
-        case .emptyBook: "电子书中没有可阅读的章节。"
-        case .bookTooLarge: "电子书展开后过大，已停止导入以保护设备存储空间。"
-        case .unreadableText: "无法识别这个文本文件的编码。"
-        case .invalidFictionBook: "FB2 文件结构不完整或已损坏。"
+        case .invalidEPUB: return "EPUB 结构不完整或文件已损坏。"
+        case .emptyBook: return "电子书中没有可阅读的章节。"
+        case .bookTooLarge: return "电子书展开后过大，已停止导入以保护设备存储空间。"
+        case .unreadableText: return "无法识别这个文本文件的编码。"
+        case .invalidFictionBook: return "FB2 文件结构不完整或已损坏。"
         }
     }
 }
