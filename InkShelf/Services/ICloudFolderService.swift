@@ -129,13 +129,8 @@ enum ICloudFolderService {
                 try? FileManager.default.startDownloadingUbiquitousItem(at: sourceURL)
                 for _ in 0..<7_200 {
                     try Task.checkCancellation()
-                    let values = try? sourceURL.resourceValues(forKeys: [
-                        .ubiquitousItemDownloadingStatusKey,
-                        .ubiquitousItemPercentDownloadedKey,
-                    ])
-                    let percentNumber = values?.allValues[.ubiquitousItemPercentDownloadedKey] as? NSNumber
-                    let percent = min(max((percentNumber?.doubleValue ?? 0) / 100, 0), 1)
-                    await progress(percent * 0.88)
+                    let values = try? sourceURL.resourceValues(forKeys: [.ubiquitousItemDownloadingStatusKey])
+                    await progress(0.08)
                     if values?.ubiquitousItemDownloadingStatus == .current ||
                         values?.ubiquitousItemDownloadingStatus == .downloaded {
                         break
@@ -157,7 +152,7 @@ enum ICloudFolderService {
                         from: coordinatedURL,
                         to: destination,
                         expectedSize: max(book.size, 1),
-                        baseProgress: ubiquitous ? 0.88 : 0,
+                        baseProgress: ubiquitous ? 0.08 : 0,
                         progress: progress
                     )
                 } catch {
