@@ -94,7 +94,7 @@ struct SettingsView: View {
                 Section("云书库") {
                     LabeledContent("iCloud Drive") {
                         Text(iCloudLibrary.folders.isEmpty ? "未连接" : "已连接")
-                            .foregroundStyle(iCloudLibrary.folders.isEmpty ? .secondary : .green)
+                            .foregroundStyle(iCloudLibrary.folders.isEmpty ? Color.secondary : Color.green)
                     }
                     if !iCloudLibrary.folders.isEmpty {
                         LabeledContent("云端索引") {
