@@ -7,7 +7,7 @@
 - PDF：保留并打开原文件，使用 PDFKit 矢量/原始页面渲染，不重新压缩。
 - 漫画与画集：CBZ、ZIP、JPG、PNG、HEIC、WebP、GIF、TIFF、BMP、AVIF 等常用图片格式。
 - 电子书：EPUB、TXT、HTML/HTM、Markdown、RTF、FB2。
-- 导入方式：文件、整个文件夹、照片图库，以及私人服务器云书库。
+- 导入方式：文件、整个文件夹、照片图库、iCloud Drive 文件夹，以及私人服务器云书库。
 
 暂不支持带 DRM 的电子书，也不绕过 DRM；CBR/RAR/7z、MOBI 与 AZW3 尚未加入。
 
@@ -28,9 +28,21 @@
 - DeepSeek 密钥只保存在 iOS Keychain；App 不把 PDF 或整页原图直接上传给 AI。
 - AI 是可选功能，关闭后阅读器完全不发起 DeepSeek 请求。
 
-## 私人云书库
+## iCloud Drive 书库
 
-“云书库”标签页连接 `https://4-3rail.top/` 的墨阅独立书库服务：
+“云书库”默认使用 iCloud。第一次在系统“文件”选择存放画集的 iCloud Drive 文件夹后，墨阅会保存系统授予的文件夹访问权限：
+
+- 递归索引 PDF、CBZ、图片和电子书，只读取文件名、大小与更新时间，不预先复制整套书库。
+- 首次打开一本书时由 iCloud 下载原文件并显示进度，整理完成后使用与本地书籍完全相同的阅读引擎。
+- 已打开的书保留本地副本，之后可离线阅读；可以单独删除本地副本以释放空间。
+- 断开文件夹或删除本地副本不会修改、移动或删除 iCloud Drive 中的原文件。
+- 连接通过 iOS 文件选择器和 Apple ID 的系统权限完成，墨阅不接触账号或密码，也不需要自建 iCloud 数据库。
+
+在 Windows 上，可先用 iCloud for Windows 把 `anmi`、`kantoku`、`rurudo`、`ももこ` 四个文件夹上传到同一个 iCloud Drive 文件夹；进入墨阅后只需选择它们的上级文件夹。
+
+## 独立服务器书库
+
+“云书库”的“服务器”模式连接 `https://4-3rail.top/` 的墨阅独立书库服务：
 
 - 不需要账号或密码，进入页面即可查看、上传、下载、删除和同步阅读进度。
 - 列表和小封面优先加载；原书首次打开时后台下载并显示进度。
@@ -67,7 +79,7 @@ open InkShelf.xcodeproj
 
 ## 本机数据位置
 
-导入和云端缓存内容保存在 App Documents 下的 `InkShelf Library`：
+导入、iCloud 按需下载和服务器缓存内容保存在 App Documents 下的 `InkShelf Library`：
 
 - PDF：`<book-id>/source.pdf`
 - CBZ/ZIP：`<book-id>/source.cbz|zip` 与 `<book-id>/pages/`
@@ -75,4 +87,4 @@ open InkShelf.xcodeproj
 - 电子书：`<book-id>/source.*`、解析资源与 `ebook.json`
 - 元数据：`library.json`
 
-启用了文件共享，必要时可通过系统文件管理或设备备份取回内容。删除本地书架项目会删除该项目的本地副本；删除云端项目则会单独确认，而且不会删除已经缓存的本地副本。
+启用了文件共享，必要时可通过系统文件管理或设备备份取回内容。删除本地书架项目只会删除该项目的本地副本；iCloud 原文件保持不变。删除服务器项目则会单独确认，而且不会删除已经缓存的本地副本。

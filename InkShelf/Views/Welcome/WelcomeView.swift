@@ -19,9 +19,9 @@ struct WelcomeView: View {
             colors: [AppTheme.accent, AppTheme.coral]
         ),
         .init(
-            title: "私人云书库，离线也能读",
-            subtitle: "连接你的私人服务器，原书首次下载后保存在本机；进度会同步，断网也能继续。",
-            symbol: "externaldrive.fill.badge.icloud",
+            title: "iCloud 书库，按需下载",
+            subtitle: "选择 iCloud Drive 中的画集文件夹即可浏览；原书首次打开后保存在本机，断网也能继续。",
+            symbol: "icloud.and.arrow.down.fill",
             colors: [AppTheme.cyan, AppTheme.accent]
         ),
         .init(

@@ -4,6 +4,7 @@ struct SettingsView: View {
     @Environment(LibraryStore.self) private var library
     @Environment(AICompanionStore.self) private var companion
     @Environment(RemoteLibraryStore.self) private var remoteLibrary
+    @Environment(ICloudLibraryStore.self) private var iCloudLibrary
     @AppStorage("appearance") private var appearance = AppAppearance.light.rawValue
     @AppStorage("reader.layout") private var layout = ReaderLayout.single.rawValue
     @AppStorage("reader.flow") private var flow = ReaderFlow.horizontal.rawValue
@@ -91,11 +92,21 @@ struct SettingsView: View {
                 }
 
                 Section("云书库") {
+                    LabeledContent("iCloud Drive") {
+                        Text(iCloudLibrary.folders.isEmpty ? "未连接" : "已连接")
+                            .foregroundStyle(iCloudLibrary.folders.isEmpty ? .secondary : .green)
+                    }
+                    if !iCloudLibrary.folders.isEmpty {
+                        LabeledContent("云端索引") {
+                            Text("\(iCloudLibrary.books.count) 本 · \(AppFormatters.fileSize(iCloudLibrary.totalCloudSize))")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                     LabeledContent("独立服务器") {
                         Text(remoteLibrary.isOnline ? "已连接" : "未连接")
                             .foregroundStyle(remoteLibrary.isOnline ? .green : .secondary)
                     }
-                    Text("与文档中心完全分离，不需要账号或密码。服务器保存原文件；打开后会缓存到本机，离线时仍可继续阅读。")
+                    Text("默认可连接“文件”App 中的 iCloud Drive 文件夹：只索引书名和大小，首次打开才下载，之后可离线阅读。独立服务器仍作为备用来源。")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -109,7 +120,7 @@ struct SettingsView: View {
                     }
 
                     Label {
-                        Text("本地导入与云端缓存不会修改原文件。云书库不设密码，知道服务器地址的人都能管理其中的书籍；启用 AI 后，仅将本机识别出的文字和粗略画面标签发送给 DeepSeek，不上传整页原图。")
+                        Text("本地导入与云端缓存不会修改原文件。删除 iCloud 本地副本或断开文件夹不会删除 iCloud 原书；独立服务器不设密码，知道地址的人都能管理其中的书籍。启用 AI 后，仅将本机识别出的文字和粗略画面标签发送给 DeepSeek，不上传整页原图。")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     } icon: {
@@ -119,7 +130,7 @@ struct SettingsView: View {
                 }
 
                 Section("关于") {
-                    LabeledContent("墨阅", value: "1.2.1")
+                    LabeledContent("墨阅", value: "1.3.0")
                     Button("重新查看欢迎页") {
                         hasSeenWelcome = false
                     }

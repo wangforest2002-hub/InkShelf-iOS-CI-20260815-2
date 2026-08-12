@@ -125,7 +125,7 @@ final class RemoteLibraryStore {
     }
 
     func scheduleProgress(book: Book, position: Int, progress: Double) {
-        guard let remoteID = book.remoteSourceID else { return }
+        guard let remoteID = book.remoteSourceID, !remoteID.hasPrefix("icloud:") else { return }
         progressTasks[remoteID]?.cancel()
         progressTasks[remoteID] = Task { [weak self] in
             try? await Task.sleep(for: .seconds(1.2))
@@ -135,7 +135,7 @@ final class RemoteLibraryStore {
     }
 
     func flushProgress(book: Book, position: Int, progress: Double) {
-        guard let remoteID = book.remoteSourceID else { return }
+        guard let remoteID = book.remoteSourceID, !remoteID.hasPrefix("icloud:") else { return }
         progressTasks[remoteID]?.cancel()
         progressTasks[remoteID] = Task { [weak self] in
             guard let self else { return }

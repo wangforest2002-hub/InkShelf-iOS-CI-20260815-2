@@ -2,6 +2,7 @@ import SwiftUI
 
 struct RootView: View {
     @Environment(RemoteLibraryStore.self) private var remoteLibrary
+    @Environment(ICloudLibraryStore.self) private var iCloudLibrary
     @AppStorage("hasSeenWelcome") private var hasSeenWelcome = false
     @State private var showWelcome = false
 
@@ -10,6 +11,7 @@ struct RootView: View {
             .task {
                 showWelcome = !hasSeenWelcome
                 await remoteLibrary.loadIfNeeded()
+                await iCloudLibrary.loadIfNeeded()
             }
             .onChange(of: hasSeenWelcome) { _, hasSeen in
                 if !hasSeen { showWelcome = true }

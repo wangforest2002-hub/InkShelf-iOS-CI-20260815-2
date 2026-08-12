@@ -73,6 +73,32 @@ final class BookModelTests: XCTestCase {
         XCTAssertEqual(decoded.remoteModifiedAt, book.remoteModifiedAt)
     }
 
+    func testICloudBookIdentityIsStableAcrossScans() {
+        let folderID = UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE")!
+        let first = ICloudBook.stableID(folderID: folderID, relativePath: "anmi/画集 01.cbz")
+        let second = ICloudBook.stableID(folderID: folderID, relativePath: "anmi/画集 01.cbz")
+        let another = ICloudBook.stableID(folderID: folderID, relativePath: "anmi/画集 02.cbz")
+        XCTAssertEqual(first, second)
+        XCTAssertNotEqual(first, another)
+    }
+
+    func testICloudBookRoundTripsWithoutBookmarkOrFileContents() throws {
+        let book = ICloudBook(
+            id: "1234567890abcdef12345678",
+            folderID: UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE")!,
+            relativePath: "kantoku/sample.cbz",
+            name: "sample.cbz",
+            collection: "kantoku",
+            size: 1_024,
+            modifiedAt: Date(timeIntervalSince1970: 123_456),
+            format: "cbz"
+        )
+        let decoded = try JSONDecoder().decode(ICloudBook.self, from: JSONEncoder().encode(book))
+        XCTAssertEqual(decoded, book)
+        XCTAssertEqual(decoded.kind, .archive)
+        XCTAssertEqual(decoded.sourceID, "icloud:1234567890abcdef12345678")
+    }
+
     private func makeBook(pageCount: Int, currentPage: Int) -> Book {
         Book(
             title: "测试",

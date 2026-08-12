@@ -2,6 +2,40 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct RemoteLibraryView: View {
+    @AppStorage("cloud.libraryMode") private var modeRaw = CloudLibraryMode.iCloud.rawValue
+
+    private var mode: Binding<CloudLibraryMode> {
+        Binding(
+            get: { CloudLibraryMode(rawValue: modeRaw) ?? .iCloud },
+            set: { modeRaw = $0.rawValue }
+        )
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                Picker("云书库来源", selection: mode) {
+                    ForEach(CloudLibraryMode.allCases) { source in
+                        Text(source.title).tag(source)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal, 18)
+                .padding(.vertical, 9)
+                .background(.bar)
+
+                switch mode.wrappedValue {
+                case .iCloud:
+                    ICloudLibraryView()
+                case .server:
+                    ServerLibraryView()
+                }
+            }
+        }
+    }
+}
+
+private struct ServerLibraryView: View {
     @Environment(RemoteLibraryStore.self) private var remote
     @Environment(LibraryStore.self) private var library
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -24,27 +58,25 @@ struct RemoteLibraryView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            ZStack {
-                AuroraBackground()
+        ZStack {
+            AuroraBackground()
 
-                remoteContent
+            remoteContent
 
-                if remote.isUploading || !remote.downloadProgress.isEmpty {
-                    RemoteTransferOverlay(
-                        isUploading: remote.isUploading,
-                        progress: remote.downloadProgress.values.first
-                    )
-                    .transition(.scale(scale: 0.94).combined(with: .opacity))
-                }
+            if remote.isUploading || !remote.downloadProgress.isEmpty {
+                RemoteTransferOverlay(
+                    isUploading: remote.isUploading,
+                    progress: remote.downloadProgress.values.first
+                )
+                .transition(.scale(scale: 0.94).combined(with: .opacity))
             }
-            .navigationTitle("云书库")
-            .searchable(text: $query, prompt: "搜索服务器上的书")
-            .toolbar { toolbarContent }
-            .navigationDestination(item: $openedBook) { book in
-                ReaderView(book: book)
-                    .navigationTransition(.zoom(sourceID: book.remoteSourceID ?? book.id.uuidString, in: coverTransition))
-            }
+        }
+        .navigationTitle("服务器书库")
+        .searchable(text: $query, prompt: "搜索服务器上的书")
+        .toolbar { toolbarContent }
+        .navigationDestination(item: $openedBook) { book in
+            ReaderView(book: book)
+                .navigationTransition(.zoom(sourceID: book.remoteSourceID ?? book.id.uuidString, in: coverTransition))
         }
         .fileImporter(
             isPresented: $showUploader,
