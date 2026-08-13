@@ -149,7 +149,6 @@ enum ICloudFolderService {
                     let values = try? sourceURL.resourceValues(forKeys: [
                         .ubiquitousItemDownloadingStatusKey,
                         .ubiquitousItemDownloadingErrorKey,
-                        .ubiquitousItemPercentDownloadedKey,
                     ])
                     if values?.ubiquitousItemDownloadingError != nil {
                         throw ICloudFolderError.downloadFailed
@@ -162,7 +161,9 @@ enum ICloudFolderService {
                         break
                     }
 
-                    let percent = (values?.allValues[.ubiquitousItemPercentDownloadedKey] as? NSNumber)?.doubleValue ?? 0
+                    let percent = (NSMetadataItem(url: sourceURL)?
+                        .value(forAttribute: NSMetadataUbiquitousItemPercentDownloadedKey) as? NSNumber)?
+                        .doubleValue ?? 0
                     let fraction = min(max(percent / 100, 0), 1)
                     await progress(0.02 + fraction * 0.46)
                     if status == .current || status == .downloaded {
