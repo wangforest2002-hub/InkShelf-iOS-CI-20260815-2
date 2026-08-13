@@ -7,6 +7,12 @@ struct WelcomeView: View {
 
     private let features: [WelcomeFeature] = [
         .init(
+            title: "欢迎回到二次元小家",
+            subtitle: "这里不只是一副书架。窗边有暖光，喜欢的故事有自己的位置，每次打开都像回到熟悉的小屋。",
+            symbol: "house.fill",
+            colors: [AppTheme.honey, AppTheme.coral]
+        ),
+        .init(
             title: "原稿原样，清晰到底",
             subtitle: "PDF 使用 PDFKit 原生渲染，导入文件不转码；图片与压缩包也保留源文件。",
             symbol: "sparkles.rectangle.stack.fill",
@@ -44,6 +50,10 @@ struct WelcomeView: View {
 
             VStack(spacing: 0) {
                 HStack {
+                    Label("二次元小家", systemImage: "house.fill")
+                        .font(.subheadline.bold())
+                        .foregroundStyle(AppTheme.wood)
+                        .padding(22)
                     Spacer()
                     Button("跳过", action: onFinish)
                         .buttonStyle(.plain)
@@ -69,7 +79,7 @@ struct WelcomeView: View {
                         }
                     }
                 } label: {
-                    Label(page == features.count - 1 ? "进入书架" : "继续", systemImage: "arrow.right")
+                    Label(page == features.count - 1 ? "回到我的小家" : "继续", systemImage: "arrow.right")
                         .font(.headline)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 4)
@@ -102,13 +112,27 @@ private struct WelcomeFeatureView: View {
                     )
                     .frame(width: 270, height: 270)
 
-                Image(systemName: feature.symbol)
-                    .font(.system(size: 82, weight: .medium))
-                    .symbolRenderingMode(.palette)
-                    .foregroundStyle(.white, LinearGradient(colors: feature.colors, startPoint: .topLeading, endPoint: .bottomTrailing))
-                    .shadow(color: feature.colors[0].opacity(0.4), radius: 30)
-                    .rotationEffect(.degrees(isActive && !reduceMotion ? 0 : -4))
-                    .scaleEffect(isActive ? 1 : 0.90)
+                if feature.symbol == "house.fill" {
+                    CozyWindowView()
+                        .frame(width: 230, height: 170)
+                        .overlay(alignment: .bottom) {
+                            Image(systemName: "house.fill")
+                                .font(.system(size: 54, weight: .semibold))
+                                .foregroundStyle(AppTheme.wood)
+                                .padding(15)
+                                .background(.ultraThinMaterial, in: Circle())
+                                .offset(y: 32)
+                        }
+                        .scaleEffect(isActive ? 1 : 0.92)
+                } else {
+                    Image(systemName: feature.symbol)
+                        .font(.system(size: 82, weight: .medium))
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(.white, LinearGradient(colors: feature.colors, startPoint: .topLeading, endPoint: .bottomTrailing))
+                        .shadow(color: feature.colors[0].opacity(0.4), radius: 30)
+                        .rotationEffect(.degrees(isActive && !reduceMotion ? 0 : -4))
+                        .scaleEffect(isActive ? 1 : 0.90)
+                }
             }
             .animation(reduceMotion ? nil : .bouncy(duration: 0.7), value: isActive)
 

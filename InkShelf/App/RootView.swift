@@ -64,15 +64,15 @@ private struct MainTabView: View {
 
     private var tabs: some View {
         TabView {
-            Tab("书架", systemImage: "books.vertical.fill") {
+            Tab("小家", systemImage: "house.fill") {
                 LibraryView(scope: .all)
             }
 
-            Tab("收藏", systemImage: "star.fill") {
+            Tab("珍藏", systemImage: "heart.fill") {
                 LibraryView(scope: .favorites)
             }
 
-            Tab("云书库", systemImage: "externaldrive.fill.badge.icloud") {
+            Tab("云阁楼", systemImage: "externaldrive.fill.badge.icloud") {
                 RemoteLibraryView()
             }
 

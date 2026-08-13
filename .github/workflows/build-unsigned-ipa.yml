@@ -90,6 +90,26 @@ jobs:
             -only-testing:InkShelfTests/BookModelTests/testLocalCBZPDFFolderSmokeImport \
             -parallel-testing-enabled NO
 
+      - name: Launch app and capture UI smoke screenshot
+        run: |
+          APP_PATH="build-simulator/Build/Products/Debug-iphonesimulator/InkShelf.app"
+          test -d "$APP_PATH"
+          xcrun simctl terminate "$DEVICE_ID" com.inkshelf.reader 2>/dev/null || true
+          xcrun simctl uninstall "$DEVICE_ID" com.inkshelf.reader 2>/dev/null || true
+          xcrun simctl install "$DEVICE_ID" "$APP_PATH"
+          xcrun simctl launch "$DEVICE_ID" com.inkshelf.reader | grep -q 'com.inkshelf.reader:'
+          sleep 6
+          xcrun simctl io "$DEVICE_ID" screenshot ui-smoke.png
+          test -s ui-smoke.png
+
+      - name: Upload UI smoke screenshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: InkShelf-ui-smoke
+          path: ui-smoke.png
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Build for iPhone
         run: |
           set -o pipefail
@@ -107,7 +127,7 @@ jobs:
         run: |
           APP_PATH="build/Build/Products/Release-iphoneos/InkShelf.app"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$APP_PATH/Info.plist")" = "二次元小家"
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Info.plist")" = "1.4.0"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Info.plist")" = "1.5.0"
           /usr/libexec/PlistBuddy -c 'Print :CFBundleIcons' "$APP_PATH/Info.plist" >/dev/null
           find "$APP_PATH" -maxdepth 1 -type f \( -name 'AppIcon*.png' -o -name 'Assets.car' \) | grep -q .
 

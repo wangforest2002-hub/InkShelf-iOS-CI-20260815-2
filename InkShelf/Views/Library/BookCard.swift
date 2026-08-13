@@ -12,7 +12,22 @@ struct BookCard: View {
                 CoverArtwork(book: book, coverURL: coverURL, previewURLs: previewURLs)
                     .aspectRatio(0.70, contentMode: .fit)
                     .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                    .shadow(color: .black.opacity(0.22), radius: 10, y: 7)
+                    .shadow(color: AppTheme.wood.opacity(0.20), radius: 10, y: 7)
+                    .overlay(alignment: .bottom) {
+                        Capsule()
+                            .fill(
+                                LinearGradient(
+                                    colors: [AppTheme.wood.opacity(0.72), AppTheme.honey.opacity(0.56)],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
+                            .frame(height: 6)
+                            .padding(.horizontal, 7)
+                            .offset(y: 5)
+                            .shadow(color: AppTheme.wood.opacity(0.18), radius: 4, y: 3)
+                            .accessibilityHidden(true)
+                    }
 
                 if book.isFavorite {
                     Image(systemName: "star.fill")
@@ -54,9 +69,18 @@ struct BookCard: View {
                 .foregroundStyle(.secondary)
 
                 ProgressView(value: book.progress)
-                    .tint(AppTheme.accent)
+                    .tint(book.progress > 0 ? AppTheme.coral : AppTheme.accent)
                     .scaleEffect(x: 1, y: 0.72, anchor: .center)
             }
+        }
+        .padding(9)
+        .background {
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(.thinMaterial)
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(.white.opacity(0.24), lineWidth: 0.8)
         }
         .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .accessibilityElement(children: .combine)

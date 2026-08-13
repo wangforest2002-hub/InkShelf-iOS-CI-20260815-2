@@ -20,6 +20,22 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
+                Section {
+                    HStack(spacing: 16) {
+                        CozyWindowView()
+                            .frame(width: 84, height: 62)
+                        VStack(alignment: .leading, spacing: 5) {
+                            Label("把这里布置成喜欢的样子", systemImage: "house.fill")
+                                .font(.headline)
+                            Text("阅读习惯、云书库和陪读伙伴都安放在这里。")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(.vertical, 6)
+                    .accessibilityElement(children: .combine)
+                }
+
                 Section("外观") {
                     Picker("应用外观", selection: $appearance) {
                         ForEach(AppAppearance.allCases) { item in
@@ -130,7 +146,7 @@ struct SettingsView: View {
                 }
 
                 Section("关于") {
-                    LabeledContent("二次元小家", value: "1.3.1")
+                    LabeledContent("二次元小家", value: "1.5.0")
                     Button("重新查看欢迎页") {
                         hasSeenWelcome = false
                     }
@@ -138,7 +154,7 @@ struct SettingsView: View {
             }
             .scrollContentBackground(.hidden)
             .background(AuroraBackground())
-            .navigationTitle("设置")
+            .navigationTitle("小家设置")
         }
     }
 

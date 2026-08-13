@@ -40,17 +40,36 @@ struct LibraryView: View {
                 } else {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 22) {
-                            if scope == .all,
-                               query.isEmpty,
-                               let continueBook = library.continueReadingBook {
-                                NavigationLink(value: continueBook) {
-                                    ContinueReadingCard(
-                                        book: continueBook,
-                                        coverURL: library.coverURL(for: continueBook)
+                            if query.isEmpty {
+                                if scope == .all {
+                                    HomeWelcomeHeader(
+                                        bookCount: library.books.count,
+                                        favoriteCount: library.books.filter(\.isFavorite).count
+                                    )
+
+                                    if let continueBook = library.continueReadingBook {
+                                        NavigationLink(value: continueBook) {
+                                            ContinueReadingCard(
+                                                book: continueBook,
+                                                coverURL: library.coverURL(for: continueBook)
+                                            )
+                                        }
+                                        .buttonStyle(PressableCardStyle())
+                                    }
+                                } else {
+                                    LibrarySectionHeading(
+                                        title: "珍藏角落",
+                                        subtitle: "喜欢的故事，都替你安静收在这里",
+                                        symbol: "heart.fill"
                                     )
                                 }
-                                .buttonStyle(PressableCardStyle())
                             }
+
+                            LibrarySectionHeading(
+                                title: scope == .all ? "家里的书架" : "我的珍藏",
+                                subtitle: "(books.count) 本读物",
+                                symbol: scope == .all ? "books.vertical.fill" : "star.fill"
+                            )
 
                             LazyVGrid(columns: gridColumns, spacing: 24) {
                                 ForEach(books) { book in
@@ -87,7 +106,7 @@ struct LibraryView: View {
                         .transition(.scale(scale: 0.92).combined(with: .opacity))
                 }
             }
-            .navigationTitle(scope == .all ? "二次元小家" : "我的收藏")
+            .navigationTitle(scope == .all ? "二次元小家" : "珍藏角落")
             .searchable(text: $query, prompt: "搜索标题")
             .toolbar {
                 if scope == .all {
@@ -294,9 +313,9 @@ private struct ContinueReadingCard: View {
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
 
             VStack(alignment: .leading, spacing: 7) {
-                Label("继续阅读", systemImage: "play.fill")
+                Label("为你留着位置", systemImage: "lamp.table.fill")
                     .font(.caption.weight(.bold))
-                    .foregroundStyle(AppTheme.accent)
+                    .foregroundStyle(AppTheme.wood)
                 Text(book.title)
                     .font(.headline)
                     .foregroundStyle(.primary)
@@ -305,7 +324,7 @@ private struct ContinueReadingCard: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 ProgressView(value: book.progress)
-                    .tint(AppTheme.accent)
+                    .tint(AppTheme.coral)
             }
             Spacer(minLength: 4)
             Image(systemName: "chevron.right")
@@ -314,8 +333,145 @@ private struct ContinueReadingCard: View {
         }
         .padding(14)
         .inkGlass(cornerRadius: 24, interactive: true)
+        .overlay {
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(
+                    LinearGradient(
+                        colors: [AppTheme.honey.opacity(0.48), AppTheme.cyan.opacity(0.22)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1
+                )
+        }
+        .shadow(color: AppTheme.wood.opacity(0.09), radius: 16, y: 8)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("继续阅读 \(book.title)，\(book.progressLabel)")
+    }
+}
+
+private struct HomeWelcomeHeader: View {
+    let bookCount: Int
+    let favoriteCount: Int
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var appeared = false
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 18) {
+                greetingCopy
+                Spacer(minLength: 8)
+                CozyWindowView()
+                    .frame(width: 116, height: 88)
+            }
+
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(alignment: .top, spacing: 12) {
+                    greetingCopy
+                    Spacer(minLength: 4)
+                    CozyWindowView()
+                        .frame(width: 82, height: 64)
+                }
+            }
+        }
+        .padding(18)
+        .background {
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: colorScheme == .dark
+                            ? [AppTheme.nightLamp.opacity(0.42), AppTheme.lilac.opacity(0.12), AppTheme.accent.opacity(0.08)]
+                            : [AppTheme.cream.opacity(0.80), AppTheme.cyan.opacity(0.10), AppTheme.peach.opacity(0.14)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+        }
+        .inkGlass(cornerRadius: 28)
+        .overlay {
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .stroke(.white.opacity(colorScheme == .dark ? 0.16 : 0.36), lineWidth: 1)
+        }
+        .shadow(color: AppTheme.honey.opacity(0.12), radius: 24, y: 12)
+        .opacity(appeared ? 1 : 0)
+        .offset(y: appeared ? 0 : 8)
+        .onAppear {
+            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.55)) {
+                appeared = true
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private var greetingCopy: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            Label(greeting, systemImage: "house.fill")
+                .font(.title2.bold())
+                .foregroundStyle(
+                    LinearGradient(
+                        colors: [AppTheme.wood, AppTheme.coral, AppTheme.accent],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+
+            Text(message)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            HStack(spacing: 8) {
+                HomeStatChip(symbol: "books.vertical.fill", text: "\(bookCount) 本")
+                if favoriteCount > 0 {
+                    HomeStatChip(symbol: "heart.fill", text: "\(favoriteCount) 份喜欢")
+                }
+            }
+        }
+    }
+
+    private var greeting: String {
+        switch Calendar.current.component(.hour, from: .now) {
+        case 5..<11: "早安，欢迎回家"
+        case 11..<18: "午后好，欢迎回家"
+        default: "晚上好，欢迎回家"
+        }
+    }
+
+    private var message: String {
+        bookCount == 0 ? "把喜欢的故事带回家吧" : "暖光已经亮起，慢慢挑一本喜欢的"
+    }
+}
+
+private struct HomeStatChip: View {
+    let symbol: String
+    let text: String
+
+    var body: some View {
+        Label(text, systemImage: symbol)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(.white.opacity(0.28), in: Capsule())
+    }
+}
+
+private struct LibrarySectionHeading: View {
+    let title: String
+    let subtitle: String
+    let symbol: String
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline) {
+            Label(title, systemImage: symbol)
+                .font(.headline)
+                .foregroundStyle(.primary)
+            Spacer()
+            Text(subtitle)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .accessibilityElement(children: .combine)
     }
 }
 
