@@ -10,6 +10,7 @@ struct DocumentPickerView: UIViewControllerRepresentable {
     let contentTypes: [UTType]
     var allowsMultipleSelection = false
     var asCopy = false
+    var directoryURL: URL? = nil
     let onResult: (Result<[URL], Error>) -> Void
     var onCancel: () -> Void = {}
 
@@ -25,6 +26,7 @@ struct DocumentPickerView: UIViewControllerRepresentable {
         picker.delegate = context.coordinator
         picker.allowsMultipleSelection = allowsMultipleSelection
         picker.shouldShowFileExtensions = true
+        picker.directoryURL = directoryURL
         return picker
     }
 

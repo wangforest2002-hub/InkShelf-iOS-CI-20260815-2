@@ -101,7 +101,7 @@ jobs:
             -configuration Debug \
             -destination "platform=iOS Simulator,id=$DEVICE_ID" \
             -derivedDataPath build-simulator \
-            -only-testing:InkShelfUITests/ReaderNavigationUITests/testSeededLocalBookOpensAndReturnsFromReader \
+            -only-testing:InkShelfUITests/ReaderNavigationUITests \
             -parallel-testing-enabled NO
 
       - name: Launch app and capture UI smoke screenshot

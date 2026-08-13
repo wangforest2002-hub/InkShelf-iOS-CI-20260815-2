@@ -38,6 +38,9 @@ final class LibraryStore {
         if ProcessInfo.processInfo.arguments.contains("INKSHELF_UI_TEST_SEED") {
             installReaderNavigationSmokeBook()
         }
+        if ProcessInfo.processInfo.arguments.contains("INKSHELF_UI_TEST_PICKER") {
+            installPickerSmokeInput()
+        }
 #endif
     }
 
@@ -375,6 +378,19 @@ final class LibraryStore {
             saveImmediately()
         } catch {
             alert = LibraryAlert(title: "UI 冒烟数据失败", message: error.localizedDescription)
+        }
+    }
+
+    private func installPickerSmokeInput() {
+        let folder = libraryURL.deletingLastPathComponent()
+            .appendingPathComponent("PickerSmokeInbox", isDirectory: true)
+        let file = folder.appendingPathComponent("picker-fixture.png")
+        let png = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLxVQAAAABJRU5ErkJggg==")!
+        do {
+            try fileManager.createDirectory(at: folder, withIntermediateDirectories: true)
+            try png.write(to: file, options: .atomic)
+        } catch {
+            alert = LibraryAlert(title: "UI 选择器数据失败", message: error.localizedDescription)
         }
     }
 #endif

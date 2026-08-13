@@ -156,6 +156,7 @@ struct LibraryView: View {
                 contentTypes: picker == .files ? UTType.inkShelfFileTypes : [.folder],
                 allowsMultipleSelection: true,
                 asCopy: true,
+                directoryURL: pickerSmokeDirectory,
                 onResult: { result in
                     importPicker = nil
                     handleImportResult(result, removeSourcesAfterImport: true)
@@ -271,6 +272,16 @@ struct LibraryView: View {
         } else {
             openedBook = book
         }
+    }
+
+    private var pickerSmokeDirectory: URL? {
+#if DEBUG
+        guard ProcessInfo.processInfo.arguments.contains("INKSHELF_UI_TEST_PICKER") else { return nil }
+        return FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("PickerSmokeInbox", isDirectory: true)
+#else
+        return nil
+#endif
     }
 
     private func importPhotos(_ items: [PhotosPickerItem]) async {
