@@ -94,6 +94,15 @@ targets:
               - net.daringfireball.markdown
               - org.fictionbook.fb2
         UTImportedTypeDeclarations:
+          - UTTypeIdentifier: org.idpf.epub-container
+            UTTypeDescription: EPUB 电子书
+            UTTypeConformsTo:
+              - public.zip-archive
+            UTTypeTagSpecification:
+              public.filename-extension:
+                - epub
+              public.mime-type:
+                - application/epub+zip
           - UTTypeIdentifier: com.inkshelf.cbz
             UTTypeDescription: Comic Book Archive
             UTTypeConformsTo:
