@@ -162,7 +162,8 @@ enum ICloudFolderService {
                         break
                     }
 
-                    let fraction = min(max((values?.ubiquitousItemPercentDownloaded ?? 0) / 100, 0), 1)
+                    let percent = (values?.allValues[.ubiquitousItemPercentDownloadedKey] as? NSNumber)?.doubleValue ?? 0
+                    let fraction = min(max(percent / 100, 0), 1)
                     await progress(0.02 + fraction * 0.46)
                     if status == .current || status == .downloaded {
                         downloadReady = true
