@@ -39,25 +39,39 @@ struct LibraryView: View {
                     )
                 } else {
                     ScrollView {
-                        LazyVGrid(columns: gridColumns, spacing: 24) {
-                            ForEach(books) { book in
-                                NavigationLink(value: book) {
-                                    BookCard(
-                                        book: book,
-                                        coverURL: library.coverURL(for: book),
-                                        previewURLs: library.previewURLs(for: book)
+                        VStack(alignment: .leading, spacing: 22) {
+                            if scope == .all,
+                               query.isEmpty,
+                               let continueBook = library.continueReadingBook {
+                                NavigationLink(value: continueBook) {
+                                    ContinueReadingCard(
+                                        book: continueBook,
+                                        coverURL: library.coverURL(for: continueBook)
                                     )
-                                        .matchedTransitionSource(id: book.id, in: coverTransition)
                                 }
                                 .buttonStyle(PressableCardStyle())
-                                .contextMenu {
-                                    bookContextMenu(book)
-                                } preview: {
-                                    BookPreview(
-                                        book: book,
-                                        coverURL: library.coverURL(for: book),
-                                        previewURLs: library.previewURLs(for: book)
-                                    )
+                            }
+
+                            LazyVGrid(columns: gridColumns, spacing: 24) {
+                                ForEach(books) { book in
+                                    NavigationLink(value: book) {
+                                        BookCard(
+                                            book: book,
+                                            coverURL: library.coverURL(for: book),
+                                            previewURLs: library.previewURLs(for: book)
+                                        )
+                                            .matchedTransitionSource(id: book.id, in: coverTransition)
+                                    }
+                                    .buttonStyle(PressableCardStyle())
+                                    .contextMenu {
+                                        bookContextMenu(book)
+                                    } preview: {
+                                        BookPreview(
+                                            book: book,
+                                            coverURL: library.coverURL(for: book),
+                                            previewURLs: library.previewURLs(for: book)
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -249,6 +263,59 @@ struct LibraryView: View {
                 message: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
             )
         }
+    }
+}
+
+private struct ContinueReadingCard: View {
+    let book: Book
+    let coverURL: URL?
+
+    var body: some View {
+        HStack(spacing: 16) {
+            Group {
+                if let coverURL, let image = UIImage(contentsOfFile: coverURL.path) {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFill()
+                } else {
+                    LinearGradient(
+                        colors: [AppTheme.accent.opacity(0.75), .cyan.opacity(0.5)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                    .overlay {
+                        Image(systemName: book.kind.systemImage)
+                            .font(.title)
+                            .foregroundStyle(.white)
+                    }
+                }
+            }
+            .frame(width: 72, height: 94)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 7) {
+                Label("继续阅读", systemImage: "play.fill")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(AppTheme.accent)
+                Text(book.title)
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
+                Text(book.progressLabel)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                ProgressView(value: book.progress)
+                    .tint(AppTheme.accent)
+            }
+            Spacer(minLength: 4)
+            Image(systemName: "chevron.right")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.tertiary)
+        }
+        .padding(14)
+        .inkGlass(cornerRadius: 24, interactive: true)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("继续阅读 \(book.title)，\(book.progressLabel)")
     }
 }
 

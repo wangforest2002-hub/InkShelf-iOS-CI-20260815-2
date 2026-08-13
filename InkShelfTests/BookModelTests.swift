@@ -1,5 +1,7 @@
 import XCTest
 import UniformTypeIdentifiers
+import UIKit
+import ZIPFoundation
 @testable import InkShelf
 
 final class BookModelTests: XCTestCase {
@@ -105,7 +107,7 @@ final class BookModelTests: XCTestCase {
         XCTAssertTrue(UTType.comicBookArchive.conforms(to: .zip))
     }
 
-    func testCoordinatedCopyPreservesOriginalBytes() throws {
+    func testCoordinatedCopyPreservesOriginalBytes() async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -115,9 +117,102 @@ final class BookModelTests: XCTestCase {
         let destination = root.appendingPathComponent("copy.cbz")
         let original = Data([0x50, 0x4B, 0x03, 0x04, 0x01, 0x02, 0x03])
         try original.write(to: source)
-        try ExternalFileAccess.copyItem(from: source, to: destination)
+        let copied = try await Task.detached {
+            try ExternalFileAccess.copyItem(from: source, to: destination)
+            return try Data(contentsOf: destination)
+        }.value
 
-        XCTAssertEqual(try Data(contentsOf: destination), original)
+        XCTAssertEqual(copied, original)
+    }
+
+    @MainActor
+    func testLocalCBZPDFFolderSmokeImport() async throws {
+        let fileManager = FileManager.default
+        let root = fileManager.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? fileManager.removeItem(at: root) }
+        try fileManager.createDirectory(at: root, withIntermediateDirectories: true)
+
+        let archivePages = root.appendingPathComponent("archive-pages", isDirectory: true)
+        let gallery = root.appendingPathComponent("本地画集", isDirectory: true)
+        try fileManager.createDirectory(at: archivePages, withIntermediateDirectories: true)
+        try fileManager.createDirectory(at: gallery, withIntermediateDirectories: true)
+        try testPNG(color: .systemPink).write(to: archivePages.appendingPathComponent("001.png"))
+        try testPNG(color: .systemBlue).write(to: archivePages.appendingPathComponent("002.png"))
+        try testPNG(color: .systemMint).write(to: gallery.appendingPathComponent("001.png"))
+
+        let cbz = root.appendingPathComponent("冒烟漫画.cbz")
+        try fileManager.zipItem(at: archivePages, to: cbz, shouldKeepParent: false)
+
+        let pdf = root.appendingPathComponent("冒烟 PDF.pdf")
+        let pdfData = UIGraphicsPDFRenderer(bounds: CGRect(x: 0, y: 0, width: 320, height: 480)).pdfData { context in
+            context.beginPage()
+            UIColor.white.setFill()
+            context.cgContext.fill(CGRect(x: 0, y: 0, width: 320, height: 480))
+            UIColor.systemPurple.setFill()
+            context.cgContext.fill(CGRect(x: 32, y: 32, width: 256, height: 416))
+        }
+        try pdfData.write(to: pdf)
+
+        let destination = root.appendingPathComponent("library", isDirectory: true)
+        let imported = try await BookImporter.importBooks(from: [cbz, pdf, gallery], into: destination)
+
+        XCTAssertEqual(imported.count, 3)
+        XCTAssertEqual(imported.first(where: { $0.kind == .archive })?.pageCount, 2)
+        XCTAssertEqual(imported.first(where: { $0.kind == .pdf })?.pageCount, 1)
+        XCTAssertEqual(imported.first(where: { $0.kind == .imageCollection })?.pageCount, 1)
+        let archiveBook = try XCTUnwrap(imported.first(where: { $0.kind == .archive }))
+        let sourcePath = try XCTUnwrap(archiveBook.sourceRelativePath)
+        XCTAssertEqual(
+            try Data(contentsOf: destination.appendingPathComponent(sourcePath)),
+            try Data(contentsOf: cbz)
+        )
+    }
+
+    @MainActor
+    func testInterruptedReadingSessionRestoresOnlyUntilReaderCloses() throws {
+        let fileManager = FileManager.default
+        let root = fileManager.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let suiteName = "InkShelfTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer {
+            try? fileManager.removeItem(at: root)
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let id = UUID()
+        let library = root.appendingPathComponent("InkShelf Library", isDirectory: true)
+        try fileManager.createDirectory(
+            at: library.appendingPathComponent(id.uuidString.lowercased()).appendingPathComponent("pages"),
+            withIntermediateDirectories: true
+        )
+        let book = Book(
+            id: id,
+            title: "恢复现场",
+            kind: .imageCollection,
+            sourceFileName: "恢复现场",
+            contentRelativePath: "\(id.uuidString.lowercased())/pages",
+            pageCount: 20,
+            currentPage: 7,
+            fileSize: 1
+        )
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        try encoder.encode([book]).write(to: library.appendingPathComponent("library.json"))
+        defaults.set(id.uuidString, forKey: "reader.activeBookID")
+
+        let store = LibraryStore(fileManager: fileManager, defaults: defaults, documentsURL: root)
+        XCTAssertEqual(store.interruptedReadingBook?.id, id)
+        XCTAssertEqual(store.interruptedReadingBook?.currentPage, 7)
+        store.endReading(id)
+        XCTAssertNil(store.interruptedReadingBook)
+    }
+
+    @MainActor
+    private func testPNG(color: UIColor) -> Data {
+        UIGraphicsImageRenderer(size: CGSize(width: 48, height: 64)).pngData { context in
+            color.setFill()
+            context.cgContext.fill(CGRect(x: 0, y: 0, width: 48, height: 64))
+        }
     }
 
     private func makeBook(pageCount: Int, currentPage: Int) -> Book {

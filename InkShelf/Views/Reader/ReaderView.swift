@@ -3,6 +3,7 @@ import UIKit
 
 struct ReaderView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(LibraryStore.self) private var library
     @Environment(AICompanionStore.self) private var companion
@@ -103,7 +104,7 @@ struct ReaderView: View {
                     isEBook: book.kind == .ebook,
                     aiEnabled: aiEnabled && companion.hasAPIKey,
                     isFavorite: favoriteState,
-                    dismiss: { dismiss() },
+                    dismiss: closeReader,
                     toggleFavorite: { library.toggleFavorite(book.id) },
                     toggleLayout: toggleLayout,
                     showAICompanion: openAICompanion,
@@ -120,7 +121,7 @@ struct ReaderView: View {
         .preferredColorScheme(book.kind == .ebook ? (ebookTheme == .night ? .dark : .light) : .dark)
         .sensoryFeedback(.selection, trigger: currentPage)
         .onAppear {
-            library.markOpened(book.id)
+            library.beginReading(book.id)
             if book.kind == .ebook {
                 ebookPackage = library.ebookPackage(for: book)
                 pageCount = max(1, ebookPackage?.chapters.count ?? book.pageCount)
@@ -150,12 +151,20 @@ struct ReaderView: View {
         .onChange(of: keepAwake) { _, newValue in
             UIApplication.shared.isIdleTimerDisabled = newValue
         }
+        .onChange(of: scenePhase) { _, newPhase in
+            guard newPhase != .active else { return }
+            library.flushProgress()
+            remoteLibrary.flushProgress(book: book, position: currentPage, progress: readingProgress)
+        }
         .onDisappear {
             hideControlsTask?.cancel()
             companion.cancelAll()
             library.flushProgress()
             remoteLibrary.flushProgress(book: book, position: currentPage, progress: readingProgress)
             UIApplication.shared.isIdleTimerDisabled = false
+            if scenePhase == .active {
+                library.endReading(book.id)
+            }
         }
         .sheet(isPresented: $showSettings) {
             ReaderSettingsView(
@@ -296,6 +305,11 @@ struct ReaderView: View {
         guard !passwordDraft.isEmpty else { return }
         didTryPassword = true
         pdfPassword = passwordDraft
+    }
+
+    private func closeReader() {
+        library.endReading(book.id)
+        dismiss()
     }
 
     private func toggleLayout() {

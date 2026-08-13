@@ -14,21 +14,42 @@ final class LibraryStore {
     private(set) var isImporting = false
     var alert: LibraryAlert?
 
-    @ObservationIgnored private let fileManager = FileManager.default
+    @ObservationIgnored private let fileManager: FileManager
+    @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let metadataURL: URL
     @ObservationIgnored private var saveTask: Task<Void, Never>?
     let libraryURL: URL
 
-    init() {
-        let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+    init(
+        fileManager: FileManager = .default,
+        defaults: UserDefaults = .standard,
+        documentsURL: URL? = nil
+    ) {
+        self.fileManager = fileManager
+        self.defaults = defaults
+        let documents = documentsURL ?? fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
         libraryURL = documents.appendingPathComponent("InkShelf Library", isDirectory: true)
         metadataURL = libraryURL.appendingPathComponent("library.json")
-        try? FileManager.default.createDirectory(at: libraryURL, withIntermediateDirectories: true)
+        try? fileManager.createDirectory(at: libraryURL, withIntermediateDirectories: true)
         load()
     }
 
     var storageUsage: Int64 {
         books.reduce(0) { $0 + $1.fileSize }
+    }
+
+    var continueReadingBook: Book? {
+        books
+            .filter { $0.lastOpenedAt != nil }
+            .max { ($0.lastOpenedAt ?? .distantPast) < ($1.lastOpenedAt ?? .distantPast) }
+    }
+
+    var interruptedReadingBook: Book? {
+        guard let value = defaults.string(forKey: Self.activeReaderKey),
+              let id = UUID(uuidString: value),
+              let book = books.first(where: { $0.id == id })
+        else { return nil }
+        return book
     }
 
     func filteredBooks(scope: LibraryScope, query: String) -> [Book] {
@@ -130,6 +151,16 @@ final class LibraryStore {
         scheduleSave()
     }
 
+    func beginReading(_ id: UUID) {
+        markOpened(id)
+        defaults.set(id.uuidString, forKey: Self.activeReaderKey)
+    }
+
+    func endReading(_ id: UUID) {
+        guard defaults.string(forKey: Self.activeReaderKey) == id.uuidString else { return }
+        defaults.removeObject(forKey: Self.activeReaderKey)
+    }
+
     func updateProgress(bookID: UUID, page: Int) {
         guard let index = books.firstIndex(where: { $0.id == bookID }) else { return }
         let clamped = min(max(0, page), max(0, books[index].pageCount - 1))
@@ -178,6 +209,7 @@ final class LibraryStore {
                 try fileManager.removeItem(at: folder)
             }
             books.removeAll { $0.id == book.id }
+            endReading(book.id)
             saveImmediately()
         } catch {
             alert = LibraryAlert(title: "无法删除", message: error.localizedDescription)
@@ -236,6 +268,11 @@ final class LibraryStore {
             decoder.dateDecodingStrategy = .iso8601
             books = try decoder.decode([Book].self, from: data)
                 .filter { fileManager.fileExists(atPath: contentURL(for: $0).path) }
+            if let value = defaults.string(forKey: Self.activeReaderKey),
+               let id = UUID(uuidString: value),
+               !books.contains(where: { $0.id == id }) {
+                defaults.removeObject(forKey: Self.activeReaderKey)
+            }
         } catch {
             alert = LibraryAlert(title: "书架数据需要修复", message: "本地文件仍然保留，但书架索引无法读取：\(error.localizedDescription)")
         }
@@ -261,6 +298,8 @@ final class LibraryStore {
             alert = LibraryAlert(title: "无法保存书架", message: error.localizedDescription)
         }
     }
+
+    private static let activeReaderKey = "reader.activeBookID"
 }
 
 enum LibraryScope: Equatable {

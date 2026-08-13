@@ -1,27 +1,51 @@
 import SwiftUI
 
 struct RootView: View {
+    @Environment(LibraryStore.self) private var library
     @Environment(RemoteLibraryStore.self) private var remoteLibrary
     @Environment(ICloudLibraryStore.self) private var iCloudLibrary
     @AppStorage("hasSeenWelcome") private var hasSeenWelcome = false
-    @State private var showWelcome = false
+    @State private var launchDestination: LaunchDestination?
 
     var body: some View {
         MainTabView()
             .task {
-                showWelcome = !hasSeenWelcome
+                if !hasSeenWelcome {
+                    launchDestination = .welcome
+                } else if let book = library.interruptedReadingBook {
+                    launchDestination = .reader(book)
+                }
                 await remoteLibrary.loadIfNeeded()
                 await iCloudLibrary.loadIfNeeded()
             }
             .onChange(of: hasSeenWelcome) { _, hasSeen in
-                if !hasSeen { showWelcome = true }
+                if !hasSeen { launchDestination = .welcome }
             }
-            .fullScreenCover(isPresented: $showWelcome) {
-                WelcomeView {
-                    hasSeenWelcome = true
-                    showWelcome = false
+            .fullScreenCover(item: $launchDestination) { destination in
+                switch destination {
+                case .welcome:
+                    WelcomeView {
+                        hasSeenWelcome = true
+                        launchDestination = nil
+                    }
+                case .reader(let book):
+                    NavigationStack {
+                        ReaderView(book: book)
+                    }
                 }
             }
+    }
+}
+
+private enum LaunchDestination: Identifiable {
+    case welcome
+    case reader(Book)
+
+    var id: String {
+        switch self {
+        case .welcome: "welcome"
+        case .reader(let book): "reader-\(book.id.uuidString)"
+        }
     }
 }
 
