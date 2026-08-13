@@ -75,7 +75,7 @@ private struct ServerLibraryView: View {
         .searchable(text: $query, prompt: "搜索服务器上的书")
         .toolbar { toolbarContent }
         .navigationDestination(item: $openedBook) { book in
-            ReaderView(book: book)
+            ReaderView(book: book) { openedBook = nil }
                 .navigationTransition(.zoom(sourceID: book.remoteSourceID ?? book.id.uuidString, in: coverTransition))
         }
         .sheet(isPresented: $showUploader) {

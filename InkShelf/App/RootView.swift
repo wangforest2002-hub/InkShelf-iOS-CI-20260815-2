@@ -30,7 +30,7 @@ struct RootView: View {
                     }
                 case .reader(let book):
                     NavigationStack {
-                        ReaderView(book: book)
+                        ReaderView(book: book) { launchDestination = nil }
                     }
                 }
             }

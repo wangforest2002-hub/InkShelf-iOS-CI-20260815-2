@@ -147,7 +147,7 @@ struct LibraryView: View {
                 }
             }
             .navigationDestination(item: $openedBook) { book in
-                ReaderView(book: book)
+                ReaderView(book: book) { openedBook = nil }
                     .navigationTransition(.zoom(sourceID: book.id, in: coverTransition))
             }
         }

@@ -9,6 +9,7 @@ struct ReaderView: View {
     @Environment(AICompanionStore.self) private var companion
     @Environment(RemoteLibraryStore.self) private var remoteLibrary
     let book: Book
+    let onClose: (() -> Void)?
 
     @State private var currentPage: Int
     @State private var pageCount: Int
@@ -42,8 +43,9 @@ struct ReaderView: View {
     @AppStorage("ebook.lineHeight") private var ebookLineHeight = 1.72
     @AppStorage("ebook.margin") private var ebookMargin = 24.0
 
-    init(book: Book) {
+    init(book: Book, onClose: (() -> Void)? = nil) {
         self.book = book
+        self.onClose = onClose
         _currentPage = State(initialValue: min(max(0, book.currentPage), max(0, book.pageCount - 1)))
         _pageCount = State(initialValue: max(1, book.pageCount))
         _ebookProgress = State(initialValue: book.ebookChapterProgress ?? 0)
@@ -309,7 +311,11 @@ struct ReaderView: View {
 
     private func closeReader() {
         library.endReading(book.id)
-        dismiss()
+        if let onClose {
+            onClose()
+        } else {
+            dismiss()
+        }
     }
 
     private func toggleLayout() {

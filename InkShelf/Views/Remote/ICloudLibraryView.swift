@@ -40,7 +40,7 @@ struct ICloudLibraryView: View {
         .searchable(text: $query, prompt: "搜索书名或文件夹")
         .toolbar { toolbarContent }
         .navigationDestination(item: $openedBook) { book in
-            ReaderView(book: book)
+            ReaderView(book: book) { openedBook = nil }
                 .navigationTransition(.zoom(sourceID: book.remoteSourceID ?? book.id.uuidString, in: coverTransition))
         }
         .sheet(isPresented: $showFolderPicker) {

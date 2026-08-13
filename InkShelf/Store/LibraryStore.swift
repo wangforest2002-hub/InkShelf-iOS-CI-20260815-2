@@ -32,6 +32,14 @@ final class LibraryStore {
         let documents = documentsURL ?? fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
         libraryURL = documents.appendingPathComponent("InkShelf Library", isDirectory: true)
         metadataURL = libraryURL.appendingPathComponent("library.json")
+#if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("INKSHELF_UI_TEST_PICKER") {
+            // Each picker test must begin on a truly empty shelf. UI test
+            // methods share the same simulator container unless we reset it.
+            try? fileManager.removeItem(at: libraryURL)
+            defaults.removeObject(forKey: Self.activeReaderKey)
+        }
+#endif
         try? fileManager.createDirectory(at: libraryURL, withIntermediateDirectories: true)
         load()
 #if DEBUG
