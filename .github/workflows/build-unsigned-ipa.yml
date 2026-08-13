@@ -31,17 +31,61 @@ jobs:
             -project InkShelf.xcodeproj \
             -scheme InkShelf
 
-      - name: Run unit tests on an available iPhone Simulator
+      - name: Select an available iPhone Simulator
         run: |
-          set -o pipefail
           DEVICE_ID=$(xcrun simctl list devices available --json | python3 -c 'import json,sys; data=json.load(sys.stdin); print(next(device["udid"] for runtime in data["devices"].values() for device in runtime if device.get("isAvailable") and device["name"].startswith("iPhone")))')
           test -n "$DEVICE_ID"
-          xcodebuild test \
+          echo "DEVICE_ID=$DEVICE_ID" >> "$GITHUB_ENV"
+
+      - name: Build the simulator test bundle
+        run: |
+          set -o pipefail
+          xcodebuild build-for-testing \
             -project InkShelf.xcodeproj \
             -scheme InkShelf \
             -configuration Debug \
             -destination "platform=iOS Simulator,id=$DEVICE_ID" \
             -derivedDataPath build-simulator \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Run model and reading-restoration tests
+        timeout-minutes: 3
+        run: |
+          set -o pipefail
+          xcodebuild test-without-building \
+            -project InkShelf.xcodeproj \
+            -scheme InkShelf \
+            -configuration Debug \
+            -destination "platform=iOS Simulator,id=$DEVICE_ID" \
+            -derivedDataPath build-simulator \
+            -skip-testing:InkShelfTests/BookModelTests/testCoordinatedCopyPreservesOriginalBytes \
+            -skip-testing:InkShelfTests/BookModelTests/testLocalCBZPDFFolderSmokeImport \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Run security-scoped copy smoke test
+        timeout-minutes: 3
+        run: |
+          set -o pipefail
+          xcodebuild test-without-building \
+            -project InkShelf.xcodeproj \
+            -scheme InkShelf \
+            -configuration Debug \
+            -destination "platform=iOS Simulator,id=$DEVICE_ID" \
+            -derivedDataPath build-simulator \
+            -only-testing:InkShelfTests/BookModelTests/testCoordinatedCopyPreservesOriginalBytes \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Run CBZ, PDF, and folder import smoke test
+        timeout-minutes: 4
+        run: |
+          set -o pipefail
+          xcodebuild test-without-building \
+            -project InkShelf.xcodeproj \
+            -scheme InkShelf \
+            -configuration Debug \
+            -destination "platform=iOS Simulator,id=$DEVICE_ID" \
+            -derivedDataPath build-simulator \
+            -only-testing:InkShelfTests/BookModelTests/testLocalCBZPDFFolderSmokeImport \
             CODE_SIGNING_ALLOWED=NO
 
       - name: Build for iPhone
