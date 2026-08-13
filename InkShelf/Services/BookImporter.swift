@@ -271,7 +271,7 @@ enum BookImporter {
         // child while that parent coordination is still open can deadlock some
         // File Provider implementations (including iCloud placeholders).
         let imageURLs = try ExternalFileAccess.coordinateReading(at: sourceFolder) { coordinatedFolder in
-            try imageURLs(in: coordinatedFolder)
+            try collectImageURLs(in: coordinatedFolder)
         }
         guard !imageURLs.isEmpty else { throw BookImportError.noImages }
         guard imageURLs.count <= maxArchiveEntries else { throw BookImportError.archiveTooLarge }
@@ -284,7 +284,7 @@ enum BookImporter {
         )
     }
 
-    private static func imageURLs(in sourceFolder: URL) throws -> [URL] {
+    private static func collectImageURLs(in sourceFolder: URL) throws -> [URL] {
         let fileManager = FileManager.default
         let keys: [URLResourceKey] = [.isRegularFileKey, .isHiddenKey]
         guard let enumerator = fileManager.enumerator(
