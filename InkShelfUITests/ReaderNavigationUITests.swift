@@ -53,6 +53,18 @@ final class ReaderNavigationUITests: XCTestCase {
         // Files presents file rows as different accessibility element types
         // across iOS releases (cell, button, or static text).
         let fixture = app.descendants(matching: .any)["picker-fixture.png"]
+        if !fixture.waitForExistence(timeout: 2) {
+            // `directoryURL` is only a hint and Files may open Recents instead.
+            // Walk the same visible route a user would take on either a Chinese
+            // or English simulator.
+            navigateIfVisible(app, labels: ["浏览", "Browse"])
+            if !fixture.exists { navigateIfVisible(app, labels: ["我的 iPhone", "On My iPhone"]) }
+            if !fixture.exists { navigateIfVisible(app, labels: ["二次元小家", "InkShelf"]) }
+            if !fixture.exists { navigateIfVisible(app, labels: ["PickerSmokeInbox"]) }
+        }
+        if !fixture.waitForExistence(timeout: 8) {
+            print("FILES PICKER HIERARCHY:\n\(app.debugDescription)")
+        }
         XCTAssertTrue(fixture.waitForExistence(timeout: 8), "The system document picker did not open the requested folder")
         fixture.tap()
 
@@ -73,5 +85,28 @@ final class ReaderNavigationUITests: XCTestCase {
             back = app.buttons["reader-close"]
         }
         XCTAssertTrue(back.waitForExistence(timeout: 2), "The imported image did not open in ReaderView")
+    }
+
+    @discardableResult
+    private func navigateIfVisible(_ app: XCUIApplication, labels: [String]) -> Bool {
+        for _ in 0..<15 {
+            for label in labels {
+                let candidates = [
+                    app.buttons[label],
+                    app.cells[label],
+                    app.staticTexts[label],
+                    app.descendants(matching: .any)
+                        .matching(NSPredicate(format: "label == %@", label))
+                        .firstMatch,
+                ]
+                if let element = candidates.first(where: { $0.exists && $0.isHittable }) {
+                    element.tap()
+                    Thread.sleep(forTimeInterval: 0.45)
+                    return true
+                }
+            }
+            Thread.sleep(forTimeInterval: 0.2)
+        }
+        return false
     }
 }
