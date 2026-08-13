@@ -56,6 +56,12 @@ enum ICloudFolderService {
         let accessed = rootURL.startAccessingSecurityScopedResource()
         defer { if accessed { rootURL.stopAccessingSecurityScopedResource() } }
 
+        return try ExternalFileAccess.coordinateReading(at: rootURL) { coordinatedRoot in
+            try scanCoordinatedFolder(link: link, rootURL: coordinatedRoot)
+        }
+    }
+
+    private static func scanCoordinatedFolder(link: ICloudFolderLink, rootURL: URL) throws -> [ICloudBook] {
         let keys: [URLResourceKey] = [
             .isRegularFileKey,
             .fileSizeKey,

@@ -1,4 +1,5 @@
 import XCTest
+import UniformTypeIdentifiers
 @testable import InkShelf
 
 final class BookModelTests: XCTestCase {
@@ -97,6 +98,26 @@ final class BookModelTests: XCTestCase {
         XCTAssertEqual(decoded, book)
         XCTAssertEqual(decoded.kind, .archive)
         XCTAssertEqual(decoded.sourceID, "icloud:1234567890abcdef12345678")
+    }
+
+    func testGenericFileProviderDataIsSelectable() {
+        XCTAssertTrue(UTType.inkShelfFileTypes.contains(.data))
+        XCTAssertTrue(UTType.comicBookArchive.conforms(to: .zip))
+    }
+
+    func testCoordinatedCopyPreservesOriginalBytes() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+
+        let source = root.appendingPathComponent("sample.cbz")
+        let destination = root.appendingPathComponent("copy.cbz")
+        let original = Data([0x50, 0x4B, 0x03, 0x04, 0x01, 0x02, 0x03])
+        try original.write(to: source)
+        try ExternalFileAccess.copyItem(from: source, to: destination)
+
+        XCTAssertEqual(try Data(contentsOf: destination), original)
     }
 
     private func makeBook(pageCount: Int, currentPage: Int) -> Book {

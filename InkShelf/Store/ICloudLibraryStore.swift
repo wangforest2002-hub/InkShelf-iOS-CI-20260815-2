@@ -33,7 +33,17 @@ final class ICloudLibraryStore {
         if !folders.isEmpty { await refresh(showErrors: false) }
     }
 
-    func linkFolder(_ url: URL) async {
+    func linkFolder(_ url: URL) {
+        // Start the security scope while the document-picker callback is still
+        // active; waiting for a newly scheduled Task can lose the permission.
+        let accessed = url.startAccessingSecurityScopedResource()
+        Task {
+            defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+            await linkFolderWithActiveAccess(url)
+        }
+    }
+
+    private func linkFolderWithActiveAccess(_ url: URL) async {
         do {
             let bookmark = try ICloudFolderService.bookmark(for: url)
             let selectedPath = url.standardizedFileURL.path

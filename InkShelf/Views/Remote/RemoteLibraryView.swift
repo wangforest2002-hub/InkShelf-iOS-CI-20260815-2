@@ -85,7 +85,7 @@ private struct ServerLibraryView: View {
         ) { result in
             switch result {
             case .success(let urls):
-                Task { await remote.upload(urls) }
+                remote.upload(urls)
             case .failure(let error):
                 remote.alert = LibraryAlert(title: "无法选择书籍", message: error.localizedDescription)
             }

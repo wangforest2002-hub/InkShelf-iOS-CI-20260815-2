@@ -33,7 +33,7 @@ enum EBookImporter {
             let ext = sourceURL.pathExtension.lowercased()
             let sourceName = ext.isEmpty ? "source" : "source.\(ext)"
             let copiedSource = folder.appendingPathComponent(sourceName)
-            try fileManager.copyItem(at: sourceURL, to: copiedSource)
+            try ExternalFileAccess.copyItem(from: sourceURL, to: copiedSource)
 
             let generated: GeneratedEBook
             switch ext {

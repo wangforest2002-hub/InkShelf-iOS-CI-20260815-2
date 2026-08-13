@@ -6,6 +6,7 @@ import ZIPFoundation
 
 enum BookImportError: LocalizedError, Sendable {
     case unsupportedFile(String)
+    case accessDenied(String)
     case unreadablePDF(String)
     case emptyArchive(String)
     case archiveTooLarge
@@ -14,6 +15,7 @@ enum BookImportError: LocalizedError, Sendable {
     var errorDescription: String? {
         switch self {
         case .unsupportedFile(let name): return "暂不支持“\(name)”的文件格式。"
+        case .accessDenied(let name): return "无法取得“\(name)”的读取权限。请在系统“文件”中确认它已下载完成，然后重新选择。"
         case .unreadablePDF(let name): return "无法读取 PDF“\(name)”。文件可能已损坏。"
         case .emptyArchive(let name): return "压缩包“\(name)”中没有可读取的图片。"
         case .archiveTooLarge: return "压缩包展开后过大或页面过多，已停止导入以保护设备存储空间。"
@@ -105,7 +107,7 @@ enum BookImporter {
 
         do {
             let destination = folder.appendingPathComponent("source.pdf")
-            try fileManager.copyItem(at: sourceURL, to: destination)
+            try ExternalFileAccess.copyItem(from: sourceURL, to: destination)
             guard let document = PDFDocument(url: destination) else {
                 throw BookImportError.unreadablePDF(sourceURL.lastPathComponent)
             }
@@ -142,7 +144,7 @@ enum BookImporter {
         do {
             let sourceExtension = sourceURL.pathExtension.lowercased() == "cbz" ? "cbz" : "zip"
             let copiedArchive = folder.appendingPathComponent("source.\(sourceExtension)")
-            try fileManager.copyItem(at: sourceURL, to: copiedArchive)
+            try ExternalFileAccess.copyItem(from: sourceURL, to: copiedArchive)
 
             let archive = try Archive(url: copiedArchive, accessMode: .read)
             let entries = archive.filter { entry in
@@ -216,7 +218,7 @@ enum BookImporter {
                 try withSecurityScopedAccess(to: sourceURL) {
                     let ext = sourceURL.pathExtension.lowercased()
                     let destination = pagesFolder.appendingPathComponent(String(format: "%06d.%@", index + 1, ext))
-                    try fileManager.copyItem(at: sourceURL, to: destination)
+                    try ExternalFileAccess.copyItem(from: sourceURL, to: destination)
                     guard isReadableImage(destination) else {
                         throw BookImportError.unsupportedFile(sourceURL.lastPathComponent)
                     }
@@ -265,6 +267,12 @@ enum BookImporter {
     }
 
     private static func importFolder(_ sourceFolder: URL, into libraryURL: URL) throws -> (Book, URL) {
+        try ExternalFileAccess.coordinateReading(at: sourceFolder) { coordinatedFolder in
+            try importCoordinatedFolder(coordinatedFolder, into: libraryURL)
+        }
+    }
+
+    private static func importCoordinatedFolder(_ sourceFolder: URL, into libraryURL: URL) throws -> (Book, URL) {
         let fileManager = FileManager.default
         let keys: [URLResourceKey] = [.isRegularFileKey, .isHiddenKey]
         guard let enumerator = fileManager.enumerator(

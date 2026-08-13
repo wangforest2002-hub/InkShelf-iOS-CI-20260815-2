@@ -60,9 +60,16 @@ final class LibraryStore {
         }
         isImporting = true
         let destination = libraryURL
+        // Document-picker permissions are ephemeral. Acquire them synchronously
+        // in the completion callback and retain them until the detached importer
+        // has fully copied every selected item into the app container.
+        let accessedURLs = urls.filter { $0.startAccessingSecurityScopedResource() }
 
         Task {
             defer {
+                for url in accessedURLs {
+                    url.stopAccessingSecurityScopedResource()
+                }
                 if let cleanupDirectory {
                     try? fileManager.removeItem(at: cleanupDirectory)
                 }

@@ -120,6 +120,9 @@ extension UTType {
     }
 
     static var inkShelfFileTypes: [UTType] {
-        [.pdf, .epubBook, .comicBookArchive, .zip, .image, .plainText, .html, .rtf, .markdownDocument, .fictionBook]
+        // `.data` is an intentional fallback. Some third-party File Providers
+        // expose CBZ/EPUB files only as generic data even when their filename
+        // extension is correct; the importer still validates the extension.
+        [.pdf, .epubBook, .comicBookArchive, .zip, .image, .plainText, .html, .rtf, .markdownDocument, .fictionBook, .data]
     }
 }

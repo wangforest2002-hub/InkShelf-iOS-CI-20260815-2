@@ -8,6 +8,7 @@ struct ICloudLibraryView: View {
 
     @State private var query = ""
     @State private var showFolderPicker = false
+    @State private var showFolderHelp = false
     @State private var openedBook: Book?
     @State private var pendingUnlink: ICloudFolderLink?
     @State private var pendingLocalRemoval: ICloudBook?
@@ -49,13 +50,23 @@ struct ICloudLibraryView: View {
         ) { result in
             switch result {
             case .success(let urls):
-                if let folder = urls.first { Task { await cloud.linkFolder(folder) } }
+                if let folder = urls.first { cloud.linkFolder(folder) }
             case .failure(let error):
                 cloud.alert = LibraryAlert(title: "无法选择 iCloud 文件夹", message: error.localizedDescription)
             }
         }
         .alert(item: alertBinding) { alert in
             Alert(title: Text(alert.title), message: Text(alert.message), dismissButton: .default(Text("好")))
+        }
+        .confirmationDialog(
+            "连接一个书库文件夹",
+            isPresented: $showFolderHelp,
+            titleVisibility: .visible
+        ) {
+            Button("开始选择") { showFolderPicker = true }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("请先把书放进一个普通文件夹。iCloud Drive 和“我的 iPad”根目录不能直接选；根目录里的 CBZ 显示为不可点是正常的。选中书库文件夹后点“打开”或“完成”。")
         }
         .confirmationDialog(
             "断开 iCloud 文件夹？",
@@ -95,8 +106,12 @@ struct ICloudLibraryView: View {
             } description: {
                 Text("在系统“文件”中选择存放 CBZ 的 iCloud Drive 文件夹。只建立索引，打开时才下载原书。")
             } actions: {
-                Button("选择 iCloud 文件夹") { showFolderPicker = true }
+                Button("选择 iCloud 文件夹") { showFolderHelp = true }
                     .adaptiveProminentButton()
+                Text("提示：先在“文件”App 新建“二次元小家书库”文件夹，并把 CBZ 放进去。")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
             }
         } else if visibleBooks.isEmpty, !cloud.isIndexing {
             ContentUnavailableView {
@@ -188,7 +203,7 @@ struct ICloudLibraryView: View {
         }
 
         ToolbarItem(placement: .primaryAction) {
-            Button { showFolderPicker = true } label: {
+            Button { showFolderHelp = true } label: {
                 Label("连接文件夹", systemImage: "folder.badge.plus")
             }
         }

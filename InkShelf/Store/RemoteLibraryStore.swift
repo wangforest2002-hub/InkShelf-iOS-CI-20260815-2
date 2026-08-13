@@ -94,19 +94,29 @@ final class RemoteLibraryStore {
         }
     }
 
-    func upload(_ urls: [URL]) async {
+    func upload(_ urls: [URL]) {
         guard !urls.isEmpty else { return }
         guard !isUploading else {
             alert = LibraryAlert(title: "正在上传", message: "请等待当前上传完成。")
             return
         }
         isUploading = true
+        let accessedURLs = urls.filter { $0.startAccessingSecurityScopedResource() }
+        Task {
+            defer {
+                for url in accessedURLs {
+                    url.stopAccessingSecurityScopedResource()
+                }
+            }
+            await uploadWithActiveAccess(urls)
+        }
+    }
+
+    private func uploadWithActiveAccess(_ urls: [URL]) async {
         defer { isUploading = false }
         do {
             let service = try makeService()
             for url in urls {
-                let accessed = url.startAccessingSecurityScopedResource()
-                defer { if accessed { url.stopAccessingSecurityScopedResource() } }
                 _ = try await service.upload(url)
             }
             await refresh(showErrors: false)
