@@ -267,12 +267,24 @@ enum BookImporter {
     }
 
     private static func importFolder(_ sourceFolder: URL, into libraryURL: URL) throws -> (Book, URL) {
-        try ExternalFileAccess.coordinateReading(at: sourceFolder) { coordinatedFolder in
-            try importCoordinatedFolder(coordinatedFolder, into: libraryURL)
+        // Only enumerate while the parent directory is coordinated. Copying a
+        // child while that parent coordination is still open can deadlock some
+        // File Provider implementations (including iCloud placeholders).
+        let imageURLs = try ExternalFileAccess.coordinateReading(at: sourceFolder) { coordinatedFolder in
+            try imageURLs(in: coordinatedFolder)
         }
+        guard !imageURLs.isEmpty else { throw BookImportError.noImages }
+        guard imageURLs.count <= maxArchiveEntries else { throw BookImportError.archiveTooLarge }
+
+        return try importImageCollection(
+            imageURLs,
+            titleOverride: sourceFolder.lastPathComponent,
+            sourceLabel: "文件夹 · \(imageURLs.count) 张图片",
+            into: libraryURL
+        )
     }
 
-    private static func importCoordinatedFolder(_ sourceFolder: URL, into libraryURL: URL) throws -> (Book, URL) {
+    private static func imageURLs(in sourceFolder: URL) throws -> [URL] {
         let fileManager = FileManager.default
         let keys: [URLResourceKey] = [.isRegularFileKey, .isHiddenKey]
         guard let enumerator = fileManager.enumerator(
@@ -298,15 +310,7 @@ enum BookImporter {
             let right = $1.standardizedFileURL.path.replacingOccurrences(of: basePath, with: "")
             return left.localizedStandardCompare(right) == .orderedAscending
         }
-        guard !imageURLs.isEmpty else { throw BookImportError.noImages }
-        guard imageURLs.count <= maxArchiveEntries else { throw BookImportError.archiveTooLarge }
-
-        return try importImageCollection(
-            imageURLs,
-            titleOverride: sourceFolder.lastPathComponent,
-            sourceLabel: "文件夹 · \(imageURLs.count) 张图片",
-            into: libraryURL
-        )
+        return imageURLs
     }
 
     private static func withSecurityScopedAccess<T>(to url: URL, operation: () throws -> T) rethrows -> T {
