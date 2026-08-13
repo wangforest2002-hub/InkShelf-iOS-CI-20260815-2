@@ -69,7 +69,7 @@ struct ICloudLibraryView: View {
             }
             Button("取消", role: .cancel) { pendingUnlink = nil }
         } message: { folder in
-            Text("墨阅将不再索引“\(folder.name)”。iCloud 原文件和已下载的本地副本都不会被删除。")
+            Text("二次元小家将不再索引“\(folder.name)”。iCloud 原文件和已下载的本地副本都不会被删除。")
         }
         .confirmationDialog(
             "删除本地副本？",

@@ -130,7 +130,7 @@ struct SettingsView: View {
                 }
 
                 Section("关于") {
-                    LabeledContent("墨阅", value: "1.3.0")
+                    LabeledContent("二次元小家", value: "1.3.1")
                     Button("重新查看欢迎页") {
                         hasSeenWelcome = false
                     }

@@ -73,7 +73,7 @@ struct LibraryView: View {
                         .transition(.scale(scale: 0.92).combined(with: .opacity))
                 }
             }
-            .navigationTitle(scope == .all ? "墨阅书架" : "我的收藏")
+            .navigationTitle(scope == .all ? "二次元小家" : "我的收藏")
             .searchable(text: $query, prompt: "搜索标题")
             .toolbar {
                 if scope == .all {

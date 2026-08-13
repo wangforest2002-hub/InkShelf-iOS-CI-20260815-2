@@ -1,6 +1,6 @@
-# 墨阅 InkShelf
+# 二次元小家 InkShelf
 
-墨阅是一款面向 iPhone 与 iPad 的原生漫画、画集、PDF 和电子书阅读器。项目使用 SwiftUI、PDFKit、Vision、WebKit 与 UIKit 构建，最低支持 iOS 18；在最新 SDK 上会自动采用 Liquid Glass、浮动标签栏和新的系统动效。
+二次元小家是一款面向 iPhone 与 iPad 的原生漫画、画集、PDF 和电子书阅读器。项目使用 SwiftUI、PDFKit、Vision、WebKit 与 UIKit 构建，最低支持 iOS 18；在最新 SDK 上会自动采用 Liquid Glass、浮动标签栏和新的系统动效。
 
 ## 阅读格式
 
@@ -30,19 +30,19 @@
 
 ## iCloud Drive 书库
 
-“云书库”默认使用 iCloud。第一次在系统“文件”选择存放画集的 iCloud Drive 文件夹后，墨阅会保存系统授予的文件夹访问权限：
+“云书库”默认使用 iCloud。第一次在系统“文件”选择存放画集的 iCloud Drive 文件夹后，二次元小家会保存系统授予的文件夹访问权限：
 
 - 递归索引 PDF、CBZ、图片和电子书，只读取文件名、大小与更新时间，不预先复制整套书库。
 - 首次打开一本书时由 iCloud 下载原文件并显示进度，整理完成后使用与本地书籍完全相同的阅读引擎。
 - 已打开的书保留本地副本，之后可离线阅读；可以单独删除本地副本以释放空间。
 - 断开文件夹或删除本地副本不会修改、移动或删除 iCloud Drive 中的原文件。
-- 连接通过 iOS 文件选择器和 Apple ID 的系统权限完成，墨阅不接触账号或密码，也不需要自建 iCloud 数据库。
+- 连接通过 iOS 文件选择器和 Apple ID 的系统权限完成，二次元小家不接触账号或密码，也不需要自建 iCloud 数据库。
 
-在 Windows 上，可先用 iCloud for Windows 把 `anmi`、`kantoku`、`rurudo`、`ももこ` 四个文件夹上传到同一个 iCloud Drive 文件夹；进入墨阅后只需选择它们的上级文件夹。
+在 Windows 上，可先用 iCloud for Windows 把 `anmi`、`kantoku`、`rurudo`、`ももこ` 四个文件夹上传到同一个 iCloud Drive 文件夹；进入二次元小家后只需选择它们的上级文件夹。
 
 ## 独立服务器书库
 
-“云书库”的“服务器”模式连接 `https://4-3rail.top/` 的墨阅独立书库服务：
+“云书库”的“服务器”模式连接 `https://4-3rail.top/` 的二次元小家独立书库服务：
 
 - 不需要账号或密码，进入页面即可查看、上传、下载、删除和同步阅读进度。
 - 列表和小封面优先加载；原书首次打开时后台下载并显示进度。

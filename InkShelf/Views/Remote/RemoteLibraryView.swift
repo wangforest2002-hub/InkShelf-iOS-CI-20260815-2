@@ -245,7 +245,7 @@ private struct RemoteServerSettingsView: View {
                         .keyboardType(.URL)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
-                    Label("墨阅云书库与文档中心完全分离，直接连接，不需要账号或密码。", systemImage: "arrow.triangle.branch")
+                    Label("二次元小家云书库与文档中心完全分离，直接连接，不需要账号或密码。", systemImage: "arrow.triangle.branch")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
