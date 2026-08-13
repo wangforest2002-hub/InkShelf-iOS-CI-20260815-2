@@ -380,6 +380,12 @@ struct ReaderView: View {
     }
 
     private func scheduleControlsHide() {
+#if DEBUG
+        let arguments = ProcessInfo.processInfo.arguments
+        if arguments.contains("INKSHELF_UI_TEST_SEED") || arguments.contains("INKSHELF_UI_TEST_PICKER") {
+            return
+        }
+#endif
         hideControlsTask?.cancel()
         hideControlsTask = Task {
             try? await Task.sleep(for: .seconds(4))

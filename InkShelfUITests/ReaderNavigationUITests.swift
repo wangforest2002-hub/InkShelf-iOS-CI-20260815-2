@@ -50,7 +50,9 @@ final class ReaderNavigationUITests: XCTestCase {
             app.buttons["导入文件或图片"].tap()
         }
 
-        let fixture = app.staticTexts["picker-fixture.png"]
+        // Files presents file rows as different accessibility element types
+        // across iOS releases (cell, button, or static text).
+        let fixture = app.descendants(matching: .any)["picker-fixture.png"]
         XCTAssertTrue(fixture.waitForExistence(timeout: 8), "The system document picker did not open the requested folder")
         fixture.tap()
 
