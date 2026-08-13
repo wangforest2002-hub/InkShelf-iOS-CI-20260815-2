@@ -12,6 +12,8 @@ struct LibraryAlert: Identifiable {
 final class LibraryStore {
     private(set) var books: [Book] = []
     private(set) var isImporting = false
+    private(set) var importStatusText: String?
+    private(set) var importNotice: String?
     var alert: LibraryAlert?
 
     @ObservationIgnored private let fileManager: FileManager
@@ -69,7 +71,11 @@ final class LibraryStore {
         }
     }
 
-    func importFiles(_ urls: [URL], cleanupDirectory: URL? = nil) {
+    func importFiles(
+        _ urls: [URL],
+        cleanupDirectory: URL? = nil,
+        removeSourcesAfterImport: Bool = false
+    ) {
         guard !urls.isEmpty else {
             if let cleanupDirectory { try? fileManager.removeItem(at: cleanupDirectory) }
             return
@@ -80,6 +86,10 @@ final class LibraryStore {
             return
         }
         isImporting = true
+        importStatusText = urls.count == 1
+            ? "正在接收“\(urls[0].lastPathComponent)”…"
+            : "正在接收 \(urls.count) 个项目…"
+        importNotice = nil
         let destination = libraryURL
         // Document-picker permissions are ephemeral. Acquire them synchronously
         // in the completion callback and retain them until the detached importer
@@ -94,19 +104,55 @@ final class LibraryStore {
                 if let cleanupDirectory {
                     try? fileManager.removeItem(at: cleanupDirectory)
                 }
+                if removeSourcesAfterImport {
+                    for url in urls { try? fileManager.removeItem(at: url) }
+                }
             }
             do {
+                importStatusText = "正在整理封面和页面…"
                 let imported = try await BookImporter.importBooks(from: urls, into: destination)
                 books.append(contentsOf: imported)
                 saveImmediately()
+                importNotice = imported.count == 1
+                    ? "“\(imported[0].title)”已经回到书架"
+                    : "已把 \(imported.count) 本读物带回小家"
+                Task { [weak self] in
+                    try? await Task.sleep(for: .seconds(2.8))
+                    self?.importNotice = nil
+                }
             } catch {
                 alert = LibraryAlert(
                     title: "导入失败",
                     message: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
                 )
             }
+            importStatusText = nil
             isImporting = false
         }
+    }
+
+    func openingError(for book: Book) -> LibraryAlert? {
+        let content = contentURL(for: book)
+        guard fileManager.fileExists(atPath: content.path) else {
+            return LibraryAlert(
+                title: "找不到这本书",
+                message: "本地文件可能已被系统清理或移动。请删除这个失效书架项目后重新导入。"
+            )
+        }
+
+        switch book.kind {
+        case .archive, .imageCollection:
+            guard !pageURLs(for: book).isEmpty else {
+                return LibraryAlert(title: "没有可读页面", message: "这本画集的页面目录为空，请重新导入原文件。")
+            }
+        case .ebook:
+            guard ebookPackage(for: book) != nil else {
+                return LibraryAlert(title: "电子书索引损坏", message: "无法读取章节索引，请重新导入原电子书。")
+            }
+        case .pdf:
+            break
+        }
+        return nil
     }
 
     func importRemoteFile(

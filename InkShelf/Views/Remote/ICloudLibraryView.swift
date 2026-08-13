@@ -43,17 +43,23 @@ struct ICloudLibraryView: View {
             ReaderView(book: book)
                 .navigationTransition(.zoom(sourceID: book.remoteSourceID ?? book.id.uuidString, in: coverTransition))
         }
-        .fileImporter(
-            isPresented: $showFolderPicker,
-            allowedContentTypes: [.folder],
-            allowsMultipleSelection: false
-        ) { result in
-            switch result {
-            case .success(let urls):
-                if let folder = urls.first { cloud.linkFolder(folder) }
-            case .failure(let error):
-                cloud.alert = LibraryAlert(title: "无法选择 iCloud 文件夹", message: error.localizedDescription)
-            }
+        .sheet(isPresented: $showFolderPicker) {
+            DocumentPickerView(
+                contentTypes: [.folder],
+                allowsMultipleSelection: false,
+                asCopy: false,
+                onResult: { result in
+                    showFolderPicker = false
+                    switch result {
+                    case .success(let urls):
+                        if let folder = urls.first { cloud.linkFolder(folder) }
+                    case .failure(let error):
+                        cloud.alert = LibraryAlert(title: "无法选择 iCloud 文件夹", message: error.localizedDescription)
+                    }
+                },
+                onCancel: { showFolderPicker = false }
+            )
+            .ignoresSafeArea()
         }
         .alert(item: alertBinding) { alert in
             Alert(title: Text(alert.title), message: Text(alert.message), dismissButton: .default(Text("好")))

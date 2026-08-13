@@ -78,17 +78,23 @@ private struct ServerLibraryView: View {
             ReaderView(book: book)
                 .navigationTransition(.zoom(sourceID: book.remoteSourceID ?? book.id.uuidString, in: coverTransition))
         }
-        .fileImporter(
-            isPresented: $showUploader,
-            allowedContentTypes: UTType.inkShelfFileTypes,
-            allowsMultipleSelection: true
-        ) { result in
-            switch result {
-            case .success(let urls):
-                remote.upload(urls)
-            case .failure(let error):
-                remote.alert = LibraryAlert(title: "无法选择书籍", message: error.localizedDescription)
-            }
+        .sheet(isPresented: $showUploader) {
+            DocumentPickerView(
+                contentTypes: UTType.inkShelfFileTypes,
+                allowsMultipleSelection: true,
+                asCopy: true,
+                onResult: { result in
+                    showUploader = false
+                    switch result {
+                    case .success(let urls):
+                        remote.upload(urls, removeSourcesAfterUpload: true)
+                    case .failure(let error):
+                        remote.alert = LibraryAlert(title: "无法选择书籍", message: error.localizedDescription)
+                    }
+                },
+                onCancel: { showUploader = false }
+            )
+            .ignoresSafeArea()
         }
         .sheet(isPresented: $showServerSettings) {
             RemoteServerSettingsView()

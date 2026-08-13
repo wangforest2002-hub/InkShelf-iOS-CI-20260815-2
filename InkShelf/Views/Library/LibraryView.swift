@@ -8,13 +8,13 @@ struct LibraryView: View {
     let scope: LibraryScope
 
     @State private var query = ""
-    @State private var showFileImporter = false
-    @State private var showFolderImporter = false
+    @State private var importPicker: ImportPicker?
     @State private var showPhotoPicker = false
     @State private var photoItems: [PhotosPickerItem] = []
     @State private var pendingDeletion: Book?
     @State private var renamingBook: Book?
     @State private var previewingBook: Book?
+    @State private var openedBook: Book?
     @Namespace private var coverTransition
 
     private var books: [Book] {
@@ -34,8 +34,8 @@ struct LibraryView: View {
                     EmptyLibraryView(
                         isFavorites: scope == .favorites,
                         hasSearch: !query.isEmpty,
-                        importAction: { showFileImporter = true },
-                        importFolderAction: { showFolderImporter = true }
+                        importAction: { importPicker = .files },
+                        importFolderAction: { importPicker = .folder }
                     )
                 } else {
                     ScrollView {
@@ -48,7 +48,7 @@ struct LibraryView: View {
                                     )
 
                                     if let continueBook = library.continueReadingBook {
-                                        NavigationLink(value: continueBook) {
+                                        Button { open(continueBook) } label: {
                                             ContinueReadingCard(
                                                 book: continueBook,
                                                 coverURL: library.coverURL(for: continueBook)
@@ -67,13 +67,13 @@ struct LibraryView: View {
 
                             LibrarySectionHeading(
                                 title: scope == .all ? "家里的书架" : "我的珍藏",
-                                subtitle: "(books.count) 本读物",
+                                subtitle: "\(books.count) 本读物",
                                 symbol: scope == .all ? "books.vertical.fill" : "star.fill"
                             )
 
                             LazyVGrid(columns: gridColumns, spacing: 24) {
                                 ForEach(books) { book in
-                                    NavigationLink(value: book) {
+                                    Button { open(book) } label: {
                                         BookCard(
                                             book: book,
                                             coverURL: library.coverURL(for: book),
@@ -102,8 +102,18 @@ struct LibraryView: View {
                 }
 
                 if library.isImporting {
-                    ImportOverlay()
+                    ImportOverlay(status: library.importStatusText)
                         .transition(.scale(scale: 0.92).combined(with: .opacity))
+                }
+
+                if let notice = library.importNotice, !library.isImporting {
+                    VStack {
+                        ImportSuccessToast(text: notice)
+                            .padding(.top, 8)
+                        Spacer()
+                    }
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .allowsHitTesting(false)
                 }
             }
             .navigationTitle(scope == .all ? "二次元小家" : "珍藏角落")
@@ -113,13 +123,13 @@ struct LibraryView: View {
                     ToolbarItem(placement: .primaryAction) {
                         Menu {
                             Button {
-                                showFileImporter = true
+                                importPicker = .files
                             } label: {
                                 Label("导入文件或图片", systemImage: "doc.badge.plus")
                             }
 
                             Button {
-                                showFolderImporter = true
+                                importPicker = .folder
                             } label: {
                                 Label("导入文件夹画集", systemImage: "folder.badge.plus")
                             }
@@ -136,16 +146,24 @@ struct LibraryView: View {
                     }
                 }
             }
-            .navigationDestination(for: Book.self) { book in
+            .navigationDestination(item: $openedBook) { book in
                 ReaderView(book: book)
                     .navigationTransition(.zoom(sourceID: book.id, in: coverTransition))
             }
         }
-        .fileImporter(
-            isPresented: $showFileImporter,
-            allowedContentTypes: UTType.inkShelfFileTypes,
-            allowsMultipleSelection: true
-        ) { handleImportResult($0) }
+        .sheet(item: $importPicker) { picker in
+            DocumentPickerView(
+                contentTypes: picker == .files ? UTType.inkShelfFileTypes : [.folder],
+                allowsMultipleSelection: true,
+                asCopy: true,
+                onResult: { result in
+                    importPicker = nil
+                    handleImportResult(result, removeSourcesAfterImport: true)
+                },
+                onCancel: { importPicker = nil }
+            )
+            .ignoresSafeArea()
+        }
         .photosPicker(
             isPresented: $showPhotoPicker,
             selection: $photoItems,
@@ -157,11 +175,6 @@ struct LibraryView: View {
             guard !items.isEmpty else { return }
             Task { await importPhotos(items) }
         }
-        .fileImporter(
-            isPresented: $showFolderImporter,
-            allowedContentTypes: [.folder],
-            allowsMultipleSelection: true
-        ) { handleImportResult($0) }
         .alert(item: alertBinding) { alert in
             Alert(title: Text(alert.title), message: Text(alert.message), dismissButton: .default(Text("好")))
         }
@@ -240,12 +253,23 @@ struct LibraryView: View {
         )
     }
 
-    private func handleImportResult(_ result: Result<[URL], Error>) {
+    private func handleImportResult(
+        _ result: Result<[URL], Error>,
+        removeSourcesAfterImport: Bool = false
+    ) {
         switch result {
         case .success(let urls):
-            library.importFiles(urls)
+            library.importFiles(urls, removeSourcesAfterImport: removeSourcesAfterImport)
         case .failure(let error):
             library.alert = LibraryAlert(title: "无法打开文件", message: error.localizedDescription)
+        }
+    }
+
+    private func open(_ book: Book) {
+        if let error = library.openingError(for: book) {
+            library.alert = error
+        } else {
+            openedBook = book
         }
     }
 
@@ -283,6 +307,13 @@ struct LibraryView: View {
             )
         }
     }
+}
+
+private enum ImportPicker: String, Identifiable {
+    case files
+    case folder
+
+    var id: String { rawValue }
 }
 
 private struct ContinueReadingCard: View {
@@ -484,13 +515,16 @@ private struct LibrarySectionHeading: View {
 }
 
 private struct ImportOverlay: View {
+    let status: String?
+
     var body: some View {
         VStack(spacing: 14) {
             ProgressView()
                 .controlSize(.large)
                 .tint(AppTheme.accent)
-            Text("正在整理书架…")
+            Text(status ?? "正在整理书架…")
                 .font(.headline)
+                .multilineTextAlignment(.center)
             Text("原文件不会被压缩或转码")
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -500,6 +534,24 @@ private struct ImportOverlay: View {
         .inkGlass(cornerRadius: 26)
         .shadow(color: .black.opacity(0.15), radius: 24, y: 10)
         .accessibilityElement(children: .combine)
+    }
+}
+
+private struct ImportSuccessToast: View {
+    let text: String
+
+    var body: some View {
+        Label(text, systemImage: "checkmark.circle.fill")
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(.primary)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 11)
+            .inkGlass(cornerRadius: 20)
+            .overlay {
+                Capsule().stroke(AppTheme.mint.opacity(0.45), lineWidth: 1)
+            }
+            .shadow(color: AppTheme.mint.opacity(0.16), radius: 16, y: 8)
+            .accessibilityAddTraits(.isStaticText)
     }
 }
 

@@ -142,6 +142,7 @@ final class BookModelTests: XCTestCase {
 
         let cbz = root.appendingPathComponent("冒烟漫画.cbz")
         try fileManager.zipItem(at: archivePages, to: cbz, shouldKeepParent: false)
+        let originalArchiveBytes = try Data(contentsOf: cbz)
 
         let pdf = root.appendingPathComponent("冒烟 PDF.pdf")
         let pdfData = UIGraphicsPDFRenderer(bounds: CGRect(x: 0, y: 0, width: 320, height: 480)).pdfData { context in
@@ -153,19 +154,36 @@ final class BookModelTests: XCTestCase {
         }
         try pdfData.write(to: pdf)
 
-        let destination = root.appendingPathComponent("library", isDirectory: true)
-        let imported = try await BookImporter.importBooks(from: [cbz, pdf, gallery], into: destination)
+        let documents = root.appendingPathComponent("app-documents", isDirectory: true)
+        let suiteName = "InkShelfImportTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = LibraryStore(fileManager: fileManager, defaults: defaults, documentsURL: documents)
+        store.importFiles([cbz, pdf, gallery], removeSourcesAfterImport: true)
+
+        for _ in 0..<400 where store.isImporting {
+            try await Task.sleep(for: .milliseconds(25))
+        }
+        XCTAssertFalse(store.isImporting, "The document-picker import pipeline did not finish in ten seconds")
+        XCTAssertNil(store.alert)
+        let imported = store.books
 
         XCTAssertEqual(imported.count, 3)
         XCTAssertEqual(imported.first(where: { $0.kind == .archive })?.pageCount, 2)
         XCTAssertEqual(imported.first(where: { $0.kind == .pdf })?.pageCount, 1)
         XCTAssertEqual(imported.first(where: { $0.kind == .imageCollection })?.pageCount, 1)
         let archiveBook = try XCTUnwrap(imported.first(where: { $0.kind == .archive }))
-        let sourcePath = try XCTUnwrap(archiveBook.sourceRelativePath)
-        XCTAssertEqual(
-            try Data(contentsOf: destination.appendingPathComponent(sourcePath)),
-            try Data(contentsOf: cbz)
-        )
+        let importedSource = try XCTUnwrap(store.sourceURL(for: archiveBook))
+        XCTAssertEqual(try Data(contentsOf: importedSource), originalArchiveBytes)
+        XCTAssertNil(store.openingError(for: archiveBook))
+        XCTAssertNotNil(store.importNotice)
+
+        XCTAssertFalse(fileManager.fileExists(atPath: cbz.path), "The picker-owned CBZ copy should be cleaned up")
+        XCTAssertFalse(fileManager.fileExists(atPath: pdf.path), "The picker-owned PDF copy should be cleaned up")
+        XCTAssertFalse(fileManager.fileExists(atPath: gallery.path), "The picker-owned folder copy should be cleaned up")
+
+        try fileManager.removeItem(at: store.contentURL(for: archiveBook))
+        XCTAssertNotNil(store.openingError(for: archiveBook), "A missing page directory must produce visible feedback")
     }
 
     @MainActor
@@ -226,4 +244,5 @@ final class BookModelTests: XCTestCase {
             fileSize: 100
         )
     }
+
 }

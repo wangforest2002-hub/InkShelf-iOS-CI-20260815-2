@@ -94,7 +94,7 @@ final class RemoteLibraryStore {
         }
     }
 
-    func upload(_ urls: [URL]) {
+    func upload(_ urls: [URL], removeSourcesAfterUpload: Bool = false) {
         guard !urls.isEmpty else { return }
         guard !isUploading else {
             alert = LibraryAlert(title: "正在上传", message: "请等待当前上传完成。")
@@ -106,6 +106,9 @@ final class RemoteLibraryStore {
             defer {
                 for url in accessedURLs {
                     url.stopAccessingSecurityScopedResource()
+                }
+                if removeSourcesAfterUpload {
+                    for url in urls { try? fileManager.removeItem(at: url) }
                 }
             }
             await uploadWithActiveAccess(urls)
