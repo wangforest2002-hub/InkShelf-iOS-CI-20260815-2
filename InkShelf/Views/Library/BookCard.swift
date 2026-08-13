@@ -5,6 +5,8 @@ struct BookCard: View {
     let book: Book
     let coverURL: URL?
     let previewURLs: [URL]
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var settled = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -86,6 +88,24 @@ struct BookCard: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(book.title)，\(book.kind.label)，\(book.progressLabel)")
         .hoverEffect(.lift)
+        .opacity(settled ? 1 : 0)
+        .scaleEffect(settled ? 1 : 0.96)
+        .offset(y: settled ? 0 : 14)
+        .onAppear {
+            withAnimation(
+                reduceMotion
+                    ? nil
+                    : .spring(response: 0.62, dampingFraction: 0.84)
+                        .delay(entranceDelay)
+            ) {
+                settled = true
+            }
+        }
+    }
+
+    private var entranceDelay: Double {
+        let seed = book.id.uuidString.utf8.reduce(0) { ($0 + Int($1)) % 7 }
+        return Double(seed) * 0.045
     }
 }
 

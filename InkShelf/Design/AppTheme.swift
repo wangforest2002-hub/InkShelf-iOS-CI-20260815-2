@@ -82,6 +82,7 @@ struct CozyWindowView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var glowing = false
+    @State private var drifting = false
 
     var body: some View {
         GeometryReader { proxy in
@@ -112,7 +113,11 @@ struct CozyWindowView: View {
                 Image(systemName: colorScheme == .dark ? "sparkles" : "cloud.fill")
                     .font(.system(size: size.width * 0.15, weight: .medium))
                     .foregroundStyle(.white.opacity(colorScheme == .dark ? 0.70 : 0.82))
-                    .offset(x: -size.width * 0.20, y: -size.height * 0.08)
+                    .offset(
+                        x: drifting ? -size.width * 0.10 : -size.width * 0.25,
+                        y: drifting ? -size.height * 0.11 : -size.height * 0.06
+                    )
+                    .scaleEffect(drifting ? 1.04 : 0.96)
 
                 VStack {
                     Spacer()
@@ -144,6 +149,36 @@ struct CozyWindowView: View {
             guard !reduceMotion else { return }
             withAnimation(.easeInOut(duration: 2.8).repeatForever(autoreverses: true)) {
                 glowing = true
+            }
+            withAnimation(.easeInOut(duration: 7.5).repeatForever(autoreverses: true)) {
+                drifting = true
+            }
+        }
+        .accessibilityHidden(true)
+    }
+}
+
+struct WarmLightSweep: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var moving = false
+
+    var body: some View {
+        GeometryReader { proxy in
+            LinearGradient(
+                colors: [.clear, AppTheme.honey.opacity(0.18), .white.opacity(0.13), .clear],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+            .frame(width: max(100, proxy.size.width * 0.52))
+            .rotationEffect(.degrees(-16))
+            .offset(x: reduceMotion ? -proxy.size.width : (moving ? proxy.size.width * 1.35 : -proxy.size.width))
+        }
+        .clipped()
+        .allowsHitTesting(false)
+        .onAppear {
+            guard !reduceMotion else { return }
+            withAnimation(.linear(duration: 6.5).repeatForever(autoreverses: false)) {
+                moving = true
             }
         }
         .accessibilityHidden(true)

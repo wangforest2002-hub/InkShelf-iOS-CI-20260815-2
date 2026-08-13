@@ -334,6 +334,10 @@ private struct ContinueReadingCard: View {
         .padding(14)
         .inkGlass(cornerRadius: 24, interactive: true)
         .overlay {
+            WarmLightSweep()
+                .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        }
+        .overlay {
             RoundedRectangle(cornerRadius: 24, style: .continuous)
                 .stroke(
                     LinearGradient(
@@ -389,6 +393,10 @@ private struct HomeWelcomeHeader: View {
                 )
         }
         .inkGlass(cornerRadius: 28)
+        .overlay {
+            WarmLightSweep()
+                .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+        }
         .overlay {
             RoundedRectangle(cornerRadius: 28, style: .continuous)
                 .stroke(.white.opacity(colorScheme == .dark ? 0.16 : 0.36), lineWidth: 1)
