@@ -86,6 +86,7 @@ struct BookCard: View {
         }
         .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("book-\(book.id.uuidString.lowercased())")
         .accessibilityLabel("\(book.title)，\(book.kind.label)，\(book.progressLabel)")
         .hoverEffect(.lift)
         .opacity(settled ? 1 : 0)

@@ -411,6 +411,7 @@ private struct ReaderControls: View {
                             .frame(width: 34, height: 34)
                     }
                     .adaptiveGlassButton()
+                    .accessibilityIdentifier("reader-close")
                     .accessibilityLabel("返回书架")
 
                     VStack(alignment: .leading, spacing: 2) {
@@ -473,6 +474,7 @@ private struct ReaderControls: View {
                     )
                     .disabled(pageCount <= 1)
                     .tint(AppTheme.accent)
+                    .accessibilityIdentifier("reader-progress")
                     .accessibilityLabel("阅读进度")
                     .accessibilityValue("第 \(min(currentPage + 1, pageCount)) 页，共 \(pageCount) 页")
 

@@ -34,6 +34,11 @@ final class LibraryStore {
         metadataURL = libraryURL.appendingPathComponent("library.json")
         try? fileManager.createDirectory(at: libraryURL, withIntermediateDirectories: true)
         load()
+#if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("INKSHELF_UI_TEST_SEED") {
+            installReaderNavigationSmokeBook()
+        }
+#endif
     }
 
     var storageUsage: Int64 {
@@ -346,6 +351,33 @@ final class LibraryStore {
     }
 
     private static let activeReaderKey = "reader.activeBookID"
+
+#if DEBUG
+    private func installReaderNavigationSmokeBook() {
+        let id = UUID(uuidString: "A11CE000-0000-4000-8000-000000000001")!
+        guard !books.contains(where: { $0.id == id }) else { return }
+        let folder = libraryURL.appendingPathComponent(id.uuidString.lowercased(), isDirectory: true)
+        let pages = folder.appendingPathComponent("pages", isDirectory: true)
+        let page = pages.appendingPathComponent("000001.png")
+        let png = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLxVQAAAABJRU5ErkJggg==")!
+        do {
+            try fileManager.createDirectory(at: pages, withIntermediateDirectories: true)
+            try png.write(to: page, options: .atomic)
+            books.append(Book(
+                id: id,
+                title: "UI 冒烟读物",
+                kind: .imageCollection,
+                sourceFileName: "UI 冒烟读物",
+                contentRelativePath: "\(id.uuidString.lowercased())/pages",
+                pageCount: 1,
+                fileSize: Int64(png.count)
+            ))
+            saveImmediately()
+        } catch {
+            alert = LibraryAlert(title: "UI 冒烟数据失败", message: error.localizedDescription)
+        }
+    }
+#endif
 }
 
 enum LibraryScope: Equatable {

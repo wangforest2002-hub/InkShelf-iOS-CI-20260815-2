@@ -135,6 +135,7 @@ targets:
     scheme:
       testTargets:
         - InkShelfTests
+        - InkShelfUITests
       gatherCoverageData: true
 
   InkShelfTests:
@@ -149,3 +150,16 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.inkshelf.reader.tests
         GENERATE_INFOPLIST_FILE: true
+
+  InkShelfUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: InkShelfUITests
+    dependencies:
+      - target: InkShelf
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.inkshelf.reader.uitests
+        GENERATE_INFOPLIST_FILE: true
+        TEST_TARGET_NAME: InkShelf

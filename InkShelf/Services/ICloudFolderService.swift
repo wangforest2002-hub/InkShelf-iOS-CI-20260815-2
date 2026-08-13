@@ -5,6 +5,7 @@ enum ICloudFolderError: LocalizedError, Sendable {
     case folderUnavailable
     case fileUnavailable
     case downloadFailed
+    case downloadTimedOut
 
     var errorDescription: String? {
         switch self {
@@ -12,6 +13,7 @@ enum ICloudFolderError: LocalizedError, Sendable {
         case .folderUnavailable: return "iCloud 文件夹暂时不可用，请在“文件”App 中确认它仍然存在。"
         case .fileUnavailable: return "这本书已从 iCloud 移动或删除。"
         case .downloadFailed: return "无法从 iCloud 下载这本书，请检查网络和 iCloud 空间。"
+        case .downloadTimedOut: return "iCloud 在 10 分钟内没有准备好这本书。请在“文件”App 中点一下文件，确认下载完成后重试。"
         }
     }
 }
@@ -132,17 +134,44 @@ enum ICloudFolderService {
 
             let ubiquitous = (try? sourceURL.resourceValues(forKeys: [.isUbiquitousItemKey]).isUbiquitousItem) ?? false
             if ubiquitous {
-                try? FileManager.default.startDownloadingUbiquitousItem(at: sourceURL)
-                for _ in 0..<7_200 {
+                do {
+                    try FileManager.default.startDownloadingUbiquitousItem(at: sourceURL)
+                } catch {
+                    throw ICloudFolderError.downloadFailed
+                }
+
+                var downloadReady = false
+                // A real percentage prevents a large CBZ from looking frozen.
+                // Ten minutes is long enough for personal libraries while still
+                // guaranteeing that a broken File Provider cannot wait forever.
+                for _ in 0..<2_400 {
                     try Task.checkCancellation()
-                    let values = try? sourceURL.resourceValues(forKeys: [.ubiquitousItemDownloadingStatusKey])
-                    await progress(0.08)
-                    if values?.ubiquitousItemDownloadingStatus == .current ||
-                        values?.ubiquitousItemDownloadingStatus == .downloaded {
+                    let values = try? sourceURL.resourceValues(forKeys: [
+                        .ubiquitousItemDownloadingStatusKey,
+                        .ubiquitousItemDownloadingErrorKey,
+                        .ubiquitousItemPercentDownloadedKey,
+                    ])
+                    if values?.ubiquitousItemDownloadingError != nil {
+                        throw ICloudFolderError.downloadFailed
+                    }
+
+                    guard let status = values?.ubiquitousItemDownloadingStatus else {
+                        // Some File Provider implementations expose an iCloud
+                        // flag but no status. Let file coordination materialize it.
+                        downloadReady = true
+                        break
+                    }
+
+                    let fraction = min(max((values?.ubiquitousItemPercentDownloaded ?? 0) / 100, 0), 1)
+                    await progress(0.02 + fraction * 0.46)
+                    if status == .current || status == .downloaded {
+                        downloadReady = true
                         break
                     }
                     try await Task.sleep(for: .milliseconds(250))
                 }
+                guard downloadReady else { throw ICloudFolderError.downloadTimedOut }
+                await progress(0.50)
             }
 
             let coordinator = NSFileCoordinator(filePresenter: nil)
@@ -158,7 +187,7 @@ enum ICloudFolderService {
                         from: coordinatedURL,
                         to: destination,
                         expectedSize: max(book.size, 1),
-                        baseProgress: ubiquitous ? 0.08 : 0,
+                        baseProgress: ubiquitous ? 0.50 : 0,
                         progress: progress
                     )
                 } catch {

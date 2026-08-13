@@ -62,6 +62,7 @@ jobs:
             -derivedDataPath build-simulator \
             -skip-testing:InkShelfTests/BookModelTests/testCoordinatedCopyPreservesOriginalBytes \
             -skip-testing:InkShelfTests/BookModelTests/testLocalCBZPDFFolderSmokeImport \
+            -skip-testing:InkShelfUITests \
             -parallel-testing-enabled NO
 
       - name: Run security-scoped copy smoke test
@@ -88,6 +89,19 @@ jobs:
             -destination "platform=iOS Simulator,id=$DEVICE_ID" \
             -derivedDataPath build-simulator \
             -only-testing:InkShelfTests/BookModelTests/testLocalCBZPDFFolderSmokeImport \
+            -parallel-testing-enabled NO
+
+      - name: Run shelf-to-reader UI navigation smoke test
+        timeout-minutes: 5
+        run: |
+          set -o pipefail
+          xcodebuild test-without-building \
+            -project InkShelf.xcodeproj \
+            -scheme InkShelf \
+            -configuration Debug \
+            -destination "platform=iOS Simulator,id=$DEVICE_ID" \
+            -derivedDataPath build-simulator \
+            -only-testing:InkShelfUITests/ReaderNavigationUITests/testSeededLocalBookOpensAndReturnsFromReader \
             -parallel-testing-enabled NO
 
       - name: Launch app and capture UI smoke screenshot
