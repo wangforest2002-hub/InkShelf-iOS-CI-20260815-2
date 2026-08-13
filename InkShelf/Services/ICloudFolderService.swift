@@ -141,9 +141,9 @@ enum ICloudFolderService {
                 }
 
                 var downloadReady = false
-                // A real percentage prevents a large CBZ from looking frozen.
                 // Ten minutes is long enough for personal libraries while still
                 // guaranteeing that a broken File Provider cannot wait forever.
+                await progress(0.08)
                 for _ in 0..<2_400 {
                     try Task.checkCancellation()
                     let values = try? sourceURL.resourceValues(forKeys: [
@@ -161,11 +161,6 @@ enum ICloudFolderService {
                         break
                     }
 
-                    let percent = (NSMetadataItem(url: sourceURL)?
-                        .value(forAttribute: NSMetadataUbiquitousItemPercentDownloadedKey) as? NSNumber)?
-                        .doubleValue ?? 0
-                    let fraction = min(max(percent / 100, 0), 1)
-                    await progress(0.02 + fraction * 0.46)
                     if status == .current || status == .downloaded {
                         downloadReady = true
                         break

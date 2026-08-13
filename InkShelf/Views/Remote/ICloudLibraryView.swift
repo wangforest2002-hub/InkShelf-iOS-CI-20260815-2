@@ -384,7 +384,7 @@ private struct ICloudDownloadOverlay: View {
                 .tint(AppTheme.accent)
             Text(
                 progress < 0.50
-                    ? "正在从 iCloud 下载 · \(Int((min(progress / 0.48, 1) * 100).rounded()))%"
+                    ? "正在等待 iCloud 下载…"
                     : "正在整理本地副本 · \(Int((progress * 100).rounded()))%"
             )
                 .font(.headline.monospacedDigit())
