@@ -346,6 +346,7 @@ final class BookModelTests: XCTestCase {
         }
     }
 
+    @MainActor
     func testImageBookCanBecomeLowQualityPreviewWithoutTouchingCover() throws {
         let fileManager = FileManager.default
         let root = fileManager.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
