@@ -89,17 +89,21 @@ final class ReaderNavigationUITests: XCTestCase {
 
     @discardableResult
     private func navigateIfVisible(_ app: XCUIApplication, labels: [String]) -> Bool {
-        for _ in 0..<15 {
+        for _ in 0..<10 {
             for label in labels {
-                let candidates = [
-                    app.buttons[label],
-                    app.cells[label],
-                    app.staticTexts[label],
-                    app.descendants(matching: .any)
-                        .matching(NSPredicate(format: "label == %@", label))
-                        .firstMatch,
-                ]
-                if let element = candidates.first(where: { $0.exists && $0.isHittable }) {
+                // File/folder cells append details such as “2 items” to the
+                // accessibility label on iOS 26, so match the visible name as
+                // a prefix instead of requiring an exact label.
+                let predicate = NSPredicate(
+                    format: "label == %@ OR label BEGINSWITH %@ OR identifier BEGINSWITH %@",
+                    label,
+                    "\(label),",
+                    label
+                )
+                let candidates = [app.cells, app.buttons, app.staticTexts]
+                for query in candidates {
+                    let element = query.matching(predicate).firstMatch
+                    guard element.exists && element.isHittable else { continue }
                     element.tap()
                     Thread.sleep(forTimeInterval: 0.45)
                     return true
