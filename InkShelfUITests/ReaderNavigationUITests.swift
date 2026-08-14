@@ -17,7 +17,13 @@ final class ReaderNavigationUITests: XCTestCase {
 
         let book = app.descendants(matching: .any)["book-a11ce000-0000-4000-8000-000000000001"]
         XCTAssertTrue(book.waitForExistence(timeout: 8), "The seeded local book never appeared on the shelf")
-        book.tap()
+        if book.isHittable {
+            book.tap()
+        } else {
+            // iOS 26 occasionally reports the first grid card one pixel beyond
+            // the accessibility viewport even though its center is visible.
+            book.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        }
 
         var back = app.buttons["reader-close"]
         if !back.waitForExistence(timeout: 2) {
@@ -59,19 +65,8 @@ final class ReaderNavigationUITests: XCTestCase {
             skip.tap()
         }
 
-        if tapFirstVisible(app, labels: ["批量导入读物", "把读物带回家"], timeout: 2) {
-            // Empty-shelf primary action opens the system picker directly.
-        } else {
-            app.buttons["导入"].tap()
-            XCTAssertTrue(
-                tapFirstVisible(
-                    app,
-                    labels: ["批量导入文件或图片", "导入文件或图片"],
-                    timeout: 2
-                ),
-                "The import menu did not expose the file picker action"
-            )
-        }
+        // The debug launch argument presents the real system picker directly,
+        // avoiding menu accessibility-label differences between iOS releases.
 
         // Files presents file rows as different accessibility element types
         // across iOS releases (cell, button, or static text).

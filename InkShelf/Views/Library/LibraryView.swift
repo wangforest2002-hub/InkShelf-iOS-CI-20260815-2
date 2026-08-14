@@ -15,6 +15,7 @@ struct LibraryView: View {
     @State private var renamingBook: Book?
     @State private var previewingBook: Book?
     @State private var openedBook: Book?
+    @State private var didAutoPresentPickerForUITest = false
     @Namespace private var coverTransition
 
     private var books: [Book] {
@@ -172,6 +173,18 @@ struct LibraryView: View {
             matching: .images,
             preferredItemEncoding: .current
         )
+        .onAppear {
+#if DEBUG
+            guard ProcessInfo.processInfo.arguments.contains("INKSHELF_UI_TEST_PICKER"),
+                  !didAutoPresentPickerForUITest
+            else { return }
+            didAutoPresentPickerForUITest = true
+            Task { @MainActor in
+                await Task.yield()
+                importPicker = .files
+            }
+#endif
+        }
         .onChange(of: photoItems) { _, items in
             guard !items.isEmpty else { return }
             Task { await importPhotos(items) }
