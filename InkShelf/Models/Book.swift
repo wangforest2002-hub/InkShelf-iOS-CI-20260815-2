@@ -26,6 +26,20 @@ enum BookKind: String, Codable, CaseIterable, Sendable {
     }
 }
 
+enum BookStorageState: String, Codable, Sendable {
+    case full
+    case previewOnly
+    case coverOnly
+
+    var title: String {
+        switch self {
+        case .full: "原画在本机"
+        case .previewOnly: "低清预览"
+        case .coverOnly: "仅保留封面"
+        }
+    }
+}
+
 struct Book: Identifiable, Codable, Hashable, Sendable {
     let id: UUID
     var title: String
@@ -42,6 +56,7 @@ struct Book: Identifiable, Codable, Hashable, Sendable {
     var fileSize: Int64
     var isFavorite: Bool
     var favoritePages: [Int]?
+    var localStorageState: BookStorageState?
     var ebookChapterProgress: Double?
     var remoteSourceID: String?
     var remoteModifiedAt: String?
@@ -62,6 +77,7 @@ struct Book: Identifiable, Codable, Hashable, Sendable {
         fileSize: Int64,
         isFavorite: Bool = false,
         favoritePages: [Int]? = nil,
+        localStorageState: BookStorageState? = nil,
         ebookChapterProgress: Double? = nil,
         remoteSourceID: String? = nil,
         remoteModifiedAt: String? = nil
@@ -81,6 +97,7 @@ struct Book: Identifiable, Codable, Hashable, Sendable {
         self.fileSize = fileSize
         self.isFavorite = isFavorite
         self.favoritePages = favoritePages
+        self.localStorageState = localStorageState
         self.ebookChapterProgress = ebookChapterProgress
         self.remoteSourceID = remoteSourceID
         self.remoteModifiedAt = remoteModifiedAt
@@ -110,6 +127,7 @@ struct Book: Identifiable, Codable, Hashable, Sendable {
     }
 
     var folderName: String { id.uuidString.lowercased() }
+    var storageState: BookStorageState { localStorageState ?? .full }
 }
 
 extension UTType {

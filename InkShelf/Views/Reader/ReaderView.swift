@@ -7,6 +7,7 @@ struct ReaderView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(LibraryStore.self) private var library
     @Environment(AICompanionStore.self) private var companion
+    @Environment(AchievementStore.self) private var achievements
     let book: Book
     let onClose: (() -> Void)?
 
@@ -26,7 +27,9 @@ struct ReaderView: View {
     @State private var didTryPassword = false
     @State private var hideControlsTask: Task<Void, Never>?
     @State private var readerAlert: ReaderAlert?
+    @State private var readerNotice: String?
     @State private var isSavingPage = false
+    @State private var activeReadingStartedAt: Date?
 
     @AppStorage("reader.layout") private var layoutRaw = ReaderLayout.single.rawValue
     @AppStorage("reader.flow") private var flowRaw = ReaderFlow.horizontal.rawValue
@@ -87,6 +90,28 @@ struct ReaderView: View {
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
 
+            if let achievement = achievements.latestUnlock {
+                VStack {
+                    AchievementUnlockToast(achievement: achievement)
+                        .padding(.top, controlsVisible ? 112 : 20)
+                    Spacer()
+                }
+                .transition(.move(edge: .top).combined(with: .opacity))
+                .zIndex(30)
+                .allowsHitTesting(false)
+            }
+
+            if let readerNotice {
+                VStack {
+                    Spacer()
+                    ReaderNoticeToast(text: readerNotice)
+                        .padding(.bottom, controlsVisible ? 126 : 24)
+                }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .zIndex(29)
+                .allowsHitTesting(false)
+            }
+
             if pdfLocked {
                 PDFPasswordOverlay(
                     password: $passwordDraft,
@@ -130,8 +155,12 @@ struct ReaderView: View {
         .persistentSystemOverlays(controlsVisible ? .automatic : .hidden)
         .preferredColorScheme(book.kind == .ebook ? (ebookTheme == .night ? .dark : .light) : .dark)
         .sensoryFeedback(.selection, trigger: currentPage)
+        .sensoryFeedback(.success, trigger: achievements.unlockedCount)
+        .sensoryFeedback(.success, trigger: readerNotice)
         .onAppear {
             library.beginReading(book.id)
+            achievements.recordOpened(bookID: book.id)
+            activeReadingStartedAt = .now
             if book.kind == .ebook {
                 ebookPackage = library.ebookPackage(for: book)
                 pageCount = max(1, ebookPackage?.chapters.count ?? book.pageCount)
@@ -150,6 +179,10 @@ struct ReaderView: View {
             } else {
                 library.updateProgress(bookID: book.id, page: newPage)
             }
+            achievements.recordPageTurn(
+                bookID: book.id,
+                reachedLastPage: pageCount > 0 && newPage >= pageCount - 1
+            )
             if controlsVisible { scheduleControlsHide() }
             prefetchPages(around: newPage)
             prepareAIPage()
@@ -162,13 +195,18 @@ struct ReaderView: View {
             UIApplication.shared.isIdleTimerDisabled = newValue
         }
         .onChange(of: scenePhase) { _, newPhase in
-            guard newPhase != .active else { return }
-            library.flushProgress()
+            if newPhase == .active {
+                activeReadingStartedAt = .now
+            } else {
+                recordReadingPause()
+                library.flushProgress()
+            }
         }
         .onDisappear {
             hideControlsTask?.cancel()
             companion.cancelAll()
             library.flushProgress()
+            recordReadingPause()
             UIApplication.shared.isIdleTimerDisabled = false
             if scenePhase == .active {
                 library.endReading(book.id)
@@ -231,6 +269,13 @@ struct ReaderView: View {
                   !showAICompanion
             else { return }
             showEndComments = true
+        }
+        .onChange(of: achievements.latestUnlock?.id) { _, newValue in
+            guard newValue != nil else { return }
+            Task {
+                try? await Task.sleep(for: .seconds(3.5))
+                achievements.clearLatestUnlock()
+            }
         }
         .alert(item: $readerAlert) { alert in
             Alert(title: Text(alert.title), message: Text(alert.message), dismissButton: .default(Text("好")))
@@ -318,10 +363,8 @@ struct ReaderView: View {
         guard book.kind != .ebook, !pdfLocked else { return }
         let wasFavorite = pageFavoriteState
         library.togglePageFavorite(bookID: book.id, page: currentPage)
-        readerAlert = ReaderAlert(
-            title: wasFavorite ? "已取消单页收藏" : "已放进珍藏角落",
-            message: wasFavorite ? "这张画面已从单页收藏中移除。" : "之后可以从“珍藏”直接回到这一页。"
-        )
+        if !wasFavorite { achievements.recordFavoritedPage() }
+        showNotice(wasFavorite ? "已取消单页珍藏" : "已放进珍藏角落")
     }
 
     private func saveCurrentPage() {
@@ -336,7 +379,8 @@ struct ReaderView: View {
                     pdfURL: book.kind == .pdf ? library.contentURL(for: book) : nil,
                     pdfPassword: pdfPassword
                 )
-                readerAlert = ReaderAlert(title: "已保存到照片", message: "当前画面已经放进系统照片图库。")
+                achievements.recordSavedPage()
+                showNotice("当前画面已保存到照片")
             } catch {
                 readerAlert = ReaderAlert(
                     title: "暂时无法保存",
@@ -353,6 +397,25 @@ struct ReaderView: View {
             onClose()
         } else {
             dismiss()
+        }
+    }
+
+    private func recordReadingPause() {
+        guard let start = activeReadingStartedAt else { return }
+        achievements.recordReadingDuration(Date.now.timeIntervalSince(start))
+        activeReadingStartedAt = nil
+    }
+
+    private func showNotice(_ text: String) {
+        withAnimation(reduceMotion ? nil : .snappy(duration: 0.26)) {
+            readerNotice = text
+        }
+        Task {
+            try? await Task.sleep(for: .seconds(2.2))
+            guard readerNotice == text else { return }
+            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.22)) {
+                readerNotice = nil
+            }
         }
     }
 
@@ -620,6 +683,42 @@ private struct ReaderAlert: Identifiable {
     let id = UUID()
     let title: String
     let message: String
+}
+
+private struct AchievementUnlockToast: View {
+    let achievement: ReadingAchievement
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: achievement.systemImage)
+                .font(.title2)
+                .foregroundStyle(AppTheme.coral)
+                .symbolEffect(.bounce)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("点亮新成就").font(.caption.weight(.bold)).foregroundStyle(AppTheme.coral)
+                Text(achievement.title).font(.headline)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .inkGlass(cornerRadius: 22)
+        .shadow(color: AppTheme.honey.opacity(0.24), radius: 18, y: 8)
+    }
+}
+
+private struct ReaderNoticeToast: View {
+    let text: String
+
+    var body: some View {
+        Label(text, systemImage: "checkmark.circle.fill")
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(.primary)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 11)
+            .inkGlass(cornerRadius: 22)
+            .shadow(color: .black.opacity(0.14), radius: 14, y: 6)
+            .accessibilityIdentifier("reader-notice")
+    }
 }
 
 private extension View {

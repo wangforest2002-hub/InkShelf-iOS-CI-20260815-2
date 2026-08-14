@@ -38,8 +38,7 @@ final class ReaderNavigationUITests: XCTestCase {
         XCTAssertTrue(pageFavorite.waitForExistence(timeout: 2), "The single-page favorite action is missing")
         XCTAssertEqual(pageFavorite.label, "收藏当前页")
         pageFavorite.tap()
-        XCTAssertTrue(app.alerts["已放进珍藏角落"].waitForExistence(timeout: 2))
-        app.alerts.buttons["好"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["reader-notice"].waitForExistence(timeout: 2))
         XCTAssertEqual(pageFavorite.label, "取消收藏当前页")
 
         let settings = app.buttons["reader-settings"]

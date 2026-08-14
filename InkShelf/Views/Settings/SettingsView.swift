@@ -111,6 +111,25 @@ struct SettingsView: View {
                     }
                 }
 
+                Section("小家记录") {
+                    NavigationLink {
+                        AchievementsView()
+                    } label: {
+                        Label("回家足迹与成就", systemImage: "medal.star.fill")
+                    }
+
+                    NavigationLink {
+                        StorageManagerView()
+                    } label: {
+                        LabeledContent {
+                            Text(AppFormatters.fileSize(library.storageUsage))
+                                .foregroundStyle(.secondary)
+                        } label: {
+                            Label("本地存储管家", systemImage: "externaldrive.fill")
+                        }
+                    }
+                }
+
                 Section("存储与隐私") {
                     LabeledContent("源文件占用") {
                         Text(AppFormatters.fileSize(library.storageUsage))

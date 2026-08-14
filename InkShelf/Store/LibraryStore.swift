@@ -14,6 +14,9 @@ final class LibraryStore {
     private(set) var isImporting = false
     private(set) var importStatusText: String?
     private(set) var importNotice: String?
+    private(set) var optimizingBookID: UUID?
+    private(set) var storageOptimizationProgress: Double?
+    private(set) var measuredStorageSizes: [UUID: Int64] = [:]
     var alert: LibraryAlert?
 
     @ObservationIgnored private let fileManager: FileManager
@@ -53,7 +56,34 @@ final class LibraryStore {
     }
 
     var storageUsage: Int64 {
-        books.reduce(0) { $0 + $1.fileSize }
+        books.reduce(0) { $0 + storageSize(for: $1) }
+    }
+
+    func storageSize(for book: Book) -> Int64 {
+        measuredStorageSizes[book.id] ?? book.fileSize
+    }
+
+    func refreshStorageMeasurements() async {
+        let rootURL = libraryURL
+        let snapshot = books.map { ($0.id, $0.folderName) }
+        let measured = await Task.detached(priority: .utility) {
+            var result: [UUID: Int64] = [:]
+            for (id, folderName) in snapshot {
+                let folder = rootURL.appendingPathComponent(folderName, isDirectory: true)
+                let enumerator = FileManager.default.enumerator(
+                    at: folder,
+                    includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey]
+                )
+                var total: Int64 = 0
+                while let url = enumerator?.nextObject() as? URL {
+                    let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
+                    if values?.isRegularFile == true { total += Int64(values?.fileSize ?? 0) }
+                }
+                result[id] = total
+            }
+            return result
+        }.value
+        measuredStorageSizes = measured
     }
 
     var continueReadingBook: Book? {
@@ -165,6 +195,12 @@ final class LibraryStore {
     }
 
     func openingError(for book: Book) -> LibraryAlert? {
+        if book.storageState == .coverOnly {
+            return LibraryAlert(
+                title: "这里只留下了封面",
+                message: "你之前清理了这本读物的本地内容。如需重新阅读，请再次导入原文件；同名书会作为新项目回到书架。"
+            )
+        }
         let content = contentURL(for: book)
         guard fileManager.fileExists(atPath: content.path) else {
             return LibraryAlert(
@@ -289,6 +325,49 @@ final class LibraryStore {
         saveImmediately()
     }
 
+    func optimizeStorage(bookID: UUID, mode: StorageRetentionMode) async {
+        guard optimizingBookID == nil,
+              let originalIndex = books.firstIndex(where: { $0.id == bookID })
+        else { return }
+        let book = books[originalIndex]
+        let rootURL = libraryURL
+        optimizingBookID = bookID
+        storageOptimizationProgress = 0
+        alert = nil
+        do {
+            let updated = try await Task.detached(priority: .userInitiated) {
+                try StorageOptimizationService.optimize(book: book, libraryURL: rootURL, mode: mode) { progress in
+                    Task { @MainActor [weak self] in
+                        guard self?.optimizingBookID == bookID else { return }
+                        self?.storageOptimizationProgress = progress
+                    }
+                }
+            }.value
+            guard let index = books.firstIndex(where: { $0.id == bookID }) else {
+                optimizingBookID = nil
+                storageOptimizationProgress = nil
+                return
+            }
+            books[index] = updated
+            measuredStorageSizes[updated.id] = updated.fileSize
+            saveImmediately()
+            importNotice = mode == .previewOnly
+                ? "“\(updated.title)”已换成省空间预览"
+                : "“\(updated.title)”现在只保留封面"
+            Task { [weak self] in
+                try? await Task.sleep(for: .seconds(3))
+                self?.importNotice = nil
+            }
+        } catch {
+            alert = LibraryAlert(
+                title: "无法整理本地空间",
+                message: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            )
+        }
+        optimizingBookID = nil
+        storageOptimizationProgress = nil
+    }
+
     func rename(_ id: UUID, to newTitle: String) {
         let title = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !title.isEmpty, let index = books.firstIndex(where: { $0.id == id }) else { return }
@@ -303,6 +382,7 @@ final class LibraryStore {
                 try fileManager.removeItem(at: folder)
             }
             books.removeAll { $0.id == book.id }
+            measuredStorageSizes.removeValue(forKey: book.id)
             endReading(book.id)
             saveImmediately()
         } catch {
@@ -361,7 +441,9 @@ final class LibraryStore {
             let decoder = JSONDecoder()
             decoder.dateDecodingStrategy = .iso8601
             books = try decoder.decode([Book].self, from: data)
-                .filter { fileManager.fileExists(atPath: contentURL(for: $0).path) }
+                .filter {
+                    $0.storageState == .coverOnly || fileManager.fileExists(atPath: contentURL(for: $0).path)
+                }
             if let value = defaults.string(forKey: Self.activeReaderKey),
                let id = UUID(uuidString: value),
                !books.contains(where: { $0.id == id }) {

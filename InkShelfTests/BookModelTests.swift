@@ -277,6 +277,7 @@ final class BookModelTests: XCTestCase {
         )
         XCTAssertNil(decoded.favoritePages)
         XCTAssertEqual(decoded.currentPage, 2)
+        XCTAssertEqual(decoded.storageState, .full)
     }
 
     @MainActor
@@ -343,6 +344,100 @@ final class BookModelTests: XCTestCase {
             XCTAssertFalse(purpose.promptDescription.isEmpty)
             XCTAssertFalse(purpose.systemImage.isEmpty)
         }
+    }
+
+    func testImageBookCanBecomeLowQualityPreviewWithoutTouchingCover() throws {
+        let fileManager = FileManager.default
+        let root = fileManager.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? fileManager.removeItem(at: root) }
+        let id = UUID()
+        let folder = root.appendingPathComponent(id.uuidString.lowercased(), isDirectory: true)
+        let pages = folder.appendingPathComponent("pages", isDirectory: true)
+        try fileManager.createDirectory(at: pages, withIntermediateDirectories: true)
+        let cover = folder.appendingPathComponent("cover.jpg")
+        try testPNG(color: .systemOrange).write(to: cover)
+        try testPNG(color: .systemPurple).write(to: pages.appendingPathComponent("001.png"))
+        try testPNG(color: .systemBlue).write(to: pages.appendingPathComponent("002.png"))
+        let source = folder.appendingPathComponent("source.cbz")
+        try Data(repeating: 0x42, count: 100).write(to: source)
+        let book = Book(
+            id: id,
+            title: "省空间测试",
+            kind: .archive,
+            sourceFileName: "source.cbz",
+            contentRelativePath: "\(id.uuidString.lowercased())/pages",
+            sourceRelativePath: "\(id.uuidString.lowercased())/source.cbz",
+            coverRelativePath: "\(id.uuidString.lowercased())/cover.jpg",
+            pageCount: 2,
+            fileSize: 1_000
+        )
+
+        let optimized = try StorageOptimizationService.optimize(book: book, libraryURL: root, mode: .previewOnly)
+        XCTAssertEqual(optimized.storageState, .previewOnly)
+        XCTAssertEqual(optimized.kind, .imageCollection)
+        XCTAssertEqual(optimized.pageCount, 2)
+        XCTAssertTrue(fileManager.fileExists(atPath: cover.path))
+        XCTAssertFalse(fileManager.fileExists(atPath: source.path))
+        XCTAssertEqual(
+            try fileManager.contentsOfDirectory(atPath: root.appendingPathComponent(optimized.contentRelativePath).path).count,
+            2
+        )
+    }
+
+    @MainActor
+    func testCoverOnlyBookSurvivesLibraryReloadAndShowsOpeningMessage() throws {
+        let fileManager = FileManager.default
+        let root = fileManager.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let suiteName = "InkShelfCoverOnlyTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer {
+            try? fileManager.removeItem(at: root)
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let id = UUID()
+        let library = root.appendingPathComponent("InkShelf Library", isDirectory: true)
+        let folder = library.appendingPathComponent(id.uuidString.lowercased(), isDirectory: true)
+        try fileManager.createDirectory(at: folder, withIntermediateDirectories: true)
+        let coverPath = "\(id.uuidString.lowercased())/cover.jpg"
+        try testPNG(color: .systemMint).write(to: library.appendingPathComponent(coverPath))
+        let book = Book(
+            id: id,
+            title: "只留封面",
+            kind: .pdf,
+            sourceFileName: "gone.pdf",
+            contentRelativePath: "\(id.uuidString.lowercased())/content-removed",
+            coverRelativePath: coverPath,
+            pageCount: 20,
+            fileSize: 100,
+            localStorageState: .coverOnly
+        )
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        try encoder.encode([book]).write(to: library.appendingPathComponent("library.json"))
+
+        let store = LibraryStore(fileManager: fileManager, defaults: defaults, documentsURL: root)
+        XCTAssertEqual(store.books.first?.storageState, .coverOnly)
+        XCTAssertEqual(store.openingError(for: book)?.title, "这里只留下了封面")
+    }
+
+    @MainActor
+    func testReadingAchievementsUnlockAndPersist() throws {
+        let suiteName = "InkShelfAchievementTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = AchievementStore(defaults: defaults)
+        let bookID = UUID()
+        store.recordOpened(bookID: bookID)
+        store.recordFavoritedPage()
+        store.recordPageTurn(bookID: bookID, reachedLastPage: true)
+        XCTAssertTrue(store.footprint.unlockedAt.keys.contains("first-home"))
+        XCTAssertTrue(store.footprint.unlockedAt.keys.contains("page-spark"))
+        XCTAssertTrue(store.footprint.unlockedAt.keys.contains("first-finale"))
+
+        let restored = AchievementStore(defaults: defaults)
+        XCTAssertEqual(restored.footprint.openedBookIDs, Set([bookID]))
+        XCTAssertEqual(restored.footprint.pagesTurned, 1)
+        XCTAssertEqual(restored.unlockedCount, 3)
     }
 
     @MainActor

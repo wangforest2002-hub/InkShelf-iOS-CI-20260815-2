@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 
 struct LibraryView: View {
     @Environment(LibraryStore.self) private var library
+    @Environment(AchievementStore.self) private var achievements
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     let scope: LibraryScope
 
@@ -17,6 +18,7 @@ struct LibraryView: View {
     @State private var aiWritingBook: Book?
     @State private var openedBook: Book?
     @State private var didAutoPresentPickerForUITest = false
+    @State private var showAchievements = false
     @Namespace private var coverTransition
 
     private var books: [Book] {
@@ -52,6 +54,18 @@ struct LibraryView: View {
                                             ContinueReadingCard(
                                                 book: continueBook,
                                                 coverURL: library.coverURL(for: continueBook)
+                                            )
+                                        }
+                                        .buttonStyle(PressableCardStyle())
+                                    }
+
+                                    if !achievements.footprint.openedBookIDs.isEmpty {
+                                        Button { showAchievements = true } label: {
+                                            FootprintHomeCard(
+                                                unlocked: achievements.unlockedCount,
+                                                total: achievements.achievements.count,
+                                                pages: achievements.footprint.pagesTurned,
+                                                minutes: achievements.readingMinutes
                                             )
                                         }
                                         .buttonStyle(PressableCardStyle())
@@ -222,6 +236,16 @@ struct LibraryView: View {
         .sheet(item: $aiWritingBook) { book in
             NavigationStack {
                 AIWritingStudioView(book: book)
+            }
+        }
+        .sheet(isPresented: $showAchievements) {
+            NavigationStack {
+                AchievementsView()
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("完成") { showAchievements = false }
+                        }
+                    }
             }
         }
     }
@@ -552,6 +576,38 @@ private struct HomeStatChip: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
             .background(.white.opacity(0.28), in: Capsule())
+    }
+}
+
+private struct FootprintHomeCard: View {
+    let unlocked: Int
+    let total: Int
+    let pages: Int
+    let minutes: Int
+
+    var body: some View {
+        HStack(spacing: 14) {
+            Image(systemName: "medal.star.fill")
+                .font(.title2)
+                .symbolRenderingMode(.palette)
+                .foregroundStyle(AppTheme.honey, AppTheme.coral)
+                .frame(width: 48, height: 48)
+                .background(AppTheme.honey.opacity(0.12), in: Circle())
+            VStack(alignment: .leading, spacing: 4) {
+                Text("回家足迹").font(.headline)
+                Text("\(pages) 页 · \(minutes) 分钟 · \(unlocked)/\(total) 枚徽章")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .contentTransition(.numericText())
+            }
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(.tertiary)
+        }
+        .padding(14)
+        .inkGlass(cornerRadius: 22, interactive: true)
+        .accessibilityElement(children: .combine)
     }
 }
 
