@@ -57,6 +57,7 @@ struct Book: Identifiable, Codable, Hashable, Sendable {
     var isFavorite: Bool
     var favoritePages: [Int]?
     var localStorageState: BookStorageState?
+    var shelfGroupID: UUID?
     var ebookChapterProgress: Double?
     var remoteSourceID: String?
     var remoteModifiedAt: String?
@@ -78,6 +79,7 @@ struct Book: Identifiable, Codable, Hashable, Sendable {
         isFavorite: Bool = false,
         favoritePages: [Int]? = nil,
         localStorageState: BookStorageState? = nil,
+        shelfGroupID: UUID? = nil,
         ebookChapterProgress: Double? = nil,
         remoteSourceID: String? = nil,
         remoteModifiedAt: String? = nil
@@ -98,6 +100,7 @@ struct Book: Identifiable, Codable, Hashable, Sendable {
         self.isFavorite = isFavorite
         self.favoritePages = favoritePages
         self.localStorageState = localStorageState
+        self.shelfGroupID = shelfGroupID
         self.ebookChapterProgress = ebookChapterProgress
         self.remoteSourceID = remoteSourceID
         self.remoteModifiedAt = remoteModifiedAt

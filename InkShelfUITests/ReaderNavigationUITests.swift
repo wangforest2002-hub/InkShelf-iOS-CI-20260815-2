@@ -15,6 +15,11 @@ final class ReaderNavigationUITests: XCTestCase {
             skip.tap()
         }
 
+        XCTAssertTrue(
+            app.buttons["shelf-new-group"].waitForExistence(timeout: 4),
+            "The custom shelf-group entry point is missing"
+        )
+
         let book = app.descendants(matching: .any)["book-a11ce000-0000-4000-8000-000000000001"]
         XCTAssertTrue(book.waitForExistence(timeout: 8), "The seeded local book never appeared on the shelf")
         if book.isHittable {

@@ -44,8 +44,8 @@ targets:
       path: InkShelf/Resources/Info.plist
       properties:
         CFBundleDisplayName: 二次元小家
-        CFBundleShortVersionString: "1.7.0"
-        CFBundleVersion: "11"
+        CFBundleShortVersionString: "1.7.1"
+        CFBundleVersion: "12"
         NSPhotoLibraryAddUsageDescription: 用于把你喜欢的当前画面保存到系统照片图库。
         LSRequiresIPhoneOS: true
         LSSupportsOpeningDocumentsInPlace: true

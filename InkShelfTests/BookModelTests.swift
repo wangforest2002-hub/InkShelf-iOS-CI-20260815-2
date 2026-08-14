@@ -271,13 +271,59 @@ final class BookModelTests: XCTestCase {
         let data = try JSONEncoder().encode(original)
         var object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
         object.removeValue(forKey: "favoritePages")
+        object.removeValue(forKey: "shelfGroupID")
         let decoded = try JSONDecoder().decode(
             Book.self,
             from: JSONSerialization.data(withJSONObject: object)
         )
         XCTAssertNil(decoded.favoritePages)
+        XCTAssertNil(decoded.shelfGroupID)
         XCTAssertEqual(decoded.currentPage, 2)
         XCTAssertEqual(decoded.storageState, .full)
+    }
+
+    @MainActor
+    func testShelfGroupsPersistAndDeletingGroupKeepsBook() throws {
+        let fileManager = FileManager.default
+        let root = fileManager.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let suiteName = "InkShelfGroupTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer {
+            try? fileManager.removeItem(at: root)
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let bookID = UUID()
+        let library = root.appendingPathComponent("InkShelf Library", isDirectory: true)
+        let pages = library.appendingPathComponent(bookID.uuidString.lowercased()).appendingPathComponent("pages")
+        try fileManager.createDirectory(at: pages, withIntermediateDirectories: true)
+        try testPNG(color: .systemCyan).write(to: pages.appendingPathComponent("001.png"))
+        let book = Book(
+            id: bookID,
+            title: "分组测试画集",
+            kind: .imageCollection,
+            sourceFileName: "分组测试画集",
+            contentRelativePath: "\(bookID.uuidString.lowercased())/pages",
+            pageCount: 1,
+            fileSize: 1
+        )
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        try encoder.encode([book]).write(to: library.appendingPathComponent("library.json"))
+
+        var store: LibraryStore? = LibraryStore(fileManager: fileManager, defaults: defaults, documentsURL: root)
+        let group = try XCTUnwrap(store?.createShelfGroup(title: "温暖收藏"))
+        store?.assignBook(bookID, toShelfGroup: group.id)
+        XCTAssertEqual(store?.bookCount(inShelfGroup: group.id), 1)
+        store = nil
+
+        store = LibraryStore(fileManager: fileManager, defaults: defaults, documentsURL: root)
+        XCTAssertEqual(store?.shelfGroups.first?.title, "温暖收藏")
+        XCTAssertEqual(store?.books.first?.shelfGroupID, group.id)
+        store?.deleteShelfGroup(group.id)
+        XCTAssertEqual(store?.books.count, 1)
+        XCTAssertNil(store?.books.first?.shelfGroupID)
+        XCTAssertTrue(store?.shelfGroups.isEmpty == true)
     }
 
     @MainActor

@@ -11,6 +11,7 @@ struct LibraryAlert: Identifiable {
 @Observable
 final class LibraryStore {
     private(set) var books: [Book] = []
+    private(set) var shelfGroups: [ShelfGroup] = []
     private(set) var isImporting = false
     private(set) var importStatusText: String?
     private(set) var importNotice: String?
@@ -22,6 +23,7 @@ final class LibraryStore {
     @ObservationIgnored private let fileManager: FileManager
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let metadataURL: URL
+    @ObservationIgnored private let groupsURL: URL
     @ObservationIgnored private var saveTask: Task<Void, Never>?
     let libraryURL: URL
 
@@ -35,6 +37,7 @@ final class LibraryStore {
         let documents = documentsURL ?? fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
         libraryURL = documents.appendingPathComponent("InkShelf Library", isDirectory: true)
         metadataURL = libraryURL.appendingPathComponent("library.json")
+        groupsURL = libraryURL.appendingPathComponent("shelf-groups.json")
 #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("INKSHELF_UI_TEST_PICKER") {
             // Each picker test must begin on a truly empty shelf. UI test
@@ -45,6 +48,7 @@ final class LibraryStore {
 #endif
         try? fileManager.createDirectory(at: libraryURL, withIntermediateDirectories: true)
         load()
+        loadShelfGroups()
 #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("INKSHELF_UI_TEST_SEED") {
             installReaderNavigationSmokeBook()
@@ -251,6 +255,7 @@ final class LibraryStore {
 
         if let old = books.first(where: { $0.remoteSourceID == remoteID }) {
             book.isFavorite = old.isFavorite
+            book.shelfGroupID = old.shelfGroupID
             let oldFolder = libraryURL.appendingPathComponent(old.folderName, isDirectory: true)
             books.removeAll { $0.id == old.id }
             try? fileManager.removeItem(at: oldFolder)
@@ -323,6 +328,50 @@ final class LibraryStore {
         if !pages.insert(page).inserted { pages.remove(page) }
         books[index].favoritePages = pages.sorted()
         saveImmediately()
+    }
+
+    @discardableResult
+    func createShelfGroup(title: String) -> ShelfGroup? {
+        let cleaned = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleaned.isEmpty else { return nil }
+        let group = ShelfGroup(title: cleaned, styleIndex: shelfGroups.count)
+        shelfGroups.append(group)
+        saveShelfGroups()
+        return group
+    }
+
+    func renameShelfGroup(_ id: UUID, to title: String) {
+        let cleaned = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleaned.isEmpty, let index = shelfGroups.firstIndex(where: { $0.id == id }) else { return }
+        shelfGroups[index].title = cleaned
+        saveShelfGroups()
+    }
+
+    func deleteShelfGroup(_ id: UUID) {
+        shelfGroups.removeAll { $0.id == id }
+        for index in books.indices where books[index].shelfGroupID == id {
+            books[index].shelfGroupID = nil
+        }
+        saveShelfGroups()
+        saveImmediately()
+    }
+
+    func assignBook(_ bookID: UUID, toShelfGroup groupID: UUID?) {
+        guard groupID == nil || shelfGroups.contains(where: { $0.id == groupID }),
+              let index = books.firstIndex(where: { $0.id == bookID })
+        else { return }
+        books[index].shelfGroupID = groupID
+        saveImmediately()
+        importNotice = groupID.flatMap { id in shelfGroups.first(where: { $0.id == id })?.title }
+            .map { "已放进“\($0)”" } ?? "已移到未分组"
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(2.2))
+            self?.importNotice = nil
+        }
+    }
+
+    func bookCount(inShelfGroup id: UUID) -> Int {
+        books.filter { $0.shelfGroupID == id }.count
     }
 
     func optimizeStorage(bookID: UUID, mode: StorageRetentionMode) async {
@@ -451,6 +500,40 @@ final class LibraryStore {
             }
         } catch {
             alert = LibraryAlert(title: "书架数据需要修复", message: "本地文件仍然保留，但书架索引无法读取：\(error.localizedDescription)")
+        }
+    }
+
+    private func loadShelfGroups() {
+        guard let data = try? Data(contentsOf: groupsURL) else { return }
+        do {
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            shelfGroups = try decoder.decode([ShelfGroup].self, from: data)
+            let validIDs = Set(shelfGroups.map(\.id))
+            var repaired = false
+            for index in books.indices {
+                if let id = books[index].shelfGroupID, !validIDs.contains(id) {
+                    books[index].shelfGroupID = nil
+                    repaired = true
+                }
+            }
+            if repaired { saveImmediately() }
+        } catch {
+            alert = LibraryAlert(
+                title: "分组数据需要修复",
+                message: "书籍仍然保留，但分组列表无法读取：\(error.localizedDescription)"
+            )
+        }
+    }
+
+    private func saveShelfGroups() {
+        do {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            encoder.dateEncodingStrategy = .iso8601
+            try encoder.encode(shelfGroups).write(to: groupsURL, options: .atomic)
+        } catch {
+            alert = LibraryAlert(title: "无法保存分组", message: error.localizedDescription)
         }
     }
 

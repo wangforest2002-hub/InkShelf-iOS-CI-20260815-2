@@ -19,10 +19,26 @@ struct LibraryView: View {
     @State private var openedBook: Book?
     @State private var didAutoPresentPickerForUITest = false
     @State private var showAchievements = false
+    @State private var shelfFilter: ShelfFilter = .all
+    @State private var groupEditor: ShelfGroupEditorTarget?
+    @State private var pendingGroupDeletion: ShelfGroup?
     @Namespace private var coverTransition
 
     private var books: [Book] {
-        library.filteredBooks(scope: scope, query: query)
+        let filtered = library.filteredBooks(scope: scope, query: query)
+        guard scope == .all, query.isEmpty else { return filtered }
+        switch shelfFilter {
+        case .all:
+            return filtered
+        case .ungrouped:
+            return filtered.filter { $0.shelfGroupID == nil }
+        case .group(let id):
+            return filtered.filter { $0.shelfGroupID == id }
+        }
+    }
+
+    private var keepsShelfVisibleWhenEmpty: Bool {
+        scope == .all && query.isEmpty && shelfFilter != .all && !library.books.isEmpty
     }
 
     private var gridColumns: [GridItem] {
@@ -34,7 +50,9 @@ struct LibraryView: View {
             ZStack {
                 AuroraBackground()
 
-                if books.isEmpty && !(scope == .favorites && !library.favoritePageItems.isEmpty) {
+                if books.isEmpty
+                    && !(scope == .favorites && !library.favoritePageItems.isEmpty)
+                    && !keepsShelfVisibleWhenEmpty {
                     EmptyLibraryView(
                         scope: scope,
                         hasSearch: !query.isEmpty,
@@ -44,6 +62,18 @@ struct LibraryView: View {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 22) {
                             if query.isEmpty, scope == .all {
+                                ShelfGroupStrip(
+                                    selection: $shelfFilter,
+                                    groups: library.shelfGroups,
+                                    totalCount: library.books.count,
+                                    ungroupedCount: library.books.filter { $0.shelfGroupID == nil }.count,
+                                    countForGroup: library.bookCount(inShelfGroup:),
+                                    create: { groupEditor = .create },
+                                    rename: { groupEditor = .rename($0) },
+                                    delete: { pendingGroupDeletion = $0 }
+                                )
+
+                                if shelfFilter == .all {
                                     HomeWelcomeHeader(
                                         bookCount: library.books.count,
                                         favoriteCount: library.books.filter(\.isFavorite).count
@@ -70,6 +100,7 @@ struct LibraryView: View {
                                         }
                                         .buttonStyle(PressableCardStyle())
                                     }
+                                }
                             } else if query.isEmpty, scope == .favorites {
                                     LibrarySectionHeading(
                                         title: "珍藏角落",
@@ -115,6 +146,8 @@ struct LibraryView: View {
                                         }
                                     }
                                 }
+                            } else if keepsShelfVisibleWhenEmpty {
+                                EmptyShelfGroupCard(createGroup: false)
                             }
                         }
                         .padding(.horizontal, 18)
@@ -155,6 +188,14 @@ struct LibraryView: View {
                                 showPhotoPicker = true
                             } label: {
                                 Label("从照片导入", systemImage: "photo.badge.plus")
+                            }
+
+                            Divider()
+
+                            Button {
+                                groupEditor = .create
+                            } label: {
+                                Label("新建书架分组", systemImage: "folder.badge.plus")
                             }
                         } label: {
                             Label("导入", systemImage: "plus")
@@ -224,6 +265,40 @@ struct LibraryView: View {
         } message: { book in
             Text("“\(book.title)”及其本地副本将被删除，此操作无法撤销。")
         }
+        .confirmationDialog(
+            "删除这个分组？",
+            isPresented: shelfGroupDeletionPresented,
+            titleVisibility: .visible,
+            presenting: pendingGroupDeletion
+        ) { group in
+            Button("删除“\(group.title)”", role: .destructive) {
+                if shelfFilter == .group(group.id) { shelfFilter = .all }
+                library.deleteShelfGroup(group.id)
+                pendingGroupDeletion = nil
+            }
+            Button("取消", role: .cancel) { pendingGroupDeletion = nil }
+        } message: { group in
+            Text("只会删除分组，里面的 \(library.bookCount(inShelfGroup: group.id)) 本读物会回到“未分组”，文件不会被删除。")
+        }
+        .sheet(item: $groupEditor) { target in
+            switch target {
+            case .create:
+                ShelfGroupEditorView(navigationTitle: "新建分组") { title in
+                    if let group = library.createShelfGroup(title: title) {
+                        withAnimation(.snappy(duration: 0.3)) {
+                            shelfFilter = .group(group.id)
+                        }
+                    }
+                }
+            case .rename(let group):
+                ShelfGroupEditorView(
+                    navigationTitle: "重命名分组",
+                    initialTitle: group.title
+                ) { title in
+                    library.renameShelfGroup(group.id, to: title)
+                }
+            }
+        }
         .sheet(item: $renamingBook) { book in
             RenameBookView(book: book) { title in
                 library.rename(book.id, to: title)
@@ -278,6 +353,35 @@ struct LibraryView: View {
             Label("AI 写文案", systemImage: "text.badge.star")
         }
 
+        Menu {
+            Button {
+                library.assignBook(book.id, toShelfGroup: nil)
+            } label: {
+                Label("未分组", systemImage: book.shelfGroupID == nil ? "checkmark" : "tray")
+            }
+
+            ForEach(library.shelfGroups) { group in
+                Button {
+                    library.assignBook(book.id, toShelfGroup: group.id)
+                } label: {
+                    Label(
+                        group.title,
+                        systemImage: book.shelfGroupID == group.id ? "checkmark" : group.systemImage
+                    )
+                }
+            }
+
+            Divider()
+
+            Button {
+                groupEditor = .create
+            } label: {
+                Label("新建分组…", systemImage: "folder.badge.plus")
+            }
+        } label: {
+            Label("移动到分组", systemImage: "folder")
+        }
+
         if let sourceURL = library.sourceURL(for: book) {
             ShareLink(item: sourceURL) {
                 Label("导出原文件", systemImage: "square.and.arrow.up")
@@ -301,6 +405,13 @@ struct LibraryView: View {
         Binding(
             get: { pendingDeletion != nil },
             set: { if !$0 { pendingDeletion = nil } }
+        )
+    }
+
+    private var shelfGroupDeletionPresented: Binding<Bool> {
+        Binding(
+            get: { pendingGroupDeletion != nil },
+            set: { if !$0 { pendingGroupDeletion = nil } }
         )
     }
 
@@ -333,6 +444,16 @@ struct LibraryView: View {
     }
 
     private var sectionTitle: String {
+        if scope == .all, query.isEmpty {
+            switch shelfFilter {
+            case .all:
+                break
+            case .ungrouped:
+                return "未分组"
+            case .group(let id):
+                return library.shelfGroups.first(where: { $0.id == id })?.title ?? "书架分组"
+            }
+        }
         switch scope {
         case .all: "家里的书架"
         case .recent: "最近翻开"
@@ -341,6 +462,16 @@ struct LibraryView: View {
     }
 
     private var sectionSymbol: String {
+        if scope == .all, query.isEmpty {
+            switch shelfFilter {
+            case .all:
+                break
+            case .ungrouped:
+                return "tray.fill"
+            case .group(let id):
+                return library.shelfGroups.first(where: { $0.id == id })?.systemImage ?? "folder.fill"
+            }
+        }
         switch scope {
         case .all: "books.vertical.fill"
         case .recent: "clock.arrow.circlepath"
@@ -398,6 +529,18 @@ private enum ImportPicker: String, Identifiable {
     case files
 
     var id: String { rawValue }
+}
+
+private enum ShelfGroupEditorTarget: Identifiable {
+    case create
+    case rename(ShelfGroup)
+
+    var id: String {
+        switch self {
+        case .create: "create"
+        case .rename(let group): "rename-\(group.id.uuidString)"
+        }
+    }
 }
 
 private struct ContinueReadingCard: View {
