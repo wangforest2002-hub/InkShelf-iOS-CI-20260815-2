@@ -74,9 +74,15 @@ final class ReaderNavigationUITests: XCTestCase {
         XCTAssertTrue(fixture.waitForExistence(timeout: 8), "The system document picker did not open the requested folder")
         fixture.tap()
 
-        let open = app.buttons["打开"]
-        if open.waitForExistence(timeout: 2) {
-            open.tap()
+        // Multiple selection keeps the picker open until its confirmation
+        // button is tapped. Files localizes this independently from the app,
+        // and the title also varies slightly between iOS releases.
+        if !tapFirstVisible(
+            app,
+            labels: ["打开", "Open", "选取", "Choose", "完成", "Done", "添加", "Add"],
+            timeout: 4
+        ) {
+            print("FILES PICKER HIERARCHY AFTER SELECTION:\n\(app.debugDescription)")
         }
 
         let imported = app.buttons.matching(
@@ -91,6 +97,25 @@ final class ReaderNavigationUITests: XCTestCase {
             back = app.buttons["reader-close"]
         }
         XCTAssertTrue(back.waitForExistence(timeout: 2), "The imported image did not open in ReaderView")
+    }
+
+    @discardableResult
+    private func tapFirstVisible(
+        _ app: XCUIApplication,
+        labels: [String],
+        timeout: TimeInterval
+    ) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        repeat {
+            for label in labels {
+                let button = app.buttons[label]
+                guard button.exists && button.isHittable else { continue }
+                button.tap()
+                return true
+            }
+            Thread.sleep(forTimeInterval: 0.2)
+        } while Date() < deadline
+        return false
     }
 
     @discardableResult
