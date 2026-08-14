@@ -455,9 +455,9 @@ struct LibraryView: View {
             }
         }
         switch scope {
-        case .all: "家里的书架"
-        case .recent: "最近翻开"
-        case .favorites: "收藏的读物"
+        case .all: return "家里的书架"
+        case .recent: return "最近翻开"
+        case .favorites: return "收藏的读物"
         }
     }
 
@@ -473,9 +473,9 @@ struct LibraryView: View {
             }
         }
         switch scope {
-        case .all: "books.vertical.fill"
-        case .recent: "clock.arrow.circlepath"
-        case .favorites: "star.fill"
+        case .all: return "books.vertical.fill"
+        case .recent: return "clock.arrow.circlepath"
+        case .favorites: return "star.fill"
         }
     }
 
