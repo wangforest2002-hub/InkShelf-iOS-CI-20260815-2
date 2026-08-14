@@ -3,8 +3,6 @@ import SwiftUI
 struct SettingsView: View {
     @Environment(LibraryStore.self) private var library
     @Environment(AICompanionStore.self) private var companion
-    @Environment(RemoteLibraryStore.self) private var remoteLibrary
-    @Environment(ICloudLibraryStore.self) private var iCloudLibrary
     @AppStorage("appearance") private var appearance = AppAppearance.light.rawValue
     @AppStorage("reader.layout") private var layout = ReaderLayout.single.rawValue
     @AppStorage("reader.flow") private var flow = ReaderFlow.horizontal.rawValue
@@ -27,7 +25,7 @@ struct SettingsView: View {
                         VStack(alignment: .leading, spacing: 5) {
                             Label("把这里布置成喜欢的样子", systemImage: "house.fill")
                                 .font(.headline)
-                            Text("阅读习惯、云书库和陪读伙伴都安放在这里。")
+                            Text("阅读习惯、收藏和陪读伙伴都安放在这里。")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -105,26 +103,12 @@ struct SettingsView: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
-                }
 
-                Section("云书库") {
-                    LabeledContent("iCloud Drive") {
-                        Text(iCloudLibrary.folders.isEmpty ? "未连接" : "已连接")
-                            .foregroundStyle(iCloudLibrary.folders.isEmpty ? Color.secondary : Color.green)
+                    NavigationLink {
+                        AIWritingStudioView(book: nil)
+                    } label: {
+                        Label("AI 创作室", systemImage: "text.badge.star")
                     }
-                    if !iCloudLibrary.folders.isEmpty {
-                        LabeledContent("云端索引") {
-                            Text("\(iCloudLibrary.books.count) 本 · \(AppFormatters.fileSize(iCloudLibrary.totalCloudSize))")
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    LabeledContent("独立服务器") {
-                        Text(remoteLibrary.isOnline ? "已连接" : "未连接")
-                            .foregroundStyle(remoteLibrary.isOnline ? .green : .secondary)
-                    }
-                    Text("默认可连接“文件”App 中的 iCloud Drive 文件夹：只索引书名和大小，首次打开才下载，之后可离线阅读。独立服务器仍作为备用来源。")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
                 }
 
                 Section("存储与隐私") {
@@ -136,7 +120,7 @@ struct SettingsView: View {
                     }
 
                     Label {
-                        Text("本地导入与云端缓存不会修改原文件。删除 iCloud 本地副本或断开文件夹不会删除 iCloud 原书；独立服务器不设密码，知道地址的人都能管理其中的书籍。启用 AI 后，仅将本机识别出的文字和粗略画面标签发送给 DeepSeek，不上传整页原图。")
+                        Text("从“文件”App 导入时可以直接选择 iCloud Drive 中的读物，应用只保存自己的本地副本，不会修改 iCloud 原文件。启用 AI 后，仅将本机识别出的文字和粗略画面标签发送给 DeepSeek，不上传整页原图。")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     } icon: {
@@ -146,7 +130,7 @@ struct SettingsView: View {
                 }
 
                 Section("关于") {
-                    LabeledContent("二次元小家", value: "1.5.0")
+                    LabeledContent("二次元小家", value: "1.7.0")
                     Button("重新查看欢迎页") {
                         hasSeenWelcome = false
                     }

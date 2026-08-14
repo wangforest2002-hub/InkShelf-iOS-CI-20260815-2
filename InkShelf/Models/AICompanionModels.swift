@@ -10,6 +10,50 @@ enum AIModelChoice: String, CaseIterable, Identifiable, Codable, Sendable {
     var detail: String { self == .flash ? "翻页更快、费用更低" : "评论更细腻、响应稍慢" }
 }
 
+enum AIWritingPurpose: String, CaseIterable, Identifiable, Codable, Sendable {
+    case synopsis
+    case recommendation
+    case socialShare
+    case reflection
+    case titleIdeas
+    case keepsake
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .synopsis: "画集简介"
+        case .recommendation: "推荐文案"
+        case .socialShare: "分享配文"
+        case .reflection: "阅读感想"
+        case .titleIdeas: "标题灵感"
+        case .keepsake: "珍藏寄语"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .synopsis: "text.book.closed.fill"
+        case .recommendation: "hand.thumbsup.fill"
+        case .socialShare: "square.and.arrow.up.fill"
+        case .reflection: "quote.bubble.fill"
+        case .titleIdeas: "lightbulb.fill"
+        case .keepsake: "heart.text.square.fill"
+        }
+    }
+
+    var promptDescription: String {
+        switch self {
+        case .synopsis: "写一段清楚、有画面感的内容简介，不编造未提供的信息"
+        case .recommendation: "写一段真诚、有吸引力但不过度营销的推荐文案"
+        case .socialShare: "写适合社交平台发布的轻松配文，可带少量自然的 emoji"
+        case .reflection: "写一段有个人温度、像真实读者写下的阅读感想"
+        case .titleIdeas: "给出 8 个风格各异、简短好记的标题，并各附一句说明"
+        case .keepsake: "写一段温暖克制、适合留在私人收藏中的珍藏寄语"
+        }
+    }
+}
+
 enum AICompanionPersona: String, CaseIterable, Identifiable, Codable, Sendable {
     case friend
     case otaku

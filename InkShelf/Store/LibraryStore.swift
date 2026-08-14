@@ -62,6 +62,17 @@ final class LibraryStore {
             .max { ($0.lastOpenedAt ?? .distantPast) < ($1.lastOpenedAt ?? .distantPast) }
     }
 
+    var favoritePageItems: [FavoritePageItem] {
+        books.flatMap { book in
+            (book.favoritePages ?? [])
+                .filter { $0 >= 0 && $0 < book.pageCount }
+                .map { FavoritePageItem(book: book, page: $0) }
+        }
+        .sorted {
+            ($0.book.lastOpenedAt ?? $0.book.importedAt) > ($1.book.lastOpenedAt ?? $1.book.importedAt)
+        }
+    }
+
     var interruptedReadingBook: Book? {
         guard let value = defaults.string(forKey: Self.activeReaderKey),
               let id = UUID(uuidString: value),
@@ -72,7 +83,13 @@ final class LibraryStore {
 
     func filteredBooks(scope: LibraryScope, query: String) -> [Book] {
         books
-            .filter { scope == .all || $0.isFavorite }
+            .filter {
+                switch scope {
+                case .all: true
+                case .recent: $0.lastOpenedAt != nil
+                case .favorites: $0.isFavorite
+                }
+            }
             .filter { query.isEmpty || $0.title.localizedCaseInsensitiveContains(query) }
             .sorted {
                 let left = $0.lastOpenedAt ?? $0.importedAt
@@ -257,6 +274,21 @@ final class LibraryStore {
         saveImmediately()
     }
 
+    func isPageFavorite(bookID: UUID, page: Int) -> Bool {
+        books.first(where: { $0.id == bookID })?.favoritePages?.contains(page) == true
+    }
+
+    func togglePageFavorite(bookID: UUID, page: Int) {
+        guard let index = books.firstIndex(where: { $0.id == bookID }),
+              page >= 0,
+              page < books[index].pageCount
+        else { return }
+        var pages = Set(books[index].favoritePages ?? [])
+        if !pages.insert(page).inserted { pages.remove(page) }
+        books[index].favoritePages = pages.sorted()
+        saveImmediately()
+    }
+
     func rename(_ id: UUID, to newTitle: String) {
         let title = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !title.isEmpty, let index = books.firstIndex(where: { $0.id == id }) else { return }
@@ -406,7 +438,15 @@ final class LibraryStore {
 
 enum LibraryScope: Equatable {
     case all
+    case recent
     case favorites
+}
+
+struct FavoritePageItem: Identifiable, Hashable {
+    let book: Book
+    let page: Int
+
+    var id: String { "\(book.id.uuidString)-\(page)" }
 }
 
 private enum LibraryStoreError: LocalizedError {

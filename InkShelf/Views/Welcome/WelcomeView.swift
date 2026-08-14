@@ -20,19 +20,19 @@ struct WelcomeView: View {
         ),
         .init(
             title: "漫画与电子书，一架收好",
-            subtitle: "漫画、文件夹画集、PDF、EPUB 与常见文本电子书都能阅读，多图预览让内容一目了然。",
+            subtitle: "漫画、图片画集、PDF、EPUB 与常见文本电子书都能阅读，首图封面让书架清爽明快。",
             symbol: "books.vertical.fill",
             colors: [AppTheme.accent, AppTheme.coral]
         ),
         .init(
-            title: "iCloud 书库，按需下载",
-            subtitle: "选择 iCloud Drive 中的画集文件夹即可浏览；原书首次打开后保存在本机，断网也能继续。",
-            symbol: "icloud.and.arrow.down.fill",
-            colors: [AppTheme.cyan, AppTheme.accent]
+            title: "喜欢的画面，单独珍藏",
+            subtitle: "一键收藏当前页，或把高清画面保存到系统照片；整本收藏和单页珍藏各有自己的位置。",
+            symbol: "heart.rectangle.stack.fill",
+            colors: [AppTheme.coral, AppTheme.honey]
         ),
         .init(
             title: "阅读时，也有人陪你",
-            subtitle: "可选的 AI 陪读会识别文字和画面线索，生成自然弹幕、陪伴对话与片末模拟讨论。",
+            subtitle: "可选的 AI 陪读会生成自然弹幕、陪伴对话与片末模拟讨论，也能帮你写简介、推荐和分享文案。",
             symbol: "sparkles",
             colors: [AppTheme.coral, AppTheme.accent]
         ),

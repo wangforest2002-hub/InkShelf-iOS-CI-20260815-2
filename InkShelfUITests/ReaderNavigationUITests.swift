@@ -33,8 +33,17 @@ final class ReaderNavigationUITests: XCTestCase {
         XCTAssertTrue(back.waitForExistence(timeout: 2), "Tapping a valid local book did not enter ReaderView")
         XCTAssertTrue(app.sliders["reader-progress"].exists, "Reader controls did not finish loading")
 
+        XCTAssertTrue(app.buttons["reader-save-page"].waitForExistence(timeout: 2), "The current-page save action is missing")
+        let pageFavorite = app.buttons["reader-page-favorite"]
+        XCTAssertTrue(pageFavorite.waitForExistence(timeout: 2), "The single-page favorite action is missing")
+        XCTAssertEqual(pageFavorite.label, "收藏当前页")
+        pageFavorite.tap()
+        XCTAssertTrue(app.alerts["已放进珍藏角落"].waitForExistence(timeout: 2))
+        app.alerts.buttons["好"].tap()
+        XCTAssertEqual(pageFavorite.label, "取消收藏当前页")
+
         let settings = app.buttons["reader-settings"]
-        XCTAssertTrue(settings.waitForExistence(timeout: 2), "The bottom reader toolbar is not hittable")
+        XCTAssertTrue(settings.waitForExistence(timeout: 2), "The reader settings button is not hittable")
         settings.tap()
         XCTAssertTrue(app.navigationBars["阅读设置"].waitForExistence(timeout: 2), "Reader settings did not open")
         app.buttons["完成"].tap()
@@ -53,6 +62,9 @@ final class ReaderNavigationUITests: XCTestCase {
 
         back.tap()
         XCTAssertTrue(book.waitForExistence(timeout: 4), "Returning from ReaderView did not restore the shelf")
+        XCTAssertTrue(app.tabBars.buttons["最近"].exists)
+        XCTAssertTrue(app.tabBars.buttons["珍藏"].exists)
+        XCTAssertFalse(app.tabBars.buttons["云阁楼"].exists)
     }
 
     func testSystemDocumentPickerImportsThenOpensImage() throws {

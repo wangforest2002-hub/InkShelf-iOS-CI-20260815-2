@@ -7,7 +7,6 @@ struct ReaderView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(LibraryStore.self) private var library
     @Environment(AICompanionStore.self) private var companion
-    @Environment(RemoteLibraryStore.self) private var remoteLibrary
     let book: Book
     let onClose: (() -> Void)?
 
@@ -26,6 +25,8 @@ struct ReaderView: View {
     @State private var pdfPassword = ""
     @State private var didTryPassword = false
     @State private var hideControlsTask: Task<Void, Never>?
+    @State private var readerAlert: ReaderAlert?
+    @State private var isSavingPage = false
 
     @AppStorage("reader.layout") private var layoutRaw = ReaderLayout.single.rawValue
     @AppStorage("reader.flow") private var flowRaw = ReaderFlow.horizontal.rawValue
@@ -106,8 +107,13 @@ struct ReaderView: View {
                     isEBook: book.kind == .ebook,
                     aiEnabled: aiEnabled && companion.hasAPIKey,
                     isFavorite: favoriteState,
+                    isPageFavorite: pageFavoriteState,
+                    canUsePageActions: book.kind != .ebook && !pdfLocked,
+                    isSavingPage: isSavingPage,
                     dismiss: closeReader,
                     toggleFavorite: { library.toggleFavorite(book.id) },
+                    togglePageFavorite: togglePageFavorite,
+                    savePage: saveCurrentPage,
                     toggleLayout: toggleLayout,
                     showAICompanion: openAICompanion,
                     showThumbnails: { showThumbnails = true },
@@ -144,7 +150,6 @@ struct ReaderView: View {
             } else {
                 library.updateProgress(bookID: book.id, page: newPage)
             }
-            remoteLibrary.scheduleProgress(book: book, position: newPage, progress: readingProgress)
             if controlsVisible { scheduleControlsHide() }
             prefetchPages(around: newPage)
             prepareAIPage()
@@ -152,7 +157,6 @@ struct ReaderView: View {
         .onChange(of: ebookProgress) { _, newValue in
             guard book.kind == .ebook else { return }
             library.updateEBookProgress(bookID: book.id, chapter: currentPage, progression: newValue)
-            remoteLibrary.scheduleProgress(book: book, position: currentPage, progress: readingProgress)
         }
         .onChange(of: keepAwake) { _, newValue in
             UIApplication.shared.isIdleTimerDisabled = newValue
@@ -160,13 +164,11 @@ struct ReaderView: View {
         .onChange(of: scenePhase) { _, newPhase in
             guard newPhase != .active else { return }
             library.flushProgress()
-            remoteLibrary.flushProgress(book: book, position: currentPage, progress: readingProgress)
         }
         .onDisappear {
             hideControlsTask?.cancel()
             companion.cancelAll()
             library.flushProgress()
-            remoteLibrary.flushProgress(book: book, position: currentPage, progress: readingProgress)
             UIApplication.shared.isIdleTimerDisabled = false
             if scenePhase == .active {
                 library.endReading(book.id)
@@ -230,6 +232,9 @@ struct ReaderView: View {
             else { return }
             showEndComments = true
         }
+        .alert(item: $readerAlert) { alert in
+            Alert(title: Text(alert.title), message: Text(alert.message), dismissButton: .default(Text("好")))
+        }
     }
 
     @ViewBuilder
@@ -282,12 +287,8 @@ struct ReaderView: View {
         library.books.first(where: { $0.id == book.id })?.isFavorite ?? book.isFavorite
     }
 
-    private var readingProgress: Double {
-        if book.kind == .ebook, pageCount > 0 {
-            return min(max((Double(currentPage) + ebookProgress) / Double(pageCount), 0), 1)
-        }
-        guard pageCount > 1 else { return currentPage > 0 ? 1 : 0 }
-        return min(max(Double(currentPage) / Double(pageCount - 1), 0), 1)
+    private var pageFavoriteState: Bool {
+        library.isPageFavorite(bookID: book.id, page: currentPage)
     }
 
     private func handlePDFState(_ count: Int, _ locked: Bool) {
@@ -311,6 +312,39 @@ struct ReaderView: View {
         guard !passwordDraft.isEmpty else { return }
         didTryPassword = true
         pdfPassword = passwordDraft
+    }
+
+    private func togglePageFavorite() {
+        guard book.kind != .ebook, !pdfLocked else { return }
+        let wasFavorite = pageFavoriteState
+        library.togglePageFavorite(bookID: book.id, page: currentPage)
+        readerAlert = ReaderAlert(
+            title: wasFavorite ? "已取消单页收藏" : "已放进珍藏角落",
+            message: wasFavorite ? "这张画面已从单页收藏中移除。" : "之后可以从“珍藏”直接回到这一页。"
+        )
+    }
+
+    private func saveCurrentPage() {
+        guard !isSavingPage, book.kind != .ebook, !pdfLocked else { return }
+        isSavingPage = true
+        Task {
+            do {
+                try await ReaderPageSaveService.save(
+                    book: book,
+                    page: currentPage,
+                    imageURLs: imageURLs,
+                    pdfURL: book.kind == .pdf ? library.contentURL(for: book) : nil,
+                    pdfPassword: pdfPassword
+                )
+                readerAlert = ReaderAlert(title: "已保存到照片", message: "当前画面已经放进系统照片图库。")
+            } catch {
+                readerAlert = ReaderAlert(
+                    title: "暂时无法保存",
+                    message: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                )
+            }
+            isSavingPage = false
+        }
     }
 
     private func closeReader() {
@@ -428,8 +462,13 @@ private struct ReaderControls: View {
     let isEBook: Bool
     let aiEnabled: Bool
     let isFavorite: Bool
+    let isPageFavorite: Bool
+    let canUsePageActions: Bool
+    let isSavingPage: Bool
     let dismiss: () -> Void
     let toggleFavorite: () -> Void
+    let togglePageFavorite: () -> Void
+    let savePage: () -> Void
     let toggleLayout: () -> Void
     let showAICompanion: () -> Void
     let showThumbnails: () -> Void
@@ -480,11 +519,12 @@ private struct ReaderControls: View {
                     .accessibilityLabel(isFavorite ? "取消收藏" : "收藏")
 
                     Button { perform(showSettings) } label: {
-                        Image(systemName: "ellipsis.circle")
+                        Image(systemName: "slider.horizontal.3")
                             .frame(width: 34, height: 34)
                     }
                     .adaptiveGlassButton()
                     .accessibilityLabel("阅读设置")
+                    .accessibilityIdentifier("reader-settings")
                 }
             }
             .padding(.horizontal, 14)
@@ -519,36 +559,45 @@ private struct ReaderControls: View {
                         .font(.caption.monospacedDigit().weight(.semibold))
                 }
 
-                HStack(spacing: 14) {
+                HStack(spacing: 8) {
                     Button { perform(showThumbnails) } label: {
-                        Label(isEBook ? "目录" : "缩略图", systemImage: isEBook ? "list.bullet.indent" : "square.grid.3x3")
+                        Image(systemName: isEBook ? "list.bullet.indent" : "square.grid.3x3")
                     }
-                    .frame(maxWidth: .infinity, minHeight: 48)
-                    .contentShape(Rectangle())
+                    .readerActionButton()
                     .accessibilityIdentifier("reader-thumbnails")
-
-                    Divider().frame(height: 22)
+                    .accessibilityLabel(isEBook ? "目录" : "缩略图")
 
                     Button { perform(toggleLayout) } label: {
-                        Label(
-                            isEBook ? ebookFlow.title : (layout == .single ? "单页" : "双页"),
-                            systemImage: isEBook ? ebookFlow.systemImage : layout.systemImage
-                        )
+                        Image(systemName: isEBook ? ebookFlow.systemImage : layout.systemImage)
                     }
-                    .frame(maxWidth: .infinity, minHeight: 48)
-                    .contentShape(Rectangle())
+                    .readerActionButton()
                     .accessibilityIdentifier("reader-layout")
+                    .accessibilityLabel(isEBook ? ebookFlow.title : (layout == .single ? "单页" : "双页"))
 
-                    Divider().frame(height: 22)
+                    if !isEBook {
+                        Button { perform(savePage) } label: {
+                            if isSavingPage {
+                                ProgressView().tint(.primary)
+                            } else {
+                                Image(systemName: "square.and.arrow.down")
+                            }
+                        }
+                        .readerActionButton()
+                        .disabled(!canUsePageActions || isSavingPage)
+                        .accessibilityIdentifier("reader-save-page")
+                        .accessibilityLabel(isSavingPage ? "正在保存当前页" : "保存当前页到照片")
 
-                    Button { perform(showSettings) } label: {
-                        Label("设置", systemImage: "slider.horizontal.3")
+                        Button { perform(togglePageFavorite) } label: {
+                            Image(systemName: isPageFavorite ? "heart.fill" : "heart")
+                                .foregroundStyle(isPageFavorite ? AppTheme.coral : .primary)
+                                .contentTransition(.symbolEffect(.replace))
+                        }
+                        .readerActionButton()
+                        .disabled(!canUsePageActions)
+                        .accessibilityIdentifier("reader-page-favorite")
+                        .accessibilityLabel(isPageFavorite ? "取消收藏当前页" : "收藏当前页")
                     }
-                    .frame(maxWidth: .infinity, minHeight: 48)
-                    .contentShape(Rectangle())
-                    .accessibilityIdentifier("reader-settings")
                 }
-                .font(.caption.weight(.semibold))
                 .buttonStyle(.plain)
             }
             .padding(.horizontal, 18)
@@ -564,6 +613,19 @@ private struct ReaderControls: View {
     private func perform(_ action: () -> Void) {
         action()
         onInteraction()
+    }
+}
+
+private struct ReaderAlert: Identifiable {
+    let id = UUID()
+    let title: String
+    let message: String
+}
+
+private extension View {
+    func readerActionButton() -> some View {
+        frame(maxWidth: .infinity, minHeight: 46)
+            .contentShape(Rectangle())
     }
 }
 

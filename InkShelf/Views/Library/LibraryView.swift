@@ -14,6 +14,7 @@ struct LibraryView: View {
     @State private var pendingDeletion: Book?
     @State private var renamingBook: Book?
     @State private var previewingBook: Book?
+    @State private var aiWritingBook: Book?
     @State private var openedBook: Book?
     @State private var didAutoPresentPickerForUITest = false
     @Namespace private var coverTransition
@@ -31,18 +32,16 @@ struct LibraryView: View {
             ZStack {
                 AuroraBackground()
 
-                if books.isEmpty {
+                if books.isEmpty && !(scope == .favorites && !library.favoritePageItems.isEmpty) {
                     EmptyLibraryView(
-                        isFavorites: scope == .favorites,
+                        scope: scope,
                         hasSearch: !query.isEmpty,
-                        importAction: { importPicker = .files },
-                        importFolderAction: { importPicker = .folder }
+                        importAction: { importPicker = .files }
                     )
                 } else {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 22) {
-                            if query.isEmpty {
-                                if scope == .all {
+                            if query.isEmpty, scope == .all {
                                     HomeWelcomeHeader(
                                         bookCount: library.books.count,
                                         favoriteCount: library.books.filter(\.isFavorite).count
@@ -57,40 +56,49 @@ struct LibraryView: View {
                                         }
                                         .buttonStyle(PressableCardStyle())
                                     }
-                                } else {
+                            } else if query.isEmpty, scope == .favorites {
                                     LibrarySectionHeading(
                                         title: "珍藏角落",
-                                        subtitle: "喜欢的故事，都替你安静收在这里",
-                                        symbol: "heart.fill"
+                                        subtitle: "整本与单页，都替你安静收在这里",
+                                        symbol: "star.fill"
                                     )
+                            }
+
+                            if scope == .favorites && !library.favoritePageItems.isEmpty && query.isEmpty {
+                                FavoritePageGrid(items: library.favoritePageItems) { item in
+                                    var target = item.book
+                                    target.currentPage = item.page
+                                    open(target)
                                 }
                             }
 
-                            LibrarySectionHeading(
-                                title: scope == .all ? "家里的书架" : "我的珍藏",
-                                subtitle: "\(books.count) 本读物",
-                                symbol: scope == .all ? "books.vertical.fill" : "star.fill"
-                            )
+                            if !books.isEmpty {
+                                LibrarySectionHeading(
+                                    title: sectionTitle,
+                                    subtitle: "\(books.count) 本读物",
+                                    symbol: sectionSymbol
+                                )
 
-                            LazyVGrid(columns: gridColumns, spacing: 24) {
-                                ForEach(books) { book in
-                                    Button { open(book) } label: {
-                                        BookCard(
-                                            book: book,
-                                            coverURL: library.coverURL(for: book),
-                                            previewURLs: library.previewURLs(for: book)
-                                        )
-                                            .matchedTransitionSource(id: book.id, in: coverTransition)
-                                    }
-                                    .buttonStyle(PressableCardStyle())
-                                    .contextMenu {
-                                        bookContextMenu(book)
-                                    } preview: {
-                                        BookPreview(
-                                            book: book,
-                                            coverURL: library.coverURL(for: book),
-                                            previewURLs: library.previewURLs(for: book)
-                                        )
+                                LazyVGrid(columns: gridColumns, spacing: 24) {
+                                    ForEach(books) { book in
+                                        Button { open(book) } label: {
+                                            BookCard(
+                                                book: book,
+                                                coverURL: library.coverURL(for: book),
+                                                previewURLs: library.previewURLs(for: book)
+                                            )
+                                                .matchedTransitionSource(id: book.id, in: coverTransition)
+                                        }
+                                        .buttonStyle(PressableCardStyle())
+                                        .contextMenu {
+                                            bookContextMenu(book)
+                                        } preview: {
+                                            BookPreview(
+                                                book: book,
+                                                coverURL: library.coverURL(for: book),
+                                                previewURLs: library.previewURLs(for: book)
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -117,7 +125,7 @@ struct LibraryView: View {
                     .allowsHitTesting(false)
                 }
             }
-            .navigationTitle(scope == .all ? "二次元小家" : "珍藏角落")
+            .navigationTitle(navigationTitle)
             .searchable(text: $query, prompt: "搜索标题")
             .toolbar {
                 if scope == .all {
@@ -127,12 +135,6 @@ struct LibraryView: View {
                                 importPicker = .files
                             } label: {
                                 Label("批量导入文件或图片", systemImage: "doc.on.doc")
-                            }
-
-                            Button {
-                                importPicker = .folder
-                            } label: {
-                                Label("批量导入整个文件夹", systemImage: "folder.badge.plus")
                             }
 
                             Button {
@@ -154,13 +156,13 @@ struct LibraryView: View {
         }
         .sheet(item: $importPicker) { picker in
             DocumentPickerView(
-                contentTypes: picker == .files ? UTType.inkShelfFileTypes : [.folder],
-                allowsMultipleSelection: picker == .files,
-                asCopy: picker == .files,
+                contentTypes: UTType.inkShelfFileTypes,
+                allowsMultipleSelection: true,
+                asCopy: true,
                 directoryURL: pickerSmokeDirectory,
                 onResult: { result in
                     importPicker = nil
-                    handleImportResult(result, removeSourcesAfterImport: picker == .files)
+                    handleImportResult(result, removeSourcesAfterImport: true)
                 },
                 onCancel: { importPicker = nil }
             )
@@ -217,6 +219,11 @@ struct LibraryView: View {
         .sheet(item: $previewingBook) { book in
             GalleryOverviewView(book: book, imageURLs: library.pageURLs(for: book))
         }
+        .sheet(item: $aiWritingBook) { book in
+            NavigationStack {
+                AIWritingStudioView(book: book)
+            }
+        }
     }
 
     @ViewBuilder
@@ -239,6 +246,12 @@ struct LibraryView: View {
             renamingBook = book
         } label: {
             Label("重命名", systemImage: "pencil")
+        }
+
+        Button {
+            aiWritingBook = book
+        } label: {
+            Label("AI 写文案", systemImage: "text.badge.star")
         }
 
         if let sourceURL = library.sourceURL(for: book) {
@@ -284,6 +297,30 @@ struct LibraryView: View {
             library.alert = error
         } else {
             openedBook = book
+        }
+    }
+
+    private var navigationTitle: String {
+        switch scope {
+        case .all: "我的书架"
+        case .recent: "最近阅读"
+        case .favorites: "珍藏角落"
+        }
+    }
+
+    private var sectionTitle: String {
+        switch scope {
+        case .all: "家里的书架"
+        case .recent: "最近翻开"
+        case .favorites: "收藏的读物"
+        }
+    }
+
+    private var sectionSymbol: String {
+        switch scope {
+        case .all: "books.vertical.fill"
+        case .recent: "clock.arrow.circlepath"
+        case .favorites: "star.fill"
         }
     }
 
@@ -335,7 +372,6 @@ struct LibraryView: View {
 
 private enum ImportPicker: String, Identifiable {
     case files
-    case folder
 
     var id: String { rawValue }
 }

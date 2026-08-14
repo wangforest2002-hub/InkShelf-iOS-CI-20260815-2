@@ -1,10 +1,9 @@
 import SwiftUI
 
 struct EmptyLibraryView: View {
-    let isFavorites: Bool
+    let scope: LibraryScope
     let hasSearch: Bool
     let importAction: () -> Void
-    let importFolderAction: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var floating = false
 
@@ -16,7 +15,7 @@ struct EmptyLibraryView: View {
                         .frame(width: 220, height: 150)
 
                     HStack(alignment: .bottom, spacing: 14) {
-                        Image(systemName: isFavorites ? "star.fill" : "books.vertical.fill")
+                        Image(systemName: symbol)
                             .font(.system(size: 44, weight: .medium))
                             .symbolRenderingMode(.palette)
                             .foregroundStyle(AppTheme.coral, AppTheme.accent)
@@ -47,20 +46,12 @@ struct EmptyLibraryView: View {
                         .lineSpacing(4)
                 }
 
-                if !isFavorites && !hasSearch {
-                    VStack(spacing: 12) {
-                        Button(action: importAction) {
-                            Label("批量导入读物", systemImage: "doc.on.doc")
-                                .frame(maxWidth: 280)
-                        }
-                        .adaptiveProminentButton()
-
-                        Button(action: importFolderAction) {
-                            Label("导入整个文件夹", systemImage: "folder.badge.plus")
-                                .frame(maxWidth: 280)
-                        }
-                        .adaptiveGlassButton()
+                if scope == .all && !hasSearch {
+                    Button(action: importAction) {
+                        Label("从文件或 iCloud 导入", systemImage: "doc.badge.plus")
+                            .frame(maxWidth: 280)
                     }
+                    .adaptiveProminentButton()
                 }
 
                 Label("原文件会原样保存，不压缩、不转码", systemImage: "checkmark.shield.fill")
@@ -77,13 +68,23 @@ struct EmptyLibraryView: View {
 
     private var title: String {
         if hasSearch { return "这间小屋里还没找到它" }
-        if isFavorites { return "珍藏角落还空着" }
+        if scope == .favorites { return "珍藏角落还空着" }
+        if scope == .recent { return "最近还没有翻开的书" }
         return "欢迎回到二次元小家"
     }
 
     private var description: String {
         if hasSearch { return "换一个书名试试，喜欢的故事也许就在旁边。" }
-        if isFavorites { return "长按书架中的封面，把想反复回味的故事安放到这里。" }
-        return "窗边和书架已经替你准备好了。\n带回 PDF、CBZ、图片、电子书或整个画集文件夹吧。"
+        if scope == .favorites { return "可以收藏整本读物，也可以在阅读时珍藏喜欢的单页。" }
+        if scope == .recent { return "翻开一本读物后，它会带着阅读进度出现在这里。" }
+        return "窗边和书架已经替你准备好了。\n从本地或 iCloud Drive 带回 PDF、CBZ、图片和电子书吧。"
+    }
+
+    private var symbol: String {
+        switch scope {
+        case .all: "books.vertical.fill"
+        case .recent: "clock.fill"
+        case .favorites: "star.fill"
+        }
     }
 }

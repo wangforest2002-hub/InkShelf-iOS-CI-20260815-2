@@ -13,6 +13,8 @@ final class AICompanionStore {
     private(set) var endDiscussion: AIEndDiscussion?
     private(set) var chatMessages: [AIChatMessage] = []
     private(set) var connectionMessage: String?
+    private(set) var writingResult: String?
+    private(set) var isWriting = false
     var errorMessage: String?
 
     @ObservationIgnored private static let keyAccount = "deepseek-api-key"
@@ -144,6 +146,37 @@ final class AICompanionStore {
 
     func clearConversation() {
         chatMessages = []
+    }
+
+    func generateWriting(subject: String, purpose: AIWritingPurpose, notes: String) async {
+        let trimmedSubject = subject.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedSubject.isEmpty else {
+            errorMessage = "请先填写要写的主题。"
+            return
+        }
+        guard let key = apiKey else {
+            errorMessage = DeepSeekError.missingKey.localizedDescription
+            return
+        }
+        isWriting = true
+        writingResult = nil
+        errorMessage = nil
+        do {
+            writingResult = try await DeepSeekService.shared.writingCopy(
+                apiKey: key,
+                subject: trimmedSubject,
+                purpose: purpose,
+                notes: notes.trimmingCharacters(in: .whitespacesAndNewlines),
+                settings: requestSettings
+            )
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        isWriting = false
+    }
+
+    func clearWritingResult() {
+        writingResult = nil
     }
 
     func clearCachedContent() async {

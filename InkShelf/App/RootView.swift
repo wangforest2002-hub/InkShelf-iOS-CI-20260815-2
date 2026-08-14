@@ -2,8 +2,6 @@ import SwiftUI
 
 struct RootView: View {
     @Environment(LibraryStore.self) private var library
-    @Environment(RemoteLibraryStore.self) private var remoteLibrary
-    @Environment(ICloudLibraryStore.self) private var iCloudLibrary
     @AppStorage("hasSeenWelcome") private var hasSeenWelcome = false
     @State private var launchDestination: LaunchDestination?
 
@@ -15,8 +13,6 @@ struct RootView: View {
                 } else if let book = library.interruptedReadingBook {
                     launchDestination = .reader(book)
                 }
-                await remoteLibrary.loadIfNeeded()
-                await iCloudLibrary.loadIfNeeded()
             }
             .onChange(of: hasSeenWelcome) { _, hasSeen in
                 if !hasSeen { launchDestination = .welcome }
@@ -64,16 +60,16 @@ private struct MainTabView: View {
 
     private var tabs: some View {
         TabView {
-            Tab("小家", systemImage: "books.vertical.fill") {
+            Tab("书架", systemImage: "books.vertical.fill") {
                 LibraryView(scope: .all)
+            }
+
+            Tab("最近", systemImage: "clock.fill") {
+                LibraryView(scope: .recent)
             }
 
             Tab("珍藏", systemImage: "star.fill") {
                 LibraryView(scope: .favorites)
-            }
-
-            Tab("云阁楼", systemImage: "externaldrive.fill.badge.icloud") {
-                RemoteLibraryView()
             }
 
             Tab("设置", systemImage: "gearshape.fill") {

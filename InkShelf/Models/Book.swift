@@ -41,6 +41,7 @@ struct Book: Identifiable, Codable, Hashable, Sendable {
     var lastOpenedAt: Date?
     var fileSize: Int64
     var isFavorite: Bool
+    var favoritePages: [Int]?
     var ebookChapterProgress: Double?
     var remoteSourceID: String?
     var remoteModifiedAt: String?
@@ -60,6 +61,7 @@ struct Book: Identifiable, Codable, Hashable, Sendable {
         lastOpenedAt: Date? = nil,
         fileSize: Int64,
         isFavorite: Bool = false,
+        favoritePages: [Int]? = nil,
         ebookChapterProgress: Double? = nil,
         remoteSourceID: String? = nil,
         remoteModifiedAt: String? = nil
@@ -78,6 +80,7 @@ struct Book: Identifiable, Codable, Hashable, Sendable {
         self.lastOpenedAt = lastOpenedAt
         self.fileSize = fileSize
         self.isFavorite = isFavorite
+        self.favoritePages = favoritePages
         self.ebookChapterProgress = ebookChapterProgress
         self.remoteSourceID = remoteSourceID
         self.remoteModifiedAt = remoteModifiedAt
@@ -116,7 +119,7 @@ extension UTType {
     static let markdownDocument = UTType(importedAs: "net.daringfireball.markdown", conformingTo: .plainText)
 
     static var inkShelfImportableTypes: [UTType] {
-        [.pdf, .epubBook, .comicBookArchive, .zip, .image, .plainText, .html, .rtf, .markdownDocument, .fictionBook, .folder]
+        inkShelfFileTypes
     }
 
     static var inkShelfFileTypes: [UTType] {

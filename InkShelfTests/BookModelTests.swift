@@ -266,6 +266,85 @@ final class BookModelTests: XCTestCase {
         XCTAssertNil(store.interruptedReadingBook)
     }
 
+    func testOlderBookMetadataDecodesWithoutFavoritePages() throws {
+        let original = makeBook(pageCount: 8, currentPage: 2)
+        let data = try JSONEncoder().encode(original)
+        var object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        object.removeValue(forKey: "favoritePages")
+        let decoded = try JSONDecoder().decode(
+            Book.self,
+            from: JSONSerialization.data(withJSONObject: object)
+        )
+        XCTAssertNil(decoded.favoritePages)
+        XCTAssertEqual(decoded.currentPage, 2)
+    }
+
+    @MainActor
+    func testPageFavoritePersistsAndAppearsInFavoritePageItems() throws {
+        let fileManager = FileManager.default
+        let root = fileManager.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let suiteName = "InkShelfFavoritePageTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer {
+            try? fileManager.removeItem(at: root)
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let id = UUID()
+        let library = root.appendingPathComponent("InkShelf Library", isDirectory: true)
+        let pages = library.appendingPathComponent(id.uuidString.lowercased()).appendingPathComponent("pages")
+        try fileManager.createDirectory(at: pages, withIntermediateDirectories: true)
+        try testPNG(color: .systemIndigo).write(to: pages.appendingPathComponent("001.png"))
+        try testPNG(color: .systemPink).write(to: pages.appendingPathComponent("002.png"))
+        let book = Book(
+            id: id,
+            title: "单页珍藏",
+            kind: .imageCollection,
+            sourceFileName: "单页珍藏",
+            contentRelativePath: "\(id.uuidString.lowercased())/pages",
+            pageCount: 2,
+            fileSize: 2
+        )
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        try encoder.encode([book]).write(to: library.appendingPathComponent("library.json"))
+
+        var store: LibraryStore? = LibraryStore(fileManager: fileManager, defaults: defaults, documentsURL: root)
+        store?.togglePageFavorite(bookID: id, page: 1)
+        XCTAssertTrue(store?.isPageFavorite(bookID: id, page: 1) == true)
+        XCTAssertEqual(store?.favoritePageItems.first?.page, 1)
+        store = nil
+
+        let restored = LibraryStore(fileManager: fileManager, defaults: defaults, documentsURL: root)
+        XCTAssertTrue(restored.isPageFavorite(bookID: id, page: 1))
+        restored.togglePageFavorite(bookID: id, page: 1)
+        XCTAssertFalse(restored.isPageFavorite(bookID: id, page: 1))
+    }
+
+    func testPDFPageRendersToHighResolutionPNG() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).pdf")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let data = UIGraphicsPDFRenderer(bounds: CGRect(x: 0, y: 0, width: 320, height: 480)).pdfData { context in
+            context.beginPage()
+            UIColor.systemTeal.setFill()
+            context.cgContext.fill(CGRect(x: 20, y: 20, width: 280, height: 440))
+        }
+        try data.write(to: url)
+        let png = try ReaderPageSaveService.renderedPDFPageData(url: url, page: 0, password: "")
+        let image = try XCTUnwrap(UIImage(data: png))
+        XCTAssertEqual(image.size.width, 1_280, accuracy: 1)
+        XCTAssertEqual(image.size.height, 1_920, accuracy: 1)
+    }
+
+    func testEveryAIWritingPurposeHasUsableCopy() {
+        XCTAssertEqual(AIWritingPurpose.allCases.count, 6)
+        for purpose in AIWritingPurpose.allCases {
+            XCTAssertFalse(purpose.title.isEmpty)
+            XCTAssertFalse(purpose.promptDescription.isEmpty)
+            XCTAssertFalse(purpose.systemImage.isEmpty)
+        }
+    }
+
     @MainActor
     private func testPNG(color: UIColor) -> Data {
         UIGraphicsImageRenderer(size: CGSize(width: 48, height: 64)).pngData { context in

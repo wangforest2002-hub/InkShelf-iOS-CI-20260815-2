@@ -198,6 +198,35 @@ actor DeepSeekService {
         ), limit: 500)
     }
 
+    func writingCopy(
+        apiKey: String,
+        subject: String,
+        purpose: AIWritingPurpose,
+        notes: String,
+        settings: DeepSeekPageSettings
+    ) async throws -> String {
+        let prompt = """
+        请围绕“\(subject)”完成以下写作任务：\(purpose.promptDescription)。
+
+        用户补充信息：
+        \(notes.isEmpty ? "（没有补充信息，请保持克制，不要虚构作者、角色、情节、奖项或出处。）" : notes)
+
+        使用简体中文。文字清新自然，有二次元文化的亲切感，但不要堆砌网络用语；直接给出可复制使用的成稿，不要解释创作过程。
+        """
+        return cleaned(try await completion(
+            apiKey: apiKey,
+            model: settings.model,
+            messages: [
+                ChatMessage(role: "system", content: "你是‘二次元小家’的私人文案助手。你擅长温暖、清爽、有画面感的中文写作，严格区分用户提供的信息与想象，不把编造内容当作事实。"),
+                ChatMessage(role: "user", content: prompt)
+            ],
+            maxTokens: 1_200,
+            temperature: 0.85,
+            json: false,
+            allowsCellularAccess: settings.allowsCellularAccess
+        ), limit: 2_400)
+    }
+
     private func completion(
         apiKey: String,
         model: AIModelChoice,
