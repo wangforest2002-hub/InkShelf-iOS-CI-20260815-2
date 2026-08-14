@@ -125,13 +125,13 @@ struct LibraryView: View {
                             Button {
                                 importPicker = .files
                             } label: {
-                                Label("导入文件或图片", systemImage: "doc.badge.plus")
+                                Label("批量导入文件或图片", systemImage: "doc.on.doc")
                             }
 
                             Button {
                                 importPicker = .folder
                             } label: {
-                                Label("导入文件夹画集", systemImage: "folder.badge.plus")
+                                Label("批量导入整个文件夹", systemImage: "folder.badge.plus")
                             }
 
                             Button {
@@ -154,12 +154,12 @@ struct LibraryView: View {
         .sheet(item: $importPicker) { picker in
             DocumentPickerView(
                 contentTypes: picker == .files ? UTType.inkShelfFileTypes : [.folder],
-                allowsMultipleSelection: true,
-                asCopy: true,
+                allowsMultipleSelection: picker == .files,
+                asCopy: picker == .files,
                 directoryURL: pickerSmokeDirectory,
                 onResult: { result in
                     importPicker = nil
-                    handleImportResult(result, removeSourcesAfterImport: true)
+                    handleImportResult(result, removeSourcesAfterImport: picker == .files)
                 },
                 onCancel: { importPicker = nil }
             )
@@ -355,7 +355,7 @@ private struct ContinueReadingCard: View {
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
 
             VStack(alignment: .leading, spacing: 7) {
-                Label("为你留着位置", systemImage: "lamp.table.fill")
+                Label("为你留着位置", systemImage: "play.fill")
                     .font(.caption.weight(.bold))
                     .foregroundStyle(AppTheme.wood)
                 Text(book.title)
@@ -456,7 +456,7 @@ private struct HomeWelcomeHeader: View {
 
     private var greetingCopy: some View {
         VStack(alignment: .leading, spacing: 9) {
-            Label(greeting, systemImage: "house.fill")
+            Label(greeting, systemImage: "books.vertical.fill")
                 .font(.title2.bold())
                 .foregroundStyle(
                     LinearGradient(
@@ -473,7 +473,7 @@ private struct HomeWelcomeHeader: View {
             HStack(spacing: 8) {
                 HomeStatChip(symbol: "books.vertical.fill", text: "\(bookCount) 本")
                 if favoriteCount > 0 {
-                    HomeStatChip(symbol: "heart.fill", text: "\(favoriteCount) 份喜欢")
+                    HomeStatChip(symbol: "star.fill", text: "\(favoriteCount) 本收藏")
                 }
             }
         }

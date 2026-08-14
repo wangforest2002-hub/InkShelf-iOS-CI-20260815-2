@@ -16,7 +16,7 @@ struct EmptyLibraryView: View {
                         .frame(width: 220, height: 150)
 
                     HStack(alignment: .bottom, spacing: 14) {
-                        Image(systemName: isFavorites ? "heart.fill" : "books.vertical.fill")
+                        Image(systemName: isFavorites ? "star.fill" : "books.vertical.fill")
                             .font(.system(size: 44, weight: .medium))
                             .symbolRenderingMode(.palette)
                             .foregroundStyle(AppTheme.coral, AppTheme.accent)
@@ -50,13 +50,13 @@ struct EmptyLibraryView: View {
                 if !isFavorites && !hasSearch {
                     VStack(spacing: 12) {
                         Button(action: importAction) {
-                            Label("把读物带回家", systemImage: "plus")
+                            Label("批量导入读物", systemImage: "doc.on.doc")
                                 .frame(maxWidth: 280)
                         }
                         .adaptiveProminentButton()
 
                         Button(action: importFolderAction) {
-                            Label("布置文件夹画集", systemImage: "folder.badge.plus")
+                            Label("导入整个文件夹", systemImage: "folder.badge.plus")
                                 .frame(maxWidth: 280)
                         }
                         .adaptiveGlassButton()

@@ -30,6 +30,9 @@ enum BookImporter {
     ]
     private static let maxArchiveEntries = 20_000
     private static let maxExpandedArchiveBytes: UInt64 = 8 * 1_024 * 1_024 * 1_024
+    private static var documentExtensions: Set<String> {
+        ["pdf", "cbz", "zip"].union(EBookImporter.supportedExtensions)
+    }
 
     static func importBooks(from urls: [URL], into libraryURL: URL) async throws -> [Book] {
         try await Task.detached(priority: .userInitiated) {
@@ -51,33 +54,16 @@ enum BookImporter {
 
         do {
             for folderURL in folderURLs {
-                let result = try withSecurityScopedAccess(to: folderURL) {
+                let results = try withSecurityScopedAccess(to: folderURL) {
                     try importFolder(folderURL, into: libraryURL)
                 }
-                imported.append(result.0)
-                createdFolders.append(result.1)
+                imported.append(contentsOf: results.map(\.0))
+                createdFolders.append(contentsOf: results.map(\.1))
             }
 
             for url in documentURLs {
-                let ext = url.pathExtension.lowercased()
-                let result: (Book, URL)
-                switch ext {
-                case "pdf":
-                    result = try withSecurityScopedAccess(to: url) {
-                        try importPDF(url, into: libraryURL)
-                    }
-                case "cbz", "zip":
-                    result = try withSecurityScopedAccess(to: url) {
-                        try importArchive(url, into: libraryURL)
-                    }
-                default:
-                    if EBookImporter.supportedExtensions.contains(ext) {
-                        result = try withSecurityScopedAccess(to: url) {
-                            try EBookImporter.importBook(url, into: libraryURL)
-                        }
-                    } else {
-                        throw BookImportError.unsupportedFile(url.lastPathComponent)
-                    }
+                let result = try withSecurityScopedAccess(to: url) {
+                    try importDocument(url, into: libraryURL)
                 }
                 imported.append(result.0)
                 createdFolders.append(result.1)
@@ -96,6 +82,21 @@ enum BookImporter {
                 try? fileManager.removeItem(at: folder)
             }
             throw error
+        }
+    }
+
+    private static func importDocument(_ url: URL, into libraryURL: URL) throws -> (Book, URL) {
+        let ext = url.pathExtension.lowercased()
+        switch ext {
+        case "pdf":
+            return try importPDF(url, into: libraryURL)
+        case "cbz", "zip":
+            return try importArchive(url, into: libraryURL)
+        default:
+            if EBookImporter.supportedExtensions.contains(ext) {
+                return try EBookImporter.importBook(url, into: libraryURL)
+            }
+            throw BookImportError.unsupportedFile(url.lastPathComponent)
         }
     }
 
@@ -177,7 +178,7 @@ enum BookImporter {
 
             guard !pageURLs.isEmpty else { throw BookImportError.emptyArchive(sourceURL.lastPathComponent) }
 
-            let previewNames = CoverService.createImagePreviews(sourceURLs: Array(pageURLs.prefix(4)), in: folder)
+            let previewNames = CoverService.createImagePreviews(sourceURLs: Array(pageURLs.prefix(1)), in: folder)
             let previewPaths = previewNames.map { relativePath(id: id, component: $0) }
             let book = Book(
                 id: id,
@@ -246,7 +247,7 @@ enum BookImporter {
                 title = "画集 \(formatter.string(from: .now))"
             }
 
-            let previewNames = CoverService.createImagePreviews(sourceURLs: Array(copiedURLs.prefix(4)), in: folder)
+            let previewNames = CoverService.createImagePreviews(sourceURLs: Array(copiedURLs.prefix(1)), in: folder)
             let previewPaths = previewNames.map { relativePath(id: id, component: $0) }
             let book = Book(
                 id: id,
@@ -266,25 +267,78 @@ enum BookImporter {
         }
     }
 
-    private static func importFolder(_ sourceFolder: URL, into libraryURL: URL) throws -> (Book, URL) {
-        // Only enumerate while the parent directory is coordinated. Copying a
-        // child while that parent coordination is still open can deadlock some
-        // File Provider implementations (including iCloud placeholders).
-        let imageURLs = try ExternalFileAccess.coordinateReading(at: sourceFolder) { coordinatedFolder in
-            try collectImageURLs(in: coordinatedFolder)
+    private static func importFolder(_ sourceFolder: URL, into libraryURL: URL) throws -> [(Book, URL)] {
+        // Keep file-provider coordination limited to enumeration. Copying a
+        // child while the parent coordination is open can deadlock iCloud.
+        let inventory = try ExternalFileAccess.coordinateReading(at: sourceFolder) { coordinatedFolder in
+            try collectFolderInventory(in: coordinatedFolder)
         }
-        guard !imageURLs.isEmpty else { throw BookImportError.noImages }
-        guard imageURLs.count <= maxArchiveEntries else { throw BookImportError.archiveTooLarge }
+        let imageCount = inventory.imageRelativePathsByParent.values.reduce(0) { $0 + $1.count }
+        guard inventory.documentRelativePaths.count + imageCount <= maxArchiveEntries else {
+            throw BookImportError.archiveTooLarge
+        }
 
-        return try importImageCollection(
-            imageURLs,
-            titleOverride: sourceFolder.lastPathComponent,
-            sourceLabel: "文件夹 · \(imageURLs.count) 张图片",
-            into: libraryURL
-        )
+        var results: [(Book, URL)] = []
+        var firstError: Error?
+
+        for relativePath in inventory.documentRelativePaths {
+            let sourceURL = sourceFolder.appendingPathComponent(relativePath)
+            do {
+                results.append(try importDocument(sourceURL, into: libraryURL))
+            } catch {
+                if firstError == nil { firstError = error }
+            }
+        }
+
+        if inventory.documentRelativePaths.isEmpty {
+            let allImages = inventory.imageRelativePathsByParent.values
+                .flatMap { $0 }
+                .map { sourceFolder.appendingPathComponent($0) }
+            if !allImages.isEmpty {
+                do {
+                    results.append(try importImageCollection(
+                        allImages,
+                        titleOverride: sourceFolder.lastPathComponent,
+                        sourceLabel: "文件夹 · \(allImages.count) 张图片",
+                        into: libraryURL
+                    ))
+                } catch {
+                    if firstError == nil { firstError = error }
+                }
+            }
+        } else {
+            for parent in inventory.imageRelativePathsByParent.keys.sorted(by: {
+                $0.localizedStandardCompare($1) == .orderedAscending
+            }) {
+                let relativePaths = inventory.imageRelativePathsByParent[parent] ?? []
+                let imageURLs = relativePaths.map { sourceFolder.appendingPathComponent($0) }
+                guard !imageURLs.isEmpty else { continue }
+                let folderName = parent.isEmpty
+                    ? sourceFolder.lastPathComponent
+                    : (parent as NSString).lastPathComponent
+                do {
+                    results.append(try importImageCollection(
+                        imageURLs,
+                        titleOverride: folderName,
+                        sourceLabel: "文件夹 · \(imageURLs.count) 张图片",
+                        into: libraryURL
+                    ))
+                } catch {
+                    if firstError == nil { firstError = error }
+                }
+            }
+        }
+
+        if results.isEmpty { throw firstError ?? BookImportError.noImages }
+        return results
     }
 
-    private static func collectImageURLs(in sourceFolder: URL) throws -> [URL] {
+    private struct FolderInventory {
+        var documentRelativePaths: [String] = []
+        var imageRelativePathsByParent: [String: [String]] = [:]
+    }
+
+    private static func collectFolderInventory(in sourceFolder: URL) throws -> FolderInventory {
         let fileManager = FileManager.default
         let keys: [URLResourceKey] = [.isRegularFileKey, .isHiddenKey]
         guard let enumerator = fileManager.enumerator(
@@ -295,22 +349,33 @@ enum BookImporter {
             throw BookImportError.noImages
         }
 
-        var imageURLs: [URL] = []
+        let basePath = sourceFolder.standardizedFileURL.path
+        let prefix = basePath.hasSuffix("/") ? basePath : basePath + "/"
+        var inventory = FolderInventory()
         for case let url as URL in enumerator {
             let values = try? url.resourceValues(forKeys: Set(keys))
             guard values?.isRegularFile == true, values?.isHidden != true else { continue }
-            if imageExtensions.contains(url.pathExtension.lowercased()) {
-                imageURLs.append(url)
+            let standardizedPath = url.standardizedFileURL.path
+            guard standardizedPath.hasPrefix(prefix) else { continue }
+            let relativePath = String(standardizedPath.dropFirst(prefix.count))
+            let ext = url.pathExtension.lowercased()
+            if imageExtensions.contains(ext) {
+                let parent = (relativePath as NSString).deletingLastPathComponent
+                inventory.imageRelativePathsByParent[parent, default: []].append(relativePath)
+            } else if documentExtensions.contains(ext) {
+                inventory.documentRelativePaths.append(relativePath)
             }
         }
 
-        let basePath = sourceFolder.standardizedFileURL.path
-        imageURLs.sort {
-            let left = $0.standardizedFileURL.path.replacingOccurrences(of: basePath, with: "")
-            let right = $1.standardizedFileURL.path.replacingOccurrences(of: basePath, with: "")
-            return left.localizedStandardCompare(right) == .orderedAscending
+        inventory.documentRelativePaths.sort {
+            $0.localizedStandardCompare($1) == .orderedAscending
         }
-        return imageURLs
+        for parent in inventory.imageRelativePathsByParent.keys {
+            inventory.imageRelativePathsByParent[parent]?.sort {
+                $0.localizedStandardCompare($1) == .orderedAscending
+            }
+        }
+        return inventory
     }
 
     private static func withSecurityScopedAccess<T>(to url: URL, operation: () throws -> T) rethrows -> T {

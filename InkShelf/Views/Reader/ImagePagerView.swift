@@ -11,10 +11,6 @@ struct ImagePagerView: UIViewRepresentable {
     let backgroundColor: UIColor
     let onTap: () -> Void
 
-    fileprivate var groups: [ImagePageGroup] {
-        ImagePageGroup.make(urls: imageURLs, layout: layout, coverSingle: coverSingle)
-    }
-
     func makeCoordinator() -> Coordinator {
         Coordinator(parent: self)
     }
@@ -27,6 +23,7 @@ struct ImagePagerView: UIViewRepresentable {
 
         let collectionView = PagerCollectionView(frame: .zero, collectionViewLayout: flowLayout)
         collectionView.backgroundColor = backgroundColor
+        collectionView.contentInsetAdjustmentBehavior = .never
         collectionView.isPagingEnabled = true
         collectionView.decelerationRate = .fast
         collectionView.showsHorizontalScrollIndicator = false
@@ -34,10 +31,11 @@ struct ImagePagerView: UIViewRepresentable {
         collectionView.alwaysBounceHorizontal = flow == .horizontal
         collectionView.alwaysBounceVertical = flow == .vertical
         collectionView.dataSource = context.coordinator
+        collectionView.prefetchDataSource = context.coordinator
         collectionView.delegate = context.coordinator
         collectionView.register(ImagePageCell.self, forCellWithReuseIdentifier: ImagePageCell.reuseIdentifier)
         collectionView.semanticContentAttribute = order == .rightToLeft && flow == .horizontal ? .forceRightToLeft : .forceLeftToRight
-        context.coordinator.configurationKey = configurationKey
+        context.coordinator.rebuildConfiguration(from: self)
         return collectionView
     }
 
@@ -56,11 +54,14 @@ struct ImagePagerView: UIViewRepresentable {
             }
         }
 
-        if context.coordinator.configurationKey != configurationKey {
-            context.coordinator.configurationKey = configurationKey
+        let configurationChanged = context.coordinator.configurationKey != configurationKey
+        if configurationChanged {
+            context.coordinator.rebuildConfiguration(from: self)
             collectionView.reloadData()
+            collectionView.collectionViewLayout.invalidateLayout()
         }
 
+        let groups = context.coordinator.groups
         let target = groups.firstIndex { $0.indices.contains(currentPage) } ?? 0
         guard !groups.isEmpty,
               !collectionView.isDragging,
@@ -69,40 +70,63 @@ struct ImagePagerView: UIViewRepresentable {
         else { return }
 
         DispatchQueue.main.async {
+            collectionView.layoutIfNeeded()
             guard target < collectionView.numberOfItems(inSection: 0) else { return }
-            collectionView.scrollToItem(at: IndexPath(item: target, section: 0), at: self.flow == .horizontal ? .centeredHorizontally : .centeredVertically, animated: false)
+            collectionView.scrollToItem(
+                at: IndexPath(item: target, section: 0),
+                at: self.flow == .horizontal ? .centeredHorizontally : .centeredVertically,
+                animated: false
+            )
         }
     }
 
-    private var configurationKey: String {
-        "\(imageURLs.map(\.path).joined(separator: "|"))-\(layout.rawValue)-\(flow.rawValue)-\(order.rawValue)-\(coverSingle)"
+    fileprivate var configurationKey: String {
+        [
+            String(imageURLs.count),
+            imageURLs.first?.standardizedFileURL.path ?? "",
+            imageURLs.last?.standardizedFileURL.path ?? "",
+            layout.rawValue,
+            flow.rawValue,
+            order.rawValue,
+            String(coverSingle)
+        ].joined(separator: "|")
     }
 
-    final class Coordinator: NSObject, UICollectionViewDataSource, UICollectionViewDelegate, UIScrollViewDelegate {
+    final class Coordinator: NSObject, UICollectionViewDataSource, UICollectionViewDataSourcePrefetching, UICollectionViewDelegate, UIScrollViewDelegate {
         var parent: ImagePagerView
-        var configurationKey = ""
+        fileprivate var groups: [ImagePageGroup] = []
+        fileprivate var configurationKey = ""
 
         init(parent: ImagePagerView) {
             self.parent = parent
         }
 
+        func rebuildConfiguration(from parent: ImagePagerView) {
+            configurationKey = parent.configurationKey
+            groups = ImagePageGroup.make(
+                urls: parent.imageURLs,
+                layout: parent.layout,
+                coverSingle: parent.coverSingle
+            )
+        }
+
         func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
-            parent.groups.count
+            groups.count
         }
 
         func collectionView(
             _ collectionView: UICollectionView,
             cellForItemAt indexPath: IndexPath
         ) -> UICollectionViewCell {
-            guard let cell = collectionView.dequeueReusableCell(
-                withReuseIdentifier: ImagePageCell.reuseIdentifier,
-                for: indexPath
-            ) as? ImagePageCell else {
-                return UICollectionViewCell()
-            }
+            guard groups.indices.contains(indexPath.item),
+                  let cell = collectionView.dequeueReusableCell(
+                    withReuseIdentifier: ImagePageCell.reuseIdentifier,
+                    for: indexPath
+                  ) as? ImagePageCell
+            else { return UICollectionViewCell() }
 
-            let group = parent.groups[indexPath.item]
-            let urls: [URL] = parent.order == .rightToLeft ? Array(group.urls.reversed()) : group.urls
+            let group = groups[indexPath.item]
+            let urls = parent.order == .rightToLeft ? Array(group.urls.reversed()) : group.urls
             cell.configure(
                 urls: urls,
                 pageLabel: group.indices.map { String($0 + 1) }.joined(separator: "、"),
@@ -112,8 +136,20 @@ struct ImagePagerView: UIViewRepresentable {
             return cell
         }
 
+        func collectionView(_ collectionView: UICollectionView, prefetchItemsAt indexPaths: [IndexPath]) {
+            let pixelSize = preferredPixelSize(for: collectionView)
+            let urls = indexPaths.flatMap { indexPath in
+                groups.indices.contains(indexPath.item) ? groups[indexPath.item].urls : []
+            }
+            ReaderImagePipeline.shared.prefetch(urls, maxPixelSize: pixelSize)
+        }
+
         func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
             updateCurrentPage(from: scrollView)
+        }
+
+        func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
+            if !decelerate { updateCurrentPage(from: scrollView) }
         }
 
         func scrollViewDidEndScrollingAnimation(_ scrollView: UIScrollView) {
@@ -138,11 +174,15 @@ struct ImagePagerView: UIViewRepresentable {
         }
 
         private func updateCurrentPage(from scrollView: UIScrollView) {
-            let index = min(max(0, visibleIndex(in: scrollView)), max(0, parent.groups.count - 1))
-            guard index < parent.groups.count, let page = parent.groups[index].indices.first else { return }
-            if parent.currentPage != page {
-                parent.currentPage = page
-            }
+            let index = min(max(0, visibleIndex(in: scrollView)), max(0, groups.count - 1))
+            guard groups.indices.contains(index), let page = groups[index].indices.first else { return }
+            if parent.currentPage != page { parent.currentPage = page }
+        }
+
+        private func preferredPixelSize(for collectionView: UICollectionView) -> Int {
+            let longestSide = max(collectionView.bounds.width, collectionView.bounds.height)
+            let scale = collectionView.window?.screen.scale ?? UIScreen.main.scale
+            return min(4_096, max(1_800, Int((longestSide * scale * 1.25).rounded(.up))))
         }
     }
 }
@@ -163,7 +203,6 @@ fileprivate struct ImagePageGroup {
             groups.append(ImagePageGroup(indices: [0], urls: [urls[0]]))
             index = 1
         }
-
         while index < urls.count {
             let end = min(index + 2, urls.count)
             let indices = Array(index..<end)
@@ -176,14 +215,14 @@ fileprivate struct ImagePageGroup {
 
 final class PagerCollectionView: UICollectionView {
     override func layoutSubviews() {
-        if let layout = collectionViewLayout as? UICollectionViewFlowLayout,
-           bounds.size.width > 0,
-           bounds.size.height > 0,
-           layout.itemSize != bounds.size {
-            layout.itemSize = bounds.size
-            layout.invalidateLayout()
-        }
         super.layoutSubviews()
+        guard let layout = collectionViewLayout as? UICollectionViewFlowLayout,
+              bounds.width > 0,
+              bounds.height > 0,
+              layout.itemSize != bounds.size
+        else { return }
+        layout.itemSize = bounds.size
+        layout.invalidateLayout()
     }
 }
 
@@ -221,25 +260,36 @@ private final class ImagePageCell: UICollectionViewCell {
 
 private final class ZoomingSpreadScrollView: UIScrollView, UIScrollViewDelegate {
     private let canvas = UIView()
+    private let spinner = UIActivityIndicatorView(style: .medium)
     private var imageViews: [UIImageView] = []
+    private var naturalSizes: [CGSize] = []
     private var representedPaths: [String] = []
     private var tapAction: (() -> Void)?
     private var needsFit = true
     private var lastBoundsSize: CGSize = .zero
+    private var loadGeneration = 0
+    private var requestedPixelSize = 0
+    private var loadedImageCount = 0
 
     override init(frame: CGRect) {
         super.init(frame: frame)
         delegate = self
+        contentInsetAdjustmentBehavior = .never
         bouncesZoom = true
         showsHorizontalScrollIndicator = false
         showsVerticalScrollIndicator = false
         delaysContentTouches = false
+        isDirectionalLockEnabled = true
         addSubview(canvas)
+        addSubview(spinner)
+        spinner.hidesWhenStopped = true
 
         let singleTap = UITapGestureRecognizer(target: self, action: #selector(singleTapped))
         let doubleTap = UITapGestureRecognizer(target: self, action: #selector(doubleTapped(_:)))
         doubleTap.numberOfTapsRequired = 2
         singleTap.require(toFail: doubleTap)
+        singleTap.cancelsTouchesInView = false
+        doubleTap.cancelsTouchesInView = false
         addGestureRecognizer(singleTap)
         addGestureRecognizer(doubleTap)
     }
@@ -250,71 +300,56 @@ private final class ZoomingSpreadScrollView: UIScrollView, UIScrollViewDelegate 
 
     func configure(urls: [URL], onTap: @escaping () -> Void) {
         tapAction = onTap
-        let paths = urls.map(\.path)
+        let paths = urls.map(\.standardizedFileURL.path)
         guard paths != representedPaths else { return }
-        representedPaths = paths
 
+        loadGeneration += 1
+        representedPaths = paths
+        requestedPixelSize = 0
+        loadedImageCount = 0
         imageViews.forEach { $0.removeFromSuperview() }
-        imageViews = urls.compactMap { url in
-            guard let image = UIImage(contentsOfFile: url.path) else { return nil }
-            let view = UIImageView(image: image)
+        naturalSizes = urls.map { ReaderImagePipeline.pixelSize(of: $0) }
+        imageViews = urls.map { _ in
+            let view = UIImageView()
             view.contentMode = .scaleAspectFit
             view.clipsToBounds = true
             canvas.addSubview(view)
             return view
         }
+        spinner.startAnimating()
         needsFit = true
         setNeedsLayout()
     }
 
     func clear() {
+        loadGeneration += 1
         representedPaths = []
         tapAction = nil
+        requestedPixelSize = 0
+        loadedImageCount = 0
         imageViews.forEach { $0.removeFromSuperview() }
         imageViews = []
+        naturalSizes = []
+        spinner.stopAnimating()
+        minimumZoomScale = 1
+        maximumZoomScale = 1
         zoomScale = 1
+        contentSize = .zero
         contentOffset = .zero
         needsFit = true
     }
 
     override func layoutSubviews() {
         super.layoutSubviews()
+        spinner.center = CGPoint(x: bounds.midX, y: bounds.midY)
         guard !imageViews.isEmpty, bounds.width > 0, bounds.height > 0 else { return }
-        guard needsFit || lastBoundsSize != bounds.size else {
+
+        if needsFit || lastBoundsSize != bounds.size {
+            fitCanvasToBounds()
+        } else {
             centerCanvas()
-            return
         }
-
-        lastBoundsSize = bounds.size
-        needsFit = false
-        let sizes = imageViews.map { view -> CGSize in
-            guard let image = view.image else { return CGSize(width: 1, height: 1) }
-            return CGSize(
-                width: max(image.size.width * image.scale, 1),
-                height: max(image.size.height * image.scale, 1)
-            )
-        }
-        let canvasHeight = max(sizes.map(\.height).max() ?? 1, 1)
-        let widths = sizes.map { max(1, $0.width / max($0.height, 1) * canvasHeight) }
-        let gap = imageViews.count > 1 ? max(12, canvasHeight * 0.004) : 0
-        let canvasSize = CGSize(width: widths.reduce(0, +) + gap, height: canvasHeight)
-
-        canvas.frame = CGRect(origin: .zero, size: canvasSize)
-        var x: CGFloat = 0
-        for (index, imageView) in imageViews.enumerated() {
-            imageView.frame = CGRect(x: x, y: 0, width: widths[index], height: canvasHeight)
-            x += widths[index] + gap
-        }
-        contentSize = canvasSize
-
-        let horizontalFit = bounds.width / canvasSize.width
-        let verticalFit = bounds.height / canvasSize.height
-        let fitScale = min(horizontalFit, verticalFit)
-        minimumZoomScale = fitScale
-        maximumZoomScale = max(fitScale * 10, 2)
-        zoomScale = fitScale
-        panGestureRecognizer.isEnabled = false
-        centerCanvas()
+        requestDisplayImagesIfNeeded()
     }
 
     func viewForZooming(in scrollView: UIScrollView) -> UIView? {
@@ -326,10 +361,72 @@ private final class ZoomingSpreadScrollView: UIScrollView, UIScrollViewDelegate 
         centerCanvas()
     }
 
+    private func fitCanvasToBounds() {
+        lastBoundsSize = bounds.size
+        needsFit = false
+
+        let normalizedHeight = max(naturalSizes.map(\.height).max() ?? 1, 1)
+        let normalizedWidths = naturalSizes.map { max(1, $0.width / max($0.height, 1) * normalizedHeight) }
+        let naturalGap = imageViews.count > 1 ? max(12, normalizedHeight * 0.004) : 0
+        let naturalCanvas = CGSize(
+            width: normalizedWidths.reduce(0, +) + naturalGap,
+            height: normalizedHeight
+        )
+        let fitScale = min(bounds.width / naturalCanvas.width, bounds.height / naturalCanvas.height)
+        let fittedCanvas = CGSize(
+            width: max(1, naturalCanvas.width * fitScale),
+            height: max(1, naturalCanvas.height * fitScale)
+        )
+
+        minimumZoomScale = 1
+        maximumZoomScale = 8
+        zoomScale = 1
+        contentInset = .zero
+        canvas.transform = .identity
+        canvas.bounds = CGRect(origin: .zero, size: fittedCanvas)
+        canvas.frame = CGRect(origin: .zero, size: fittedCanvas)
+
+        var x: CGFloat = 0
+        for (index, imageView) in imageViews.enumerated() {
+            let width = normalizedWidths[index] * fitScale
+            imageView.frame = CGRect(x: x, y: 0, width: width, height: fittedCanvas.height)
+            x += width + naturalGap * fitScale
+        }
+        contentSize = fittedCanvas
+        contentOffset = .zero
+        panGestureRecognizer.isEnabled = false
+        centerCanvas()
+    }
+
+    private func requestDisplayImagesIfNeeded() {
+        let screenScale = window?.screen.scale ?? UIScreen.main.scale
+        let target = min(4_096, max(1_800, Int((max(bounds.width, bounds.height) * screenScale * 1.25).rounded(.up))))
+        guard target > requestedPixelSize, representedPaths.count == imageViews.count else { return }
+        requestedPixelSize = target
+        let generation = loadGeneration
+        let paths = representedPaths
+
+        for (index, path) in paths.enumerated() {
+            ReaderImagePipeline.shared.load(URL(fileURLWithPath: path), maxPixelSize: target) { [weak self] image in
+                guard let self,
+                      self.loadGeneration == generation,
+                      self.representedPaths == paths,
+                      self.imageViews.indices.contains(index)
+                else { return }
+                self.imageViews[index].image = image
+                self.loadedImageCount += 1
+                if self.loadedImageCount >= self.imageViews.count {
+                    self.spinner.stopAnimating()
+                }
+            }
+        }
+    }
+
     private func centerCanvas() {
-        let horizontalInset = max(0, (bounds.width - contentSize.width * zoomScale) / 2)
-        let verticalInset = max(0, (bounds.height - contentSize.height * zoomScale) / 2)
-        contentInset = UIEdgeInsets(top: verticalInset, left: horizontalInset, bottom: verticalInset, right: horizontalInset)
+        var frame = canvas.frame
+        frame.origin.x = frame.width < bounds.width ? (bounds.width - frame.width) / 2 : 0
+        frame.origin.y = frame.height < bounds.height ? (bounds.height - frame.height) / 2 : 0
+        canvas.frame = frame
     }
 
     @objc private func singleTapped() {
@@ -346,7 +443,12 @@ private final class ZoomingSpreadScrollView: UIScrollView, UIScrollViewDelegate 
         let point = recognizer.location(in: canvas)
         let width = bounds.width / targetScale
         let height = bounds.height / targetScale
-        let zoomRect = CGRect(x: point.x - width / 2, y: point.y - height / 2, width: width, height: height)
+        let zoomRect = CGRect(
+            x: point.x - width / 2,
+            y: point.y - height / 2,
+            width: width,
+            height: height
+        )
         zoom(to: zoomRect, animated: true)
     }
 }

@@ -117,9 +117,8 @@ struct CoverArtwork: View {
 
     var body: some View {
         Group {
-            if previewURLs.count > 1, book.kind != .pdf {
-                MosaicArtwork(urls: previewURLs)
-            } else if let coverURL, let image = UIImage(contentsOfFile: coverURL.path) {
+            if let firstImageURL = coverURL ?? previewURLs.first,
+               let image = UIImage(contentsOfFile: firstImageURL.path) {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFill()
@@ -198,63 +197,5 @@ struct BookPreview: View {
             .foregroundStyle(.secondary)
         }
         .padding(16)
-    }
-}
-
-private struct MosaicArtwork: View {
-    let urls: [URL]
-
-    var body: some View {
-        GeometryReader { proxy in
-            let size = proxy.size
-            let gap: CGFloat = 2
-            let visible = Array(urls.prefix(4))
-
-            ZStack(alignment: .topLeading) {
-                ForEach(visible.indices, id: \.self) { index in
-                    let url = visible[index]
-                    if let image = UIImage(contentsOfFile: url.path) {
-                        Image(uiImage: image)
-                            .resizable()
-                            .scaledToFill()
-                            .frame(
-                                width: frame(for: index, count: visible.count, size: size, gap: gap).width,
-                                height: frame(for: index, count: visible.count, size: size, gap: gap).height
-                            )
-                            .clipped()
-                            .offset(
-                                x: frame(for: index, count: visible.count, size: size, gap: gap).minX,
-                                y: frame(for: index, count: visible.count, size: size, gap: gap).minY
-                            )
-                    }
-                }
-            }
-            .background(Color(.secondarySystemBackground))
-        }
-    }
-
-    private func frame(for index: Int, count: Int, size: CGSize, gap: CGFloat) -> CGRect {
-        if count == 2 {
-            let width = (size.width - gap) / 2
-            return CGRect(x: CGFloat(index) * (width + gap), y: 0, width: width, height: size.height)
-        }
-
-        if count == 3 {
-            let halfWidth = (size.width - gap) / 2
-            if index == 0 {
-                return CGRect(x: 0, y: 0, width: halfWidth, height: size.height)
-            }
-            let halfHeight = (size.height - gap) / 2
-            return CGRect(x: halfWidth + gap, y: CGFloat(index - 1) * (halfHeight + gap), width: halfWidth, height: halfHeight)
-        }
-
-        let width = (size.width - gap) / 2
-        let height = (size.height - gap) / 2
-        return CGRect(
-            x: CGFloat(index % 2) * (width + gap),
-            y: CGFloat(index / 2) * (height + gap),
-            width: width,
-            height: height
-        )
     }
 }

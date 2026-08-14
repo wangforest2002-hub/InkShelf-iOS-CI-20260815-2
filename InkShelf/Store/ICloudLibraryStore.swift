@@ -34,40 +34,44 @@ final class ICloudLibraryStore {
     }
 
     func linkFolder(_ url: URL) {
+        linkFolders([url])
+    }
+
+    func linkFolders(_ urls: [URL]) {
+        guard !urls.isEmpty else { return }
         // Start the security scope while the document-picker callback is still
         // active; waiting for a newly scheduled Task can lose the permission.
-        let accessed = url.startAccessingSecurityScopedResource()
+        let accessedURLs = urls.filter { $0.startAccessingSecurityScopedResource() }
         Task {
-            defer { if accessed { url.stopAccessingSecurityScopedResource() } }
-            await linkFolderWithActiveAccess(url)
+            defer { accessedURLs.forEach { $0.stopAccessingSecurityScopedResource() } }
+            do {
+                for url in urls {
+                    try addOrUpdateFolderWithActiveAccess(url)
+                }
+                saveMetadata()
+                await refresh()
+            } catch {
+                alert = LibraryAlert(title: "无法连接文件夹", message: errorMessage(error))
+            }
         }
     }
 
-    private func linkFolderWithActiveAccess(_ url: URL) async {
-        do {
-            let bookmark = try ICloudFolderService.bookmark(for: url)
-            let selectedPath = url.standardizedFileURL.path
-            if let existingIndex = folders.firstIndex(where: { link in
-                (try? ICloudFolderService.resolve(link).url.standardizedFileURL.path) == selectedPath
-            }) {
-                folders[existingIndex].bookmark = bookmark
-                folders[existingIndex].name = url.lastPathComponent.isEmpty ? "iCloud 画集" : url.lastPathComponent
-                saveMetadata()
-                await refresh()
-                return
-            }
-            let newLink = ICloudFolderLink(
-                id: UUID(),
-                name: url.lastPathComponent.isEmpty ? "iCloud 画集" : url.lastPathComponent,
-                bookmark: bookmark,
-                linkedAt: .now
-            )
-            folders.append(newLink)
-            saveMetadata()
-            await refresh()
-        } catch {
-            alert = LibraryAlert(title: "无法连接文件夹", message: errorMessage(error))
+    private func addOrUpdateFolderWithActiveAccess(_ url: URL) throws {
+        let bookmark = try ICloudFolderService.bookmark(for: url)
+        let selectedPath = url.standardizedFileURL.path
+        if let existingIndex = folders.firstIndex(where: { link in
+            (try? ICloudFolderService.resolve(link).url.standardizedFileURL.path) == selectedPath
+        }) {
+            folders[existingIndex].bookmark = bookmark
+            folders[existingIndex].name = url.lastPathComponent.isEmpty ? "iCloud 画集" : url.lastPathComponent
+            return
         }
+        folders.append(ICloudFolderLink(
+            id: UUID(),
+            name: url.lastPathComponent.isEmpty ? "iCloud 画集" : url.lastPathComponent,
+            bookmark: bookmark,
+            linkedAt: .now
+        ))
     }
 
     func unlink(_ folder: ICloudFolderLink) {

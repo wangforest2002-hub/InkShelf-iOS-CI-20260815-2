@@ -1,4 +1,3 @@
-import ImageIO
 import PDFKit
 import SwiftUI
 import UIKit
@@ -130,15 +129,9 @@ private struct ImagePageThumbnail: View {
             }
         }
         .task(id: url) {
-            guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return }
-            let options: [CFString: Any] = [
-                kCGImageSourceCreateThumbnailFromImageAlways: true,
-                kCGImageSourceCreateThumbnailWithTransform: true,
-                kCGImageSourceThumbnailMaxPixelSize: 360,
-                kCGImageSourceShouldCacheImmediately: true
-            ]
-            guard let thumbnail = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return }
-            image = UIImage(cgImage: thumbnail)
+            ReaderImagePipeline.shared.load(url, maxPixelSize: 360) { loaded in
+                image = loaded
+            }
         }
     }
 }

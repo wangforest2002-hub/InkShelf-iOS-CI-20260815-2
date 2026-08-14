@@ -187,6 +187,47 @@ final class BookModelTests: XCTestCase {
     }
 
     @MainActor
+    func testSelectedFolderBulkImportsEveryBookAndUsesFirstPageCover() async throws {
+        let fileManager = FileManager.default
+        let root = fileManager.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? fileManager.removeItem(at: root) }
+
+        let selectedFolder = root.appendingPathComponent("批量书库", isDirectory: true)
+        let archivePages = root.appendingPathComponent("zip-pages", isDirectory: true)
+        let imageAlbum = selectedFolder.appendingPathComponent("插画集", isDirectory: true)
+        try fileManager.createDirectory(at: archivePages, withIntermediateDirectories: true)
+        try fileManager.createDirectory(at: imageAlbum, withIntermediateDirectories: true)
+        try testPNG(color: .systemPink).write(to: archivePages.appendingPathComponent("001.png"))
+        try testPNG(color: .systemBlue).write(to: archivePages.appendingPathComponent("002.png"))
+        try testPNG(color: .systemMint).write(to: imageAlbum.appendingPathComponent("001.png"))
+        try testPNG(color: .systemOrange).write(to: imageAlbum.appendingPathComponent("002.png"))
+
+        let firstCBZ = selectedFolder.appendingPathComponent("第一本.cbz")
+        let secondCBZ = selectedFolder.appendingPathComponent("子目录/第二本.cbz")
+        try fileManager.createDirectory(at: secondCBZ.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try fileManager.zipItem(at: archivePages, to: firstCBZ, shouldKeepParent: false)
+        try fileManager.copyItem(at: firstCBZ, to: secondCBZ)
+
+        let documents = root.appendingPathComponent("app-documents", isDirectory: true)
+        let suiteName = "InkShelfFolderBatchTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = LibraryStore(fileManager: fileManager, defaults: defaults, documentsURL: documents)
+        store.importFiles([selectedFolder])
+
+        for _ in 0..<600 where store.isImporting {
+            try await Task.sleep(for: .milliseconds(25))
+        }
+        XCTAssertFalse(store.isImporting, "Bulk folder import did not finish in fifteen seconds")
+        XCTAssertNil(store.alert)
+        XCTAssertEqual(store.books.filter { $0.kind == .archive }.count, 2)
+        XCTAssertEqual(store.books.filter { $0.kind == .imageCollection }.count, 1)
+        XCTAssertEqual(store.books.count, 3)
+        XCTAssertTrue(fileManager.fileExists(atPath: selectedFolder.path), "A linked source folder must never be deleted")
+        XCTAssertTrue(store.books.allSatisfy { $0.previewRelativePaths.count <= 1 })
+    }
+
+    @MainActor
     func testInterruptedReadingSessionRestoresOnlyUntilReaderCloses() throws {
         let fileManager = FileManager.default
         let root = fileManager.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)

@@ -23,9 +23,9 @@ enum CoverService {
 
     static func createImagePreviews(sourceURLs: [URL], in folder: URL) -> [String] {
         var names: [String] = []
-        for (index, sourceURL) in sourceURLs.prefix(4).enumerated() {
-            let fileName = index == 0 ? coverFileName : "preview-\(index + 1).jpg"
-            let pixelSize = index == 0 ? 720 : 420
+        for sourceURL in sourceURLs.prefix(1) {
+            let fileName = coverFileName
+            let pixelSize = 720
             guard let image = downsampledImage(from: sourceURL, maxPixelSize: pixelSize),
                   writeJPEG(image, to: folder, fileName: fileName) != nil
             else { continue }

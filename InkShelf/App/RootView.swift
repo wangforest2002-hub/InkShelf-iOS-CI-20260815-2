@@ -64,11 +64,11 @@ private struct MainTabView: View {
 
     private var tabs: some View {
         TabView {
-            Tab("小家", systemImage: "house.fill") {
+            Tab("小家", systemImage: "books.vertical.fill") {
                 LibraryView(scope: .all)
             }
 
-            Tab("珍藏", systemImage: "heart.fill") {
+            Tab("珍藏", systemImage: "star.fill") {
                 LibraryView(scope: .favorites)
             }
 

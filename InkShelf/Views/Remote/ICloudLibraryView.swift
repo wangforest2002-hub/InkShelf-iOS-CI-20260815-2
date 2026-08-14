@@ -46,13 +46,13 @@ struct ICloudLibraryView: View {
         .sheet(isPresented: $showFolderPicker) {
             DocumentPickerView(
                 contentTypes: [.folder],
-                allowsMultipleSelection: false,
+                allowsMultipleSelection: true,
                 asCopy: false,
                 onResult: { result in
                     showFolderPicker = false
                     switch result {
                     case .success(let urls):
-                        if let folder = urls.first { cloud.linkFolder(folder) }
+                        cloud.linkFolders(urls)
                     case .failure(let error):
                         cloud.alert = LibraryAlert(title: "无法选择 iCloud 文件夹", message: error.localizedDescription)
                     }
@@ -72,7 +72,7 @@ struct ICloudLibraryView: View {
             Button("开始选择") { showFolderPicker = true }
             Button("取消", role: .cancel) {}
         } message: {
-            Text("请先把书放进一个普通文件夹。iCloud Drive 和“我的 iPad”根目录不能直接选；根目录里的 CBZ 显示为不可点是正常的。选中书库文件夹后点“打开”或“完成”。")
+            Text("可一次选择一个或多个普通文件夹。二次元小家会自动索引其中全部 PDF、CBZ 和电子书；选中文件夹后点“打开”或“完成”，不会移动 iCloud 原文件。")
         }
         .confirmationDialog(
             "断开 iCloud 文件夹？",
@@ -110,9 +110,9 @@ struct ICloudLibraryView: View {
             ContentUnavailableView {
                 Label("连接 iCloud 画集", systemImage: "icloud.and.arrow.down")
             } description: {
-                Text("在系统“文件”中选择存放 CBZ 的 iCloud Drive 文件夹。只建立索引，打开时才下载原书。")
+                Text("在系统“文件”中选择一个或多个 iCloud Drive 文件夹，里面的全部读物会自动出现。只建立索引，打开时才下载原书。")
             } actions: {
-                Button("选择 iCloud 文件夹") { showFolderHelp = true }
+                Button("批量连接 iCloud 文件夹") { showFolderHelp = true }
                     .adaptiveProminentButton()
                 Text("提示：先在“文件”App 新建“二次元小家书库”文件夹，并把 CBZ 放进去。")
                     .font(.footnote)

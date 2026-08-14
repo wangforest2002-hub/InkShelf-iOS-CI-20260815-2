@@ -111,9 +111,11 @@ struct ReaderView: View {
                     toggleLayout: toggleLayout,
                     showAICompanion: openAICompanion,
                     showThumbnails: { showThumbnails = true },
-                    showSettings: { showSettings = true }
+                    showSettings: { showSettings = true },
+                    onInteraction: showControlsTemporarily
                 )
                 .transition(.opacity.combined(with: .scale(scale: 0.985)))
+                .zIndex(20)
             }
         }
         .toolbar(.hidden, for: .navigationBar)
@@ -130,6 +132,7 @@ struct ReaderView: View {
             } else if book.kind != .pdf {
                 imageURLs = library.pageURLs(for: book)
                 pageCount = max(1, imageURLs.count)
+                prefetchPages(around: currentPage)
             }
             UIApplication.shared.isIdleTimerDisabled = keepAwake
             scheduleControlsHide()
@@ -143,6 +146,7 @@ struct ReaderView: View {
             }
             remoteLibrary.scheduleProgress(book: book, position: newPage, progress: readingProgress)
             if controlsVisible { scheduleControlsHide() }
+            prefetchPages(around: newPage)
             prepareAIPage()
         }
         .onChange(of: ebookProgress) { _, newValue in
@@ -379,6 +383,17 @@ struct ReaderView: View {
         companion.preparePage(book: book, page: currentPage, pageCount: pageCount, source: source, force: force)
     }
 
+    private func prefetchPages(around page: Int) {
+        guard book.kind == .archive || book.kind == .imageCollection, !imageURLs.isEmpty else { return }
+        let lowerBound = max(0, page - 1)
+        let upperBound = min(imageURLs.count - 1, page + 2)
+        guard lowerBound <= upperBound else { return }
+        ReaderImagePipeline.shared.prefetch(
+            Array(imageURLs[lowerBound...upperBound]),
+            maxPixelSize: 3_072
+        )
+    }
+
     private func scheduleControlsHide() {
 #if DEBUG
         let arguments = ProcessInfo.processInfo.arguments
@@ -389,7 +404,13 @@ struct ReaderView: View {
         hideControlsTask?.cancel()
         hideControlsTask = Task {
             try? await Task.sleep(for: .seconds(4))
-            guard !Task.isCancelled, !showSettings, !showThumbnails, !pdfLocked else { return }
+            guard !Task.isCancelled,
+                  !showSettings,
+                  !showThumbnails,
+                  !showAICompanion,
+                  !showEndComments,
+                  !pdfLocked
+            else { return }
             withAnimation(reduceMotion ? nil : .smooth(duration: 0.28)) {
                 controlsVisible = false
             }
@@ -413,12 +434,13 @@ private struct ReaderControls: View {
     let showAICompanion: () -> Void
     let showThumbnails: () -> Void
     let showSettings: () -> Void
+    let onInteraction: () -> Void
 
     var body: some View {
         VStack(spacing: 0) {
             AdaptiveGlassContainer(spacing: 10) {
                 HStack(spacing: 10) {
-                    Button(action: dismiss) {
+                    Button { perform(dismiss) } label: {
                         Image(systemName: "chevron.left")
                             .frame(width: 34, height: 34)
                     }
@@ -440,7 +462,7 @@ private struct ReaderControls: View {
 
                     Spacer(minLength: 4)
 
-                    Button(action: showAICompanion) {
+                    Button { perform(showAICompanion) } label: {
                         Image(systemName: "sparkles")
                             .foregroundStyle(aiEnabled ? AppTheme.accent : .secondary)
                             .frame(width: 34, height: 34)
@@ -448,7 +470,7 @@ private struct ReaderControls: View {
                     .adaptiveGlassButton()
                     .accessibilityLabel(aiEnabled ? "打开 AI 陪读" : "配置 AI 陪读")
 
-                    Button(action: toggleFavorite) {
+                    Button { perform(toggleFavorite) } label: {
                         Image(systemName: isFavorite ? "star.fill" : "star")
                             .foregroundStyle(isFavorite ? .yellow : .primary)
                             .frame(width: 34, height: 34)
@@ -457,8 +479,8 @@ private struct ReaderControls: View {
                     .adaptiveGlassButton()
                     .accessibilityLabel(isFavorite ? "取消收藏" : "收藏")
 
-                    Button(action: showSettings) {
-                        Image(systemName: "ellipsis")
+                    Button { perform(showSettings) } label: {
+                        Image(systemName: "ellipsis.circle")
                             .frame(width: 34, height: 34)
                     }
                     .adaptiveGlassButton()
@@ -479,7 +501,10 @@ private struct ReaderControls: View {
                     Slider(
                         value: Binding(
                             get: { Double(currentPage) },
-                            set: { currentPage = Int($0.rounded()) }
+                            set: {
+                                currentPage = Int($0.rounded())
+                                onInteraction()
+                            }
                         ),
                         in: 0...Double(max(pageCount - 1, 1)),
                         step: 1
@@ -495,38 +520,50 @@ private struct ReaderControls: View {
                 }
 
                 HStack(spacing: 14) {
-                    Button(action: showThumbnails) {
+                    Button { perform(showThumbnails) } label: {
                         Label(isEBook ? "目录" : "缩略图", systemImage: isEBook ? "list.bullet.indent" : "square.grid.3x3")
                     }
-                    .frame(maxWidth: .infinity)
+                    .frame(maxWidth: .infinity, minHeight: 48)
+                    .contentShape(Rectangle())
+                    .accessibilityIdentifier("reader-thumbnails")
 
                     Divider().frame(height: 22)
 
-                    Button(action: toggleLayout) {
+                    Button { perform(toggleLayout) } label: {
                         Label(
                             isEBook ? ebookFlow.title : (layout == .single ? "单页" : "双页"),
                             systemImage: isEBook ? ebookFlow.systemImage : layout.systemImage
                         )
                     }
-                    .frame(maxWidth: .infinity)
+                    .frame(maxWidth: .infinity, minHeight: 48)
+                    .contentShape(Rectangle())
+                    .accessibilityIdentifier("reader-layout")
 
                     Divider().frame(height: 22)
 
-                    Button(action: showSettings) {
+                    Button { perform(showSettings) } label: {
                         Label("设置", systemImage: "slider.horizontal.3")
                     }
-                    .frame(maxWidth: .infinity)
+                    .frame(maxWidth: .infinity, minHeight: 48)
+                    .contentShape(Rectangle())
+                    .accessibilityIdentifier("reader-settings")
                 }
                 .font(.caption.weight(.semibold))
                 .buttonStyle(.plain)
             }
             .padding(.horizontal, 18)
             .padding(.vertical, 14)
-            .inkGlass(cornerRadius: 25, interactive: true)
+            .contentShape(RoundedRectangle(cornerRadius: 25, style: .continuous))
+            .inkGlass(cornerRadius: 25)
             .padding(.horizontal, 14)
             .safeAreaPadding(.bottom, 8)
         }
         .foregroundStyle(.primary)
+    }
+
+    private func perform(_ action: () -> Void) {
+        action()
+        onInteraction()
     }
 }
 

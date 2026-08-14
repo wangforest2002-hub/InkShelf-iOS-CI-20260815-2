@@ -27,6 +27,24 @@ final class ReaderNavigationUITests: XCTestCase {
         XCTAssertTrue(back.waitForExistence(timeout: 2), "Tapping a valid local book did not enter ReaderView")
         XCTAssertTrue(app.sliders["reader-progress"].exists, "Reader controls did not finish loading")
 
+        let settings = app.buttons["reader-settings"]
+        XCTAssertTrue(settings.waitForExistence(timeout: 2), "The bottom reader toolbar is not hittable")
+        settings.tap()
+        XCTAssertTrue(app.navigationBars["阅读设置"].waitForExistence(timeout: 2), "Reader settings did not open")
+        app.buttons["完成"].tap()
+
+        let thumbnails = app.buttons["reader-thumbnails"]
+        XCTAssertTrue(thumbnails.waitForExistence(timeout: 2), "The thumbnail button disappeared after closing settings")
+        thumbnails.tap()
+        XCTAssertTrue(app.navigationBars["页面"].waitForExistence(timeout: 2), "Thumbnail navigation did not open")
+        app.buttons["完成"].tap()
+
+        let layout = app.buttons["reader-layout"]
+        XCTAssertTrue(layout.waitForExistence(timeout: 2), "The layout button is not hittable")
+        let originalLayoutLabel = layout.label
+        layout.tap()
+        XCTAssertNotEqual(layout.label, originalLayoutLabel, "The layout button did not change reader layout")
+
         back.tap()
         XCTAssertTrue(book.waitForExistence(timeout: 4), "Returning from ReaderView did not restore the shelf")
     }
