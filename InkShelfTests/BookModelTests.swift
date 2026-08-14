@@ -224,7 +224,7 @@ final class BookModelTests: XCTestCase {
         XCTAssertEqual(store.books.filter { $0.kind == .imageCollection }.count, 1)
         XCTAssertEqual(store.books.count, 3)
         XCTAssertTrue(fileManager.fileExists(atPath: selectedFolder.path), "A linked source folder must never be deleted")
-        XCTAssertTrue(store.books.allSatisfy { $0.previewRelativePaths.count <= 1 })
+        XCTAssertTrue(store.books.allSatisfy { ($0.previewRelativePaths ?? []).count <= 1 })
     }
 
     @MainActor
