@@ -31,7 +31,9 @@ enum BookImporter {
     private static let maxArchiveEntries = 20_000
     private static let maxExpandedArchiveBytes: UInt64 = 8 * 1_024 * 1_024 * 1_024
     private static var documentExtensions: Set<String> {
-        ["pdf", "cbz", "zip"].union(EBookImporter.supportedExtensions)
+        var extensions: Set<String> = ["pdf", "cbz", "zip"]
+        extensions.formUnion(EBookImporter.supportedExtensions)
+        return extensions
     }
 
     static func importBooks(from urls: [URL], into libraryURL: URL) async throws -> [Book] {
