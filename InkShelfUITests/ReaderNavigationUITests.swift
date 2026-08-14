@@ -52,7 +52,13 @@ final class ReaderNavigationUITests: XCTestCase {
 
         // Files presents file rows as different accessibility element types
         // across iOS releases (cell, button, or static text).
-        let fixture = app.descendants(matching: .any)["picker-fixture.png"]
+        let fixture = app.cells.matching(
+            NSPredicate(
+                format: "label BEGINSWITH %@ OR identifier BEGINSWITH %@",
+                "picker-fixture,",
+                "picker-fixture,"
+            )
+        ).firstMatch
         if !fixture.waitForExistence(timeout: 2) {
             // `directoryURL` is only a hint and Files may open Recents instead.
             // Walk the same visible route a user would take on either a Chinese
