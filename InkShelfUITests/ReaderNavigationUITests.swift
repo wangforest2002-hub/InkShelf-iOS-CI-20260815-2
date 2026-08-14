@@ -59,13 +59,18 @@ final class ReaderNavigationUITests: XCTestCase {
             skip.tap()
         }
 
-        let emptyImport = app.buttons["把读物带回家"]
-        if emptyImport.waitForExistence(timeout: 2) {
-            emptyImport.tap()
+        if tapFirstVisible(app, labels: ["批量导入读物", "把读物带回家"], timeout: 2) {
+            // Empty-shelf primary action opens the system picker directly.
         } else {
             app.buttons["导入"].tap()
-            XCTAssertTrue(app.buttons["导入文件或图片"].waitForExistence(timeout: 2))
-            app.buttons["导入文件或图片"].tap()
+            XCTAssertTrue(
+                tapFirstVisible(
+                    app,
+                    labels: ["批量导入文件或图片", "导入文件或图片"],
+                    timeout: 2
+                ),
+                "The import menu did not expose the file picker action"
+            )
         }
 
         // Files presents file rows as different accessibility element types
