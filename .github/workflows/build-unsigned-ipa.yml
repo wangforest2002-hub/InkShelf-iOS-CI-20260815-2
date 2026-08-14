@@ -37,7 +37,8 @@ jobs:
           DEVICE_ID=$(xcrun simctl list devices available --json | python3 -c 'import json,sys; data=json.load(sys.stdin); print(next(device["udid"] for runtime in data["devices"].values() for device in runtime if device.get("isAvailable") and device["name"].startswith("iPhone")))')
           test -n "$DEVICE_ID"
           xcrun simctl boot "$DEVICE_ID" 2>/dev/null || true
-          xcrun simctl bootstatus "$DEVICE_ID" -b
+          # Compilation does not require SpringBoard to be ready. The first
+          # xcodebuild test command will wait for the destination if needed.
           echo "DEVICE_ID=$DEVICE_ID" >> "$GITHUB_ENV"
 
       - name: Build the simulator test bundle
