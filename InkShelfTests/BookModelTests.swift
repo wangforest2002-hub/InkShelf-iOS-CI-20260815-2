@@ -487,6 +487,78 @@ final class BookModelTests: XCTestCase {
         XCTAssertEqual(restored.unlockedCount, 3)
     }
 
+    func testUpdateVersionComparisonUsesVersionThenBuild() {
+        let release = AppUpdateRelease(
+            schema: 1,
+            version: "1.8.0",
+            build: 13,
+            minimumIOS: "18.0",
+            publishedAt: .now,
+            title: "更新",
+            notes: ["测试"],
+            mandatory: false,
+            bundleIdentifier: "com.inkshelf.reader",
+            packageSize: 1024,
+            sha256: nil,
+            installURL: nil,
+            dataPolicy: "preserve_app_container"
+        )
+        XCTAssertTrue(release.isNewer(thanVersion: "1.7.9", build: 99))
+        XCTAssertTrue(release.isNewer(thanVersion: "1.8", build: 12))
+        XCTAssertFalse(release.isNewer(thanVersion: "1.8.0", build: 13))
+        XCTAssertFalse(release.isNewer(thanVersion: "1.9.0", build: 1))
+        XCTAssertTrue(release.supports(systemVersion: "26.0.1"))
+        XCTAssertTrue(release.preservesAppData)
+    }
+
+    @MainActor
+    func testPreparingOnlineUpdateBacksUpIndexesWithoutTouchingBookPages() throws {
+        let fileManager = FileManager.default
+        let root = fileManager.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let suiteName = "InkShelfUpdateSafetyTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer {
+            try? fileManager.removeItem(at: root)
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let id = UUID()
+        let library = root.appendingPathComponent("InkShelf Library", isDirectory: true)
+        let pages = library.appendingPathComponent(id.uuidString.lowercased()).appendingPathComponent("pages")
+        try fileManager.createDirectory(at: pages, withIntermediateDirectories: true)
+        let pageURL = pages.appendingPathComponent("001.png")
+        try testPNG(color: .systemYellow).write(to: pageURL)
+        let book = Book(
+            id: id,
+            title: "更新保护测试",
+            kind: .imageCollection,
+            sourceFileName: "更新保护测试",
+            contentRelativePath: "\(id.uuidString.lowercased())/pages",
+            pageCount: 1,
+            fileSize: 1
+        )
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        try encoder.encode([book]).write(to: library.appendingPathComponent("library.json"))
+
+        let store = LibraryStore(fileManager: fileManager, defaults: defaults, documentsURL: root)
+        let group = try XCTUnwrap(store.createShelfGroup(title: "更新后仍在"))
+        store.assignBook(id, toShelfGroup: group.id)
+        let backup = try store.prepareForAppUpdate(targetVersion: "1.8.1", targetBuild: 14)
+
+        XCTAssertTrue(fileManager.fileExists(atPath: pageURL.path), "Online updates must never touch cached pages")
+        XCTAssertTrue(fileManager.fileExists(atPath: backup.appendingPathComponent("library.json").path))
+        XCTAssertTrue(fileManager.fileExists(atPath: backup.appendingPathComponent("shelf-groups.json").path))
+        let snapshotData = try Data(contentsOf: backup.appendingPathComponent("update-safety.json"))
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let snapshot = try decoder.decode(UpdateSafetySnapshot.self, from: snapshotData)
+        XCTAssertEqual(snapshot.targetBuild, 14)
+        XCTAssertEqual(snapshot.bookIDs, [id])
+        XCTAssertEqual(snapshot.shelfGroupIDs, [group.id])
+        XCTAssertEqual(snapshot.policy, "preserve_app_container")
+    }
+
     @MainActor
     private func testPNG(color: UIColor) -> Data {
         UIGraphicsImageRenderer(size: CGSize(width: 48, height: 64)).pngData { context in

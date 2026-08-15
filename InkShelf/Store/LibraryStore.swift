@@ -374,6 +374,60 @@ final class LibraryStore {
         books.filter { $0.shelfGroupID == id }.count
     }
 
+    @discardableResult
+    func prepareForAppUpdate(targetVersion: String, targetBuild: Int) throws -> URL {
+        saveTask?.cancel()
+        saveImmediately()
+        saveShelfGroups()
+
+        let backupsRoot = libraryURL.appendingPathComponent("Update Backups", isDirectory: true)
+        try fileManager.createDirectory(at: backupsRoot, withIntermediateDirectories: true)
+        let folderName = "build-\(AppIdentity.build)-to-\(targetBuild)-\(UUID().uuidString.prefix(8))"
+        let backupURL = backupsRoot.appendingPathComponent(folderName, isDirectory: true)
+        try fileManager.createDirectory(at: backupURL, withIntermediateDirectories: true)
+
+        do {
+            if fileManager.fileExists(atPath: metadataURL.path) {
+                try fileManager.copyItem(
+                    at: metadataURL,
+                    to: backupURL.appendingPathComponent("library.json")
+                )
+            }
+            if fileManager.fileExists(atPath: groupsURL.path) {
+                try fileManager.copyItem(
+                    at: groupsURL,
+                    to: backupURL.appendingPathComponent("shelf-groups.json")
+                )
+            }
+
+            let snapshot = UpdateSafetySnapshot(
+                preparedAt: .now,
+                sourceVersion: AppIdentity.version,
+                sourceBuild: AppIdentity.build,
+                targetVersion: targetVersion,
+                targetBuild: targetBuild,
+                bundleIdentifier: AppIdentity.bundleIdentifier,
+                bookIDs: books.map(\.id),
+                shelfGroupIDs: shelfGroups.map(\.id),
+                bookCount: books.count,
+                favoritePageCount: favoritePageItems.count,
+                policy: "preserve_app_container"
+            )
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            encoder.dateEncodingStrategy = .iso8601
+            try encoder.encode(snapshot).write(
+                to: backupURL.appendingPathComponent("update-safety.json"),
+                options: .atomic
+            )
+            pruneUpdateBackups(in: backupsRoot, keeping: 3)
+            return backupURL
+        } catch {
+            try? fileManager.removeItem(at: backupURL)
+            throw error
+        }
+    }
+
     func optimizeStorage(bookID: UUID, mode: StorageRetentionMode) async {
         guard optimizingBookID == nil,
               let originalIndex = books.firstIndex(where: { $0.id == bookID })
@@ -555,6 +609,23 @@ final class LibraryStore {
             try data.write(to: metadataURL, options: .atomic)
         } catch {
             alert = LibraryAlert(title: "无法保存书架", message: error.localizedDescription)
+        }
+    }
+
+    private func pruneUpdateBackups(in root: URL, keeping limit: Int) {
+        guard let folders = try? fileManager.contentsOfDirectory(
+            at: root,
+            includingPropertiesForKeys: [.creationDateKey, .isDirectoryKey]
+        ) else { return }
+        let sorted = folders.filter {
+            (try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
+        }.sorted {
+            let left = (try? $0.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast
+            let right = (try? $1.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast
+            return left > right
+        }
+        for folder in sorted.dropFirst(max(1, limit)) {
+            try? fileManager.removeItem(at: folder)
         }
     }
 

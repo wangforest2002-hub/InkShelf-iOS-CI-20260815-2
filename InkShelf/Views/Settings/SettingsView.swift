@@ -3,6 +3,7 @@ import SwiftUI
 struct SettingsView: View {
     @Environment(LibraryStore.self) private var library
     @Environment(AICompanionStore.self) private var companion
+    @Environment(AppUpdateStore.self) private var updates
     @AppStorage("appearance") private var appearance = AppAppearance.light.rawValue
     @AppStorage("reader.layout") private var layout = ReaderLayout.single.rawValue
     @AppStorage("reader.flow") private var flow = ReaderFlow.horizontal.rawValue
@@ -130,6 +131,29 @@ struct SettingsView: View {
                     }
                 }
 
+                Section("应用更新") {
+                    NavigationLink {
+                        UpdateCenterView()
+                    } label: {
+                        LabeledContent {
+                            Text(updates.statusText)
+                                .foregroundStyle(updates.availableRelease == nil ? Color.secondary : AppTheme.accent)
+                        } label: {
+                            Label("在线更新", systemImage: "arrow.down.app.fill")
+                        }
+                    }
+                    .accessibilityIdentifier("settings-online-update")
+
+                    Label {
+                        Text("覆盖安装只替换应用本体，不删除书架、画册缓存、收藏和阅读记录。")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    } icon: {
+                        Image(systemName: "checkmark.shield.fill")
+                            .foregroundStyle(AppTheme.mint)
+                    }
+                }
+
                 Section("存储与隐私") {
                     LabeledContent("源文件占用") {
                         Text(AppFormatters.fileSize(library.storageUsage))
@@ -149,7 +173,7 @@ struct SettingsView: View {
                 }
 
                 Section("关于") {
-                    LabeledContent("二次元小家", value: "1.7.1")
+                    LabeledContent("二次元小家", value: "1.8.0")
                     Button("重新查看欢迎页") {
                         hasSeenWelcome = false
                     }

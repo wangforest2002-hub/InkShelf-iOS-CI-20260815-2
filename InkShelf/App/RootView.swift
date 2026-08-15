@@ -2,8 +2,10 @@ import SwiftUI
 
 struct RootView: View {
     @Environment(LibraryStore.self) private var library
+    @Environment(AppUpdateStore.self) private var updates
     @AppStorage("hasSeenWelcome") private var hasSeenWelcome = false
     @State private var launchDestination: LaunchDestination?
+    @State private var updatePrompt: AppUpdateRelease?
 
     var body: some View {
         MainTabView()
@@ -15,7 +17,11 @@ struct RootView: View {
                 }
             }
             .onChange(of: hasSeenWelcome) { _, hasSeen in
-                if !hasSeen { launchDestination = .welcome }
+                if !hasSeen {
+                    launchDestination = .welcome
+                } else {
+                    Task { await offerUpdateIfAvailable() }
+                }
             }
             .fullScreenCover(item: $launchDestination) { destination in
                 switch destination {
@@ -30,10 +36,32 @@ struct RootView: View {
                     }
                 }
             }
+            .task {
+                guard hasSeenWelcome, library.interruptedReadingBook == nil else { return }
+                await offerUpdateIfAvailable()
+            }
+            .sheet(item: $updatePrompt) { release in
+                AppUpdatePromptView(release: release)
+            }
+    }
+
+    @MainActor
+    private func offerUpdateIfAvailable() async {
+        guard !ProcessInfo.processInfo.arguments.contains("INKSHELF_UI_TEST_SEED"),
+              !ProcessInfo.processInfo.arguments.contains("INKSHELF_UI_TEST_PICKER")
+        else { return }
+        if !updates.didCheckThisLaunch {
+            await updates.checkForUpdates(silent: true)
+        }
+        guard launchDestination == nil,
+              updates.shouldOfferAutomaticPrompt,
+              let release = updates.availableRelease
+        else { return }
+        updatePrompt = release
     }
 }
 
-private enum LaunchDestination: Identifiable {
+private enum LaunchDestination: Identifiable, Equatable {
     case welcome
     case reader(Book)
 

@@ -77,6 +77,21 @@
 
 工作流使用 GitHub macOS runner、XcodeGen 和可用的最新 Xcode SDK；同时运行单元测试、模拟器构建和真机 Release 构建。
 
+## 在线覆盖更新
+
+从 1.8.0 起，设置中提供“在线更新”中心。应用从独立的 `https://4-3rail.top/inkshelf-update/` 发布通道读取版本信息；发现新版本后会先在 App Documents 内备份 `library.json`、`shelf-groups.json` 和更新安全清单，再通过 iOS 的安装服务覆盖应用本体。
+
+- 必须使用和已安装版本相同的 Bundle ID（`com.inkshelf.reader`）及兼容的签名描述文件。
+- 覆盖安装不会删除 Documents、UserDefaults 或书籍缓存；用户不可先从桌面删除旧应用。
+- iOS 不允许应用修改自己的已签名程序包，所以程序更新发布完整的已签名 IPA，而不是在本机拼接二进制补丁。
+- 发布入口只接受 SSH，公开地址仅提供只读版本元数据、manifest 和 IPA 下载。
+
+发布新的已签名 IPA：
+
+```powershell
+.\scripts\Publish-OnlineUpdate.ps1 -SignedIpa "D:\path\二次元小家-signed.ipa" -Version "1.8.1" -Build 14 -Notes "阅读体验优化","问题修复"
+```
+
 ## 本地 Mac 构建（可选）
 
 ```sh

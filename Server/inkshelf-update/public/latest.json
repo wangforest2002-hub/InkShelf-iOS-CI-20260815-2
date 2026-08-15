@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "version": "1.8.0",
+  "build": 13,
+  "minimum_ios": "18.0",
+  "published_at": "2026-08-15T00:00:00+07:00",
+  "title": "在线更新准备就绪",
+  "notes": [
+    "新增应用内更新中心",
+    "更新前自动备份书架索引与分组",
+    "覆盖安装保留画册、缓存、收藏与阅读记录"
+  ],
+  "mandatory": false,
+  "bundle_identifier": "com.inkshelf.reader",
+  "package_size": null,
+  "sha256": null,
+  "install_url": null,
+  "data_policy": "preserve_app_container"
+}

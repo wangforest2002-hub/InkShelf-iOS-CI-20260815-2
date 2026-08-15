@@ -69,6 +69,16 @@ final class ReaderNavigationUITests: XCTestCase {
         XCTAssertTrue(app.tabBars.buttons["最近"].exists)
         XCTAssertTrue(app.tabBars.buttons["珍藏"].exists)
         XCTAssertFalse(app.tabBars.buttons["云阁楼"].exists)
+
+        app.tabBars.buttons["设置"].tap()
+        let onlineUpdate = app.buttons["settings-online-update"]
+        for _ in 0..<5 where !onlineUpdate.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(onlineUpdate.waitForExistence(timeout: 3), "The online-update center is missing from Settings")
+        onlineUpdate.tap()
+        XCTAssertTrue(app.navigationBars["应用更新"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["update-check"].exists)
     }
 
     func testSystemDocumentPickerImportsThenOpensImage() throws {
