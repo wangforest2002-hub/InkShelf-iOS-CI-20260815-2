@@ -603,6 +603,12 @@ final class BookModelTests: XCTestCase {
         defer { try? fileManager.removeItem(at: inputRoot) }
         let inputURL = inputRoot.appendingPathComponent("source.png")
         try testPNG(color: .systemPink).write(to: inputURL, options: .atomic)
+        let inputSource = try XCTUnwrap(CGImageSourceCreateWithURL(inputURL as CFURL, nil))
+        let inputProperties = try XCTUnwrap(
+            CGImageSourceCopyPropertiesAtIndex(inputSource, 0, nil) as? [CFString: Any]
+        )
+        let inputWidth = try XCTUnwrap(inputProperties[kCGImagePropertyPixelWidth] as? Int)
+        let inputHeight = try XCTUnwrap(inputProperties[kCGImagePropertyPixelHeight] as? Int)
 
         let result = try await OnDeviceSharpProcessor.shared.enhance(
             source: .image(inputURL),
@@ -616,8 +622,8 @@ final class BookModelTests: XCTestCase {
         XCTAssertEqual(Array(data.prefix(8)), [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
         let source = try XCTUnwrap(CGImageSourceCreateWithURL(result.outputURL as CFURL, nil))
         let properties = try XCTUnwrap(CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any])
-        XCTAssertEqual(properties[kCGImagePropertyPixelWidth] as? Int, 96)
-        XCTAssertEqual(properties[kCGImagePropertyPixelHeight] as? Int, 128)
+        XCTAssertEqual(properties[kCGImagePropertyPixelWidth] as? Int, inputWidth * 2)
+        XCTAssertEqual(properties[kCGImagePropertyPixelHeight] as? Int, inputHeight * 2)
     }
 
     @MainActor
