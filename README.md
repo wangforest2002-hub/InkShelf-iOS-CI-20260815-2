@@ -79,7 +79,7 @@
 
 ## 在线覆盖更新
 
-从 1.8.0 起，设置中提供“在线更新”中心。应用从独立的 `https://4-3rail.top/inkshelf-update/` 发布通道读取版本信息；发现新版本后会先在 App Documents 内备份 `library.json`、`shelf-groups.json` 和更新安全清单，再通过 iOS 的安装服务覆盖应用本体。
+从 1.9.0 起，设置中提供“在线更新”中心。应用从独立的 `https://4-3rail.top/inkshelf-update/` 发布通道读取版本信息；发现新版本后会先在 App Documents 内备份 `library.json`、`shelf-groups.json` 和更新安全清单，再通过 iOS 的安装服务覆盖应用本体。
 
 - 必须使用和已安装版本相同的 Bundle ID（`com.inkshelf.reader`）及兼容的签名描述文件。
 - 覆盖安装不会删除 Documents、UserDefaults 或书籍缓存；用户不可先从桌面删除旧应用。
@@ -89,8 +89,22 @@
 发布新的已签名 IPA：
 
 ```powershell
-.\scripts\Publish-OnlineUpdate.ps1 -SignedIpa "D:\path\二次元小家-signed.ipa" -Version "1.8.1" -Build 14 -Notes "阅读体验优化","问题修复"
+.\scripts\Publish-OnlineUpdate.ps1 -SignedIpa "D:\path\二次元小家-signed.ipa" -Version "1.9.1" -Build 15 -Notes "阅读体验优化","问题修复"
 ```
+
+## X 图片珍藏与 Sharp 清晰化
+
+- 在书架分组内发起导入，新读物会直接进入当前分组；从“珍藏”页导入的个人图片会自动标为珍藏。
+- “从 X 收藏帖子图片”通过独立的 `/inkshelf-media/` 通道读取公开帖子，先预览、勾选，再下载原图；不接触 X 登录信息。
+- 阅读页右上角 AI 按钮是单击开关。开启后，本机 Vision OCR 会识别中文、日文和英文；识别到日文时，DeepSeek V4 Pro 会同时生成按对白、旁白、拟声分类的自然中文翻译并缓存。
+- 当前图片或 PDF 页默认直接在 iPhone/iPad 本地使用 Core ML 分块清晰化，原图不离开设备。固定使用 `realesrgan-x4plus-anime` 放大 4 倍，再以 Lanczos 缩回 2 倍并保存无损 PNG；完成结果自动进入珍藏。
+- 超大页面超过设备安全内存限制时，可以选填自己的 Windows 电脑桥作为自动备用。运行：
+
+```powershell
+.\scripts\Start-InkShelfSharpBridge.ps1
+```
+
+然后在应用“设置 → Sharp 图片清晰化”填写窗口显示的局域网地址。内置模型和电脑桥都会核验模型、Profile 和倍率，不会换用普通 `realesrgan-x4plus` 或 `animevideov3`。
 
 ## 本地 Mac 构建（可选）
 

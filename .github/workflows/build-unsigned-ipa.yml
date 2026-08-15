@@ -153,9 +153,10 @@ jobs:
         run: |
           APP_PATH="build/Build/Products/Release-iphoneos/InkShelf.app"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$APP_PATH/Info.plist")" = "二次元小家"
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Info.plist")" = "1.8.0"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Info.plist")" = "1.9.0"
           /usr/libexec/PlistBuddy -c 'Print :CFBundleIcons' "$APP_PATH/Info.plist" >/dev/null
           find "$APP_PATH" -maxdepth 1 -type f \( -name 'AppIcon*.png' -o -name 'Assets.car' \) | grep -q .
+          test -d "$APP_PATH/RealESRGANAnimeSharp.mlmodelc"
 
       - name: Package unsigned IPA
         run: |

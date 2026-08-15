@@ -86,6 +86,7 @@ actor PageInsightService {
         let textRequest = VNRecognizeTextRequest()
         textRequest.recognitionLevel = .accurate
         textRequest.usesLanguageCorrection = true
+        textRequest.automaticallyDetectsLanguage = true
         textRequest.recognitionLanguages = ["zh-Hans", "zh-Hant", "ja-JP", "en-US"]
         try? handler.perform([textRequest])
 
@@ -95,13 +96,34 @@ actor PageInsightService {
         let classifyRequest = VNClassifyImageRequest()
         try? handler.perform([classifyRequest])
 
-        let lines = (textRequest.results ?? []).compactMap { $0.topCandidates(1).first?.string }
+        let observations = (textRequest.results ?? []).sorted(by: readingOrder)
+        let lines = observations.compactMap { $0.topCandidates(1).first?.string }
         let labels = (classifyRequest.results ?? [])
             .filter { $0.confidence >= 0.08 }
             .prefix(8)
             .map { "\($0.identifier) (\(Int($0.confidence * 100))%)" }
 
         return (lines.joined(separator: "\n"), labels, faceRequest.results?.count ?? 0)
+    }
+
+    /// Vision's result order is not guaranteed to match manga reading order.
+    /// Vertical Japanese columns are read right-to-left; horizontal lines are
+    /// read top-to-bottom and then left-to-right within the same row.
+    private func readingOrder(_ left: VNRecognizedTextObservation, _ right: VNRecognizedTextObservation) -> Bool {
+        let leftBox = left.boundingBox
+        let rightBox = right.boundingBox
+        let leftVertical = leftBox.height > leftBox.width * 1.2
+        let rightVertical = rightBox.height > rightBox.width * 1.2
+        if leftVertical && rightVertical {
+            if abs(leftBox.midX - rightBox.midX) > 0.04 { return leftBox.midX > rightBox.midX }
+            return leftBox.maxY > rightBox.maxY
+        }
+        if !leftVertical && !rightVertical {
+            if abs(leftBox.midY - rightBox.midY) > 0.035 { return leftBox.midY > rightBox.midY }
+            return leftBox.minX < rightBox.minX
+        }
+        if abs(leftBox.midY - rightBox.midY) > 0.05 { return leftBox.midY > rightBox.midY }
+        return leftBox.midX > rightBox.midX
     }
 
     private func normalizedText(_ text: String) -> String {

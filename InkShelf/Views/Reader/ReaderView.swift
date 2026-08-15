@@ -29,6 +29,7 @@ struct ReaderView: View {
     @State private var readerAlert: ReaderAlert?
     @State private var readerNotice: String?
     @State private var isSavingPage = false
+    @State private var isEnhancingPage = false
     @State private var activeReadingStartedAt: Date?
 
     @AppStorage("reader.layout") private var layoutRaw = ReaderLayout.single.rawValue
@@ -40,6 +41,7 @@ struct ReaderView: View {
     @AppStorage("ai.enabled") private var aiEnabled = false
     @AppStorage("ai.autoDanmaku") private var autoDanmaku = true
     @AppStorage("ai.autoShowEnd") private var autoShowEnd = true
+    @AppStorage("sharp.bridgeAddress") private var sharpBridgeAddress = ""
     @AppStorage("ebook.flow") private var ebookFlowRaw = EBookFlow.paged.rawValue
     @AppStorage("ebook.theme") private var ebookThemeRaw = EBookTheme.paper.rawValue
     @AppStorage("ebook.font") private var ebookFontRaw = EBookFont.serif.rawValue
@@ -90,6 +92,24 @@ struct ReaderView: View {
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
 
+            if aiEnabled,
+               let reaction = companion.currentReaction,
+               reaction.page == currentPage,
+               let translation = reaction.translation,
+               !translation.segments.isEmpty {
+                VStack {
+                    Spacer()
+                    Button(action: openAICompanion) {
+                        AICompactTranslationCard(translation: translation)
+                    }
+                    .buttonStyle(PressableCardStyle())
+                    .padding(.horizontal, 18)
+                    .padding(.bottom, controlsVisible ? 142 : 18)
+                }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .zIndex(16)
+            }
+
             if let achievement = achievements.latestUnlock {
                 VStack {
                     AchievementUnlockToast(achievement: achievement)
@@ -135,12 +155,14 @@ struct ReaderView: View {
                     isPageFavorite: pageFavoriteState,
                     canUsePageActions: book.kind != .ebook && !pdfLocked,
                     isSavingPage: isSavingPage,
+                    isEnhancingPage: isEnhancingPage,
                     dismiss: closeReader,
                     toggleFavorite: { library.toggleFavorite(book.id) },
                     togglePageFavorite: togglePageFavorite,
                     savePage: saveCurrentPage,
+                    enhancePage: enhanceCurrentPage,
                     toggleLayout: toggleLayout,
-                    showAICompanion: openAICompanion,
+                    toggleAI: toggleAI,
                     showThumbnails: { showThumbnails = true },
                     showSettings: { showSettings = true },
                     onInteraction: showControlsTemporarily
@@ -155,6 +177,7 @@ struct ReaderView: View {
         .persistentSystemOverlays(controlsVisible ? .automatic : .hidden)
         .preferredColorScheme(book.kind == .ebook ? (ebookTheme == .night ? .dark : .light) : .dark)
         .sensoryFeedback(.selection, trigger: currentPage)
+        .sensoryFeedback(.selection, trigger: aiEnabled)
         .sensoryFeedback(.success, trigger: achievements.unlockedCount)
         .sensoryFeedback(.success, trigger: readerNotice)
         .onAppear {
@@ -391,6 +414,59 @@ struct ReaderView: View {
         }
     }
 
+    private func enhanceCurrentPage() {
+        guard !isEnhancingPage, book.kind != .ebook, !pdfLocked else { return }
+        let source: SharpPageSource?
+        switch book.kind {
+        case .archive, .imageCollection:
+            source = imageURLs.indices.contains(currentPage) ? .image(imageURLs[currentPage]) : nil
+        case .pdf:
+            source = .pdf(library.contentURL(for: book), page: currentPage, password: pdfPassword)
+        case .ebook:
+            source = nil
+        }
+        guard let source else {
+            readerAlert = ReaderAlert(title: "无法清晰化", message: "当前页面还没有准备好，请稍后再试。")
+            return
+        }
+
+        isEnhancingPage = true
+        showNotice("正在设备本地进行 Sharp 清晰化…")
+        Task {
+            do {
+                let outputName = "\(book.title)-第\(currentPage + 1)页.png"
+                let result: SharpEnhancementResult
+                do {
+                    result = try await OnDeviceSharpProcessor.shared.enhance(
+                        source: source,
+                        outputName: outputName
+                    )
+                } catch {
+                    let address = sharpBridgeAddress.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !address.isEmpty else { throw error }
+                    showNotice("本机无法处理，已自动改用你的电脑…")
+                    result = try await SharpImageService.shared.enhance(
+                        source: source,
+                        address: address,
+                        outputName: outputName
+                    )
+                }
+                let latest = library.books.first(where: { $0.id == book.id }) ?? book
+                library.importFiles(
+                    [result.outputURL],
+                    cleanupDirectory: result.temporaryRoot,
+                    shelfGroupID: latest.shelfGroupID,
+                    favoriteOnImport: true
+                )
+                let location = result.executionLocation == .device ? "设备本地" : "你的电脑"
+                showNotice("\(location)完成 · 2x PNG 已放进珍藏")
+            } catch {
+                readerAlert = ReaderAlert(title: "Sharp 清晰化失败", message: error.localizedDescription)
+            }
+            isEnhancingPage = false
+        }
+    }
+
     private func closeReader() {
         library.endReading(book.id)
         if let onClose {
@@ -457,8 +533,28 @@ struct ReaderView: View {
         showAICompanion = true
     }
 
+    private func toggleAI() {
+        if aiEnabled {
+            aiEnabled = false
+            companion.cancelAll()
+            showAICompanion = false
+            showNotice("AI 陪读已关闭")
+            return
+        }
+        guard companion.hasAPIKey else {
+            readerAlert = ReaderAlert(
+                title: "还没有连接 AI",
+                message: "请先到“设置 → AI 陪读”填写 DeepSeek API 密钥，之后这里一按就能开关。"
+            )
+            return
+        }
+        aiEnabled = true
+        prepareAIPage(force: true)
+        showNotice("AI 陪读已开启")
+    }
+
     private func prepareAIPage(force: Bool = false) {
-        guard aiEnabled, companion.hasAPIKey, force || autoDanmaku else { return }
+        guard aiEnabled, companion.hasAPIKey else { return }
         let source: AIPageSource?
         switch book.kind {
         case .pdf:
@@ -515,6 +611,40 @@ struct ReaderView: View {
     }
 }
 
+private struct AICompactTranslationCard: View {
+    let translation: AIPageTranslation
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 11) {
+            Image(systemName: "character.book.closed.fill")
+                .font(.headline)
+                .foregroundStyle(AppTheme.coral)
+                .frame(width: 30, height: 30)
+                .background(AppTheme.coral.opacity(0.13), in: Circle())
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("本页翻译")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(AppTheme.coral)
+                Text(translation.segments.prefix(2).map(\.translation).joined(separator: "　"))
+                    .font(.subheadline.weight(.medium))
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+            }
+            Spacer(minLength: 4)
+            Image(systemName: "chevron.up")
+                .font(.caption.bold())
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
+        .frame(maxWidth: 560)
+        .inkGlass(cornerRadius: 20, interactive: true)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("本页日文翻译，点按查看完整内容")
+    }
+}
+
 private struct ReaderControls: View {
     let title: String
     let kind: BookKind
@@ -528,12 +658,14 @@ private struct ReaderControls: View {
     let isPageFavorite: Bool
     let canUsePageActions: Bool
     let isSavingPage: Bool
+    let isEnhancingPage: Bool
     let dismiss: () -> Void
     let toggleFavorite: () -> Void
     let togglePageFavorite: () -> Void
     let savePage: () -> Void
+    let enhancePage: () -> Void
     let toggleLayout: () -> Void
-    let showAICompanion: () -> Void
+    let toggleAI: () -> Void
     let showThumbnails: () -> Void
     let showSettings: () -> Void
     let onInteraction: () -> Void
@@ -564,13 +696,15 @@ private struct ReaderControls: View {
 
                     Spacer(minLength: 4)
 
-                    Button { perform(showAICompanion) } label: {
-                        Image(systemName: "sparkles")
+                    Button { perform(toggleAI) } label: {
+                        Image(systemName: aiEnabled ? "sparkles.square.fill" : "sparkles")
                             .foregroundStyle(aiEnabled ? AppTheme.accent : .secondary)
                             .frame(width: 34, height: 34)
+                            .contentTransition(.symbolEffect(.replace))
                     }
                     .adaptiveGlassButton()
-                    .accessibilityLabel(aiEnabled ? "打开 AI 陪读" : "配置 AI 陪读")
+                    .accessibilityIdentifier("reader-ai-toggle")
+                    .accessibilityLabel(aiEnabled ? "关闭 AI 陪读" : "开启 AI 陪读")
 
                     Button { perform(toggleFavorite) } label: {
                         Image(systemName: isFavorite ? "star.fill" : "star")
@@ -638,6 +772,18 @@ private struct ReaderControls: View {
                     .accessibilityLabel(isEBook ? ebookFlow.title : (layout == .single ? "单页" : "双页"))
 
                     if !isEBook {
+                        Button { perform(enhancePage) } label: {
+                            if isEnhancingPage {
+                                ProgressView().tint(.primary)
+                            } else {
+                                Image(systemName: "wand.and.stars")
+                            }
+                        }
+                        .readerActionButton()
+                        .disabled(!canUsePageActions || isEnhancingPage)
+                        .accessibilityIdentifier("reader-sharp-enhance")
+                        .accessibilityLabel(isEnhancingPage ? "正在 Sharp 清晰化" : "Sharp 清晰化当前页")
+
                         Button { perform(savePage) } label: {
                             if isSavingPage {
                                 ProgressView().tint(.primary)

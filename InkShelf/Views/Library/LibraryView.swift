@@ -11,6 +11,7 @@ struct LibraryView: View {
     @State private var query = ""
     @State private var importPicker: ImportPicker?
     @State private var showPhotoPicker = false
+    @State private var showSocialPostImporter = false
     @State private var photoItems: [PhotosPickerItem] = []
     @State private var pendingDeletion: Book?
     @State private var renamingBook: Book?
@@ -175,7 +176,7 @@ struct LibraryView: View {
             .navigationTitle(navigationTitle)
             .searchable(text: $query, prompt: "搜索标题")
             .toolbar {
-                if scope == .all {
+                if scope == .all || scope == .favorites {
                     ToolbarItem(placement: .primaryAction) {
                         Menu {
                             Button {
@@ -187,18 +188,26 @@ struct LibraryView: View {
                             Button {
                                 showPhotoPicker = true
                             } label: {
-                                Label("从照片导入", systemImage: "photo.badge.plus")
+                                Label(scope == .favorites ? "从照片加入珍藏" : "从照片导入", systemImage: "photo.badge.plus")
                             }
-
-                            Divider()
 
                             Button {
-                                groupEditor = .create
+                                showSocialPostImporter = true
                             } label: {
-                                Label("新建书架分组", systemImage: "folder.badge.plus")
+                                Label("从 X 收藏帖子图片", systemImage: "heart.text.square")
+                            }
+
+                            if scope == .all {
+                                Divider()
+
+                                Button {
+                                    groupEditor = .create
+                                } label: {
+                                    Label("新建书架分组", systemImage: "folder.badge.plus")
+                                }
                             }
                         } label: {
-                            Label("导入", systemImage: "plus")
+                            Label(scope == .favorites ? "加入珍藏" : "导入", systemImage: "plus")
                         }
                         .accessibilityHint("从文件 App 导入 PDF、EPUB、电子书、CBZ、ZIP 或图片")
                     }
@@ -230,6 +239,12 @@ struct LibraryView: View {
             matching: .images,
             preferredItemEncoding: .current
         )
+        .sheet(isPresented: $showSocialPostImporter) {
+            SocialPostImportView(
+                shelfGroupID: importDestinationGroupID,
+                favoriteOnImport: true
+            )
+        }
         .onAppear {
 #if DEBUG
             guard ProcessInfo.processInfo.arguments.contains("INKSHELF_UI_TEST_PICKER"),
@@ -421,7 +436,12 @@ struct LibraryView: View {
     ) {
         switch result {
         case .success(let urls):
-            library.importFiles(urls, removeSourcesAfterImport: removeSourcesAfterImport)
+            library.importFiles(
+                urls,
+                removeSourcesAfterImport: removeSourcesAfterImport,
+                shelfGroupID: importDestinationGroupID,
+                favoriteOnImport: scope == .favorites
+            )
         case .failure(let error):
             library.alert = LibraryAlert(title: "无法打开文件", message: error.localizedDescription)
         }
@@ -489,6 +509,11 @@ struct LibraryView: View {
 #endif
     }
 
+    private var importDestinationGroupID: UUID? {
+        guard scope == .all, case .group(let id) = shelfFilter else { return nil }
+        return id
+    }
+
     private func importPhotos(_ items: [PhotosPickerItem]) async {
         let fileManager = FileManager.default
         let temporaryRoot = fileManager.temporaryDirectory
@@ -512,7 +537,12 @@ struct LibraryView: View {
             guard !urls.isEmpty else {
                 throw BookImportError.noImages
             }
-            library.importFiles(urls, cleanupDirectory: temporaryRoot)
+            library.importFiles(
+                urls,
+                cleanupDirectory: temporaryRoot,
+                shelfGroupID: importDestinationGroupID,
+                favoriteOnImport: scope == .favorites
+            )
             photoItems = []
         } catch {
             try? fileManager.removeItem(at: temporaryRoot)

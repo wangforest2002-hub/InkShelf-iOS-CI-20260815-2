@@ -3,6 +3,7 @@ import SwiftUI
 struct RootView: View {
     @Environment(LibraryStore.self) private var library
     @Environment(AppUpdateStore.self) private var updates
+    @Environment(SocialImportStore.self) private var socialImports
     @AppStorage("hasSeenWelcome") private var hasSeenWelcome = false
     @State private var launchDestination: LaunchDestination?
     @State private var updatePrompt: AppUpdateRelease?
@@ -43,6 +44,20 @@ struct RootView: View {
             .sheet(item: $updatePrompt) { release in
                 AppUpdatePromptView(release: release)
             }
+            .sheet(item: socialImportBinding) { request in
+                SocialPostImportView(
+                    shelfGroupID: nil,
+                    favoriteOnImport: true,
+                    initialURL: request.postURL
+                )
+            }
+    }
+
+    private var socialImportBinding: Binding<SocialImportRequest?> {
+        Binding(
+            get: { socialImports.pendingRequest },
+            set: { socialImports.pendingRequest = $0 }
+        )
     }
 
     @MainActor

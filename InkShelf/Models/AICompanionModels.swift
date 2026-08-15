@@ -145,6 +145,51 @@ struct AIDanmakuMessage: Identifiable, Codable, Hashable, Sendable {
     }
 }
 
+enum AITranslationRole: String, Codable, Sendable {
+    case dialogue
+    case narration
+    case soundEffect = "sound_effect"
+    case other
+
+    var title: String {
+        switch self {
+        case .dialogue: "对白"
+        case .narration: "旁白"
+        case .soundEffect: "拟声"
+        case .other: "文字"
+        }
+    }
+}
+
+struct AITranslationSegment: Identifiable, Codable, Hashable, Sendable {
+    let id: UUID
+    let source: String
+    let translation: String
+    let role: AITranslationRole
+    let speaker: String?
+
+    init(
+        id: UUID = UUID(),
+        source: String,
+        translation: String,
+        role: AITranslationRole,
+        speaker: String? = nil
+    ) {
+        self.id = id
+        self.source = source
+        self.translation = translation
+        self.role = role
+        self.speaker = speaker
+    }
+}
+
+struct AIPageTranslation: Codable, Hashable, Sendable {
+    let detectedJapanese: Bool
+    let title: String
+    let segments: [AITranslationSegment]
+    let note: String?
+}
+
 struct AIPageReaction: Identifiable, Codable, Hashable, Sendable {
     let id: UUID
     let page: Int
@@ -152,6 +197,7 @@ struct AIPageReaction: Identifiable, Codable, Hashable, Sendable {
     let mood: String
     let danmaku: [AIDanmakuMessage]
     let talkingPoints: [String]
+    let translation: AIPageTranslation?
     let createdAt: Date
 
     init(
@@ -161,6 +207,7 @@ struct AIPageReaction: Identifiable, Codable, Hashable, Sendable {
         mood: String,
         danmaku: [AIDanmakuMessage],
         talkingPoints: [String],
+        translation: AIPageTranslation? = nil,
         createdAt: Date = .now
     ) {
         self.id = id
@@ -169,6 +216,7 @@ struct AIPageReaction: Identifiable, Codable, Hashable, Sendable {
         self.mood = mood
         self.danmaku = danmaku
         self.talkingPoints = talkingPoints
+        self.translation = translation
         self.createdAt = createdAt
     }
 }

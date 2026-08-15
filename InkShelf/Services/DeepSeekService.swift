@@ -72,8 +72,9 @@ actor DeepSeekService {
         \(recent.isEmpty ? "（这是本次阅读中首个由 AI 分析的页面）" : recent)
 
         输出一个 JSON 对象，结构必须是：
-        {"summary":"一句不超过60字的本页概述","mood":"2到8字氛围","danmaku":[{"text":"不超过24字、像真实观众即时反应","tone":"normal|excited|amused|touched|curious"}],"talking_points":["最多3条可继续聊的话题"]}
+        {"summary":"一句不超过60字的本页概述","mood":"2到8字氛围","danmaku":[{"text":"不超过24字、像真实观众即时反应","tone":"normal|excited|amused|touched|curious"}],"talking_points":["最多3条可继续聊的话题"],"translation":{"detected_japanese":true,"title":"本页日文翻译","segments":[{"source":"按阅读顺序整理的日文原句","translation":"自然生动的简体中文，不要逐字硬译","role":"dialogue|narration|sound_effect|other","speaker":"能可靠判断时填写，否则空字符串"}],"note":"必要时用一句话说明语气、双关或识别不确定处"}}
         弹幕要彼此不同，避免空洞夸赞；信息不足时表达直观情绪，不要编造角色姓名和剧情事实。
+        翻译规则：只有识别文本中确有日文时 detected_japanese 才为 true，并尽量完整翻译；保持人物口吻、敬语强弱、吐槽和拟声词的活力。不要擅自补剧情。没有日文时仍返回 translation 对象，但 detected_japanese=false、segments=[]、note=""。
         """
 
         let content = try await completion(
@@ -94,12 +95,35 @@ actor DeepSeekService {
                 return AIDanmakuMessage(text: text, tone: AIDanmakuTone(rawValue: item.tone) ?? .normal)
             }
 
+        let translationSegments = payload.translation?.segments.prefix(30).compactMap { item -> AITranslationSegment? in
+            let source = cleaned(item.source, limit: 180)
+            let translated = cleaned(item.translation, limit: 260)
+            guard !source.isEmpty, !translated.isEmpty else { return nil }
+            let role = AITranslationRole(rawValue: item.role) ?? .other
+            return AITranslationSegment(
+                source: source,
+                translation: translated,
+                role: role,
+                speaker: cleaned(item.speaker ?? "", limit: 24).nilIfEmpty
+            )
+        } ?? []
+        let translation: AIPageTranslation? = {
+            guard payload.translation?.detectedJapanese == true, !translationSegments.isEmpty else { return nil }
+            return AIPageTranslation(
+                detectedJapanese: true,
+                title: cleaned(payload.translation?.title ?? "本页日文翻译", limit: 32),
+                segments: translationSegments,
+                note: cleaned(payload.translation?.note ?? "", limit: 160).nilIfEmpty
+            )
+        }()
+
         return AIPageReaction(
             page: insight.page,
             summary: cleaned(payload.summary, limit: 90),
             mood: cleaned(payload.mood, limit: 14),
             danmaku: messages,
-            talkingPoints: payload.talkingPoints.prefix(3).map { cleaned($0, limit: 60) }.filter { !$0.isEmpty }
+            talkingPoints: payload.talkingPoints.prefix(3).map { cleaned($0, limit: 60) }.filter { !$0.isEmpty },
+            translation: translation
         )
     }
 
@@ -351,6 +375,21 @@ private struct PagePayload: Decodable {
     let mood: String
     let danmaku: [DanmakuPayload]
     let talkingPoints: [String]
+    let translation: TranslationPayload?
+}
+
+private struct TranslationPayload: Decodable {
+    let detectedJapanese: Bool
+    let title: String
+    let segments: [TranslationSegmentPayload]
+    let note: String?
+}
+
+private struct TranslationSegmentPayload: Decodable {
+    let source: String
+    let translation: String
+    let role: String
+    let speaker: String?
 }
 
 private struct DanmakuPayload: Decodable {

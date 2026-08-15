@@ -26,6 +26,9 @@ struct AICompanionPanel: View {
                         .padding(.vertical, 30)
                     } else if let reaction = companion.currentReaction, reaction.page == page {
                         reactionCard(reaction)
+                        if let translation = reaction.translation {
+                            translationCard(translation)
+                        }
                         quickQuestions(reaction)
                     } else if companion.activity.isBusy {
                         HStack(spacing: 12) {
@@ -164,6 +167,60 @@ struct AICompanionPanel: View {
             }
         }
         .scrollIndicators(.hidden)
+    }
+
+    private func translationCard(_ translation: AIPageTranslation) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Label(
+                    translation.title.isEmpty ? "本页日文翻译" : translation.title,
+                    systemImage: "character.book.closed.fill"
+                )
+                .font(.headline)
+                .foregroundStyle(AppTheme.coral)
+                Spacer()
+                Text("日文 OCR → 中文")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            ForEach(Array(translation.segments.prefix(24).enumerated()), id: \.element.id) { index, segment in
+                VStack(alignment: .leading, spacing: 7) {
+                    HStack(spacing: 7) {
+                        Text("\(index + 1)")
+                            .font(.caption2.monospacedDigit().weight(.bold))
+                            .foregroundStyle(.white)
+                            .frame(width: 22, height: 22)
+                            .background(AppTheme.accent, in: Circle())
+                        Text(segment.speaker ?? segment.role.title)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                    Text(segment.translation)
+                        .font(.body.weight(.medium))
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(segment.source)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.vertical, 2)
+
+                if index < translation.segments.prefix(24).count - 1 {
+                    Divider().opacity(0.45)
+                }
+            }
+
+            if let note = translation.note {
+                Label(note, systemImage: "text.bubble")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .inkGlass(cornerRadius: 22)
     }
 
     private func chatBubble(_ message: AIChatMessage) -> some View {

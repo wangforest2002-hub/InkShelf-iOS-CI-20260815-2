@@ -6,6 +6,7 @@ struct InkShelfApp: App {
     @State private var companion = AICompanionStore()
     @State private var achievements = AchievementStore()
     @State private var updates = AppUpdateStore()
+    @State private var socialImports = SocialImportStore()
     @AppStorage("appearance") private var appearance = AppAppearance.light.rawValue
 
     var body: some Scene {
@@ -15,9 +16,12 @@ struct InkShelfApp: App {
                 .environment(companion)
                 .environment(achievements)
                 .environment(updates)
+                .environment(socialImports)
                 .preferredColorScheme(AppAppearance(rawValue: appearance)?.colorScheme)
                 .onOpenURL { url in
-                    library.importFiles([url])
+                    if !socialImports.accept(url) {
+                        library.importFiles([url])
+                    }
                 }
         }
     }

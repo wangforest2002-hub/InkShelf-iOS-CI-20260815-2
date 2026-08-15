@@ -46,9 +46,12 @@ struct EmptyLibraryView: View {
                         .lineSpacing(4)
                 }
 
-                if scope == .all && !hasSearch {
+                if scope != .recent && !hasSearch {
                     Button(action: importAction) {
-                        Label("从文件或 iCloud 导入", systemImage: "doc.badge.plus")
+                        Label(
+                            scope == .favorites ? "导入自己的珍藏图片" : "从文件或 iCloud 导入",
+                            systemImage: scope == .favorites ? "photo.badge.plus" : "doc.badge.plus"
+                        )
                             .frame(maxWidth: 280)
                     }
                     .adaptiveProminentButton()

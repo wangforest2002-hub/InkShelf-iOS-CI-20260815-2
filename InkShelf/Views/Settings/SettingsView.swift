@@ -131,6 +131,15 @@ struct SettingsView: View {
                     }
                 }
 
+                Section("图片工具") {
+                    NavigationLink {
+                        SharpImageSettingsView()
+                    } label: {
+                        Label("Sharp 图片清晰化", systemImage: "wand.and.stars.inverse")
+                    }
+                    .accessibilityIdentifier("settings-sharp")
+                }
+
                 Section("应用更新") {
                     NavigationLink {
                         UpdateCenterView()
@@ -173,7 +182,7 @@ struct SettingsView: View {
                 }
 
                 Section("关于") {
-                    LabeledContent("二次元小家", value: "1.8.0")
+                    LabeledContent("二次元小家", value: "1.9.0")
                     Button("重新查看欢迎页") {
                         hasSeenWelcome = false
                     }

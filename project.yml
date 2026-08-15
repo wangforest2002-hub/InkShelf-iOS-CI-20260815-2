@@ -44,9 +44,17 @@ targets:
       path: InkShelf/Resources/Info.plist
       properties:
         CFBundleDisplayName: 二次元小家
-        CFBundleShortVersionString: "1.8.0"
-        CFBundleVersion: "13"
+        CFBundleURLTypes:
+          - CFBundleTypeRole: Viewer
+            CFBundleURLName: com.inkshelf.reader.social-import
+            CFBundleURLSchemes:
+              - nijigenhome
+        CFBundleShortVersionString: "1.9.0"
+        CFBundleVersion: "14"
         NSPhotoLibraryAddUsageDescription: 用于把你喜欢的当前画面保存到系统照片图库。
+        NSLocalNetworkUsageDescription: 用于连接你自己的 Windows 电脑，按 Sharp 方案清晰化当前图片。
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
         LSRequiresIPhoneOS: true
         LSSupportsOpeningDocumentsInPlace: true
         UIFileSharingEnabled: true

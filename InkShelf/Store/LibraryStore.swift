@@ -141,7 +141,9 @@ final class LibraryStore {
     func importFiles(
         _ urls: [URL],
         cleanupDirectory: URL? = nil,
-        removeSourcesAfterImport: Bool = false
+        removeSourcesAfterImport: Bool = false,
+        shelfGroupID: UUID? = nil,
+        favoriteOnImport: Bool = false
     ) {
         guard !urls.isEmpty else {
             if let cleanupDirectory { try? fileManager.removeItem(at: cleanupDirectory) }
@@ -177,12 +179,32 @@ final class LibraryStore {
             }
             do {
                 importStatusText = "正在整理封面和页面…"
-                let imported = try await BookImporter.importBooks(from: urls, into: destination)
+                var imported = try await BookImporter.importBooks(from: urls, into: destination)
+                let destinationGroupID = shelfGroupID.flatMap { requestedID in
+                    shelfGroups.contains(where: { $0.id == requestedID }) ? requestedID : nil
+                }
+                for index in imported.indices {
+                    imported[index].shelfGroupID = destinationGroupID
+                    imported[index].isFavorite = favoriteOnImport
+                }
                 books.append(contentsOf: imported)
                 saveImmediately()
-                importNotice = imported.count == 1
-                    ? "“\(imported[0].title)”已经回到书架"
-                    : "已把 \(imported.count) 本读物带回小家"
+                let destinationName = destinationGroupID.flatMap { id in
+                    shelfGroups.first(where: { $0.id == id })?.title
+                }
+                if favoriteOnImport {
+                    importNotice = imported.count == 1
+                        ? "“\(imported[0].title)”已放进珍藏角落"
+                        : "已把 \(imported.count) 组图片放进珍藏角落"
+                } else if let destinationName {
+                    importNotice = imported.count == 1
+                        ? "“\(imported[0].title)”已放进“\(destinationName)”"
+                        : "已把 \(imported.count) 本读物放进“\(destinationName)”"
+                } else {
+                    importNotice = imported.count == 1
+                        ? "“\(imported[0].title)”已经回到书架"
+                        : "已把 \(imported.count) 本读物带回小家"
+                }
                 Task { [weak self] in
                     try? await Task.sleep(for: .seconds(2.8))
                     self?.importNotice = nil

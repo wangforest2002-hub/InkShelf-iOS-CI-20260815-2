@@ -107,6 +107,52 @@ final class BookModelTests: XCTestCase {
         XCTAssertTrue(UTType.comicBookArchive.conforms(to: .zip))
     }
 
+    func testXPostLinksAreStrictlyNormalizedForSocialImport() {
+        let service = SocialPostImportService.shared
+        XCTAssertEqual(
+            service.normalizedPostURL("https://x.com/kemari_kkr/status/2033518392037257415?s=20")?.absoluteString,
+            "https://x.com/kemari_kkr/status/2033518392037257415"
+        )
+        XCTAssertEqual(
+            service.normalizedPostURL("https://mobile.twitter.com/artist/status/1234567890/photo/1")?.absoluteString,
+            "https://x.com/artist/status/1234567890"
+        )
+        XCTAssertNil(service.normalizedPostURL("https://example.com/artist/status/1234567890"))
+        XCTAssertNil(service.normalizedPostURL("http://x.com/artist/status/1234567890"))
+    }
+
+    func testAITranslationRoundTripsAndOldReactionStillDecodes() throws {
+        let translation = AIPageTranslation(
+            detectedJapanese: true,
+            title: "本页日文翻译",
+            segments: [
+                AITranslationSegment(
+                    source: "おかえり！",
+                    translation: "欢迎回家！",
+                    role: .dialogue,
+                    speaker: "少女"
+                )
+            ],
+            note: "语气很亲近"
+        )
+        let reaction = AIPageReaction(
+            page: 0,
+            summary: "角色回到了家",
+            mood: "温暖",
+            danmaku: [],
+            talkingPoints: [],
+            translation: translation
+        )
+        let data = try JSONEncoder().encode(reaction)
+        let decoded = try JSONDecoder().decode(AIPageReaction.self, from: data)
+        XCTAssertEqual(decoded.translation?.segments.first?.translation, "欢迎回家！")
+
+        var legacy = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        legacy.removeValue(forKey: "translation")
+        let legacyData = try JSONSerialization.data(withJSONObject: legacy)
+        XCTAssertNil(try JSONDecoder().decode(AIPageReaction.self, from: legacyData).translation)
+    }
+
     func testCoordinatedCopyPreservesOriginalBytes() async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -327,6 +373,34 @@ final class BookModelTests: XCTestCase {
     }
 
     @MainActor
+    func testImportCanLandDirectlyInSelectedGroupAndFavorites() async throws {
+        let fileManager = FileManager.default
+        let root = fileManager.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let suiteName = "InkShelfPlacedImportTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer {
+            try? fileManager.removeItem(at: root)
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        try fileManager.createDirectory(at: root, withIntermediateDirectories: true)
+        let image = root.appendingPathComponent("来自 X 的珍藏.png")
+        try testPNG(color: .systemPink).write(to: image)
+        let store = LibraryStore(fileManager: fileManager, defaults: defaults, documentsURL: root)
+        let group = try XCTUnwrap(store.createShelfGroup(title: "画师收藏"))
+
+        store.importFiles([image], shelfGroupID: group.id, favoriteOnImport: true)
+        for _ in 0..<400 where store.isImporting {
+            try await Task.sleep(for: .milliseconds(25))
+        }
+
+        let imported = try XCTUnwrap(store.books.first)
+        XCTAssertEqual(imported.shelfGroupID, group.id)
+        XCTAssertTrue(imported.isFavorite)
+        XCTAssertEqual(store.filteredBooks(scope: .favorites, query: "").map(\.id), [imported.id])
+    }
+
+    @MainActor
     func testPageFavoritePersistsAndAppearsInFavoritePageItems() throws {
         let fileManager = FileManager.default
         let root = fileManager.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -509,6 +583,14 @@ final class BookModelTests: XCTestCase {
         XCTAssertFalse(release.isNewer(thanVersion: "1.9.0", build: 1))
         XCTAssertTrue(release.supports(systemVersion: "26.0.1"))
         XCTAssertTrue(release.preservesAppData)
+    }
+
+    func testBundledSharpModelUsesConfirmedPipeline() async throws {
+        let status = try await OnDeviceSharpProcessor.shared.status()
+        XCTAssertEqual(status.model, "realesrgan-x4plus-anime")
+        XCTAssertEqual(status.tileSize, 128)
+        XCTAssertEqual(status.upscale, 4)
+        XCTAssertEqual(status.finalScale, 2)
     }
 
     @MainActor

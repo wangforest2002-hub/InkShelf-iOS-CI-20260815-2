@@ -37,6 +37,8 @@ final class ReaderNavigationUITests: XCTestCase {
         }
         XCTAssertTrue(back.waitForExistence(timeout: 2), "Tapping a valid local book did not enter ReaderView")
         XCTAssertTrue(app.sliders["reader-progress"].exists, "Reader controls did not finish loading")
+        XCTAssertTrue(app.buttons["reader-ai-toggle"].exists, "The AI control is not a simple on/off button")
+        XCTAssertTrue(app.buttons["reader-sharp-enhance"].exists, "The Sharp current-page action is missing")
 
         XCTAssertTrue(app.buttons["reader-save-page"].waitForExistence(timeout: 2), "The current-page save action is missing")
         let pageFavorite = app.buttons["reader-page-favorite"]
