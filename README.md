@@ -1,0 +1,129 @@
+# 二次元小家 InkShelf
+
+二次元小家是一款面向 iPhone 与 iPad 的原生漫画、画集、PDF 和电子书阅读器。项目使用 SwiftUI、PDFKit、Vision、WebKit 与 UIKit 构建，最低支持 iOS 18；在最新 SDK 上会自动采用 Liquid Glass、浮动标签栏和新的系统动效。
+
+## 产品体验定义
+
+二次元小家希望让人打开应用时有“回到家”的放松感：清新但不冰冷，二次元但不喧闹。界面以晴空蓝、淡紫为主色，用奶油暖白、晨光蜜桃和轻木色补足温度；窗景、暖灯、书架和欢迎语只作为克制的空间线索，不遮挡作品封面。
+
+- 第一次进入是“欢迎回家”，而不是功能说明书。
+- 首页像一间有窗、有暖光的小阅读室，并根据早晨、午后和夜晚改变问候。
+- 上次阅读的书会显示“为你留着位置”，冷启动也会回到中断页。
+- 深色模式使用夜灯和月光氛围，保证文字、进度和按钮仍有足够对比度。
+- 默认动效包含窗外云朵漂移、灯光呼吸、暖光掠过、书卡依次归位和按压反馈；开启系统“减少动态效果”后自动收敛。
+
+## 阅读格式
+
+- PDF：保留并打开原文件，使用 PDFKit 矢量/原始页面渲染，不重新压缩。
+- 漫画与画集：CBZ、ZIP、JPG、PNG、HEIC、WebP、GIF、TIFF、BMP、AVIF 等常用图片格式。
+- 电子书：EPUB、TXT、HTML/HTM、Markdown、RTF、FB2。
+- 导入方式：文件、整个文件夹、照片图库、iCloud Drive 文件夹，以及私人服务器云书库。
+
+暂不支持带 DRM 的电子书，也不绕过 DRM；CBR/RAR/7z、MOBI 与 AZW3 尚未加入。
+
+## 主要功能
+
+- 单页/双页、封面单独显示、横向/纵向翻页、从左到右/日漫顺序。
+- PDF 与图片双指缩放，图片双击放大/还原；PDF 密码解锁和缩略图跳页。
+- 电子书分页/滚动模式、目录、全文章节搜索、字体、字号、行距、页边距、纸张/护眼/夜间主题。
+- 文件夹与漫画多图拼贴封面、画集总览、Quick Look 单图预览。
+- 书架搜索、收藏、重命名、阅读进度、原文件导出与屏幕常亮。
+- 动态字体、VoiceOver、减少动态效果适配和 iPad 指针悬停效果。
+
+## AI 陪读
+
+- 使用 Apple Vision 在本机识别页面文字、人脸和粗略画面标签。
+- DeepSeek V4 Pro 根据这些摘要生成页面弹幕、陪读对话和片末模拟讨论。
+- AI 生成的虚拟评论会明确标示为模拟内容，不冒充真实用户。
+- DeepSeek 密钥只保存在 iOS Keychain；App 不把 PDF 或整页原图直接上传给 AI。
+- AI 是可选功能，关闭后阅读器完全不发起 DeepSeek 请求。
+
+## iCloud Drive 书库
+
+“云书库”默认使用 iCloud。第一次在系统“文件”选择存放画集的 iCloud Drive 文件夹后，二次元小家会保存系统授予的文件夹访问权限：
+
+- 递归索引 PDF、CBZ、图片和电子书，只读取文件名、大小与更新时间，不预先复制整套书库。
+- 首次打开一本书时由 iCloud 下载原文件并显示进度，整理完成后使用与本地书籍完全相同的阅读引擎。
+- 已打开的书保留本地副本，之后可离线阅读；可以单独删除本地副本以释放空间。
+- 断开文件夹或删除本地副本不会修改、移动或删除 iCloud Drive 中的原文件。
+- 连接通过 iOS 文件选择器和 Apple ID 的系统权限完成，二次元小家不接触账号或密码，也不需要自建 iCloud 数据库。
+
+在 Windows 上，可先用 iCloud for Windows 把 `anmi`、`kantoku`、`rurudo`、`ももこ` 四个文件夹上传到同一个 iCloud Drive 文件夹；进入二次元小家后只需选择它们的上级文件夹。
+
+## 独立服务器书库
+
+“云书库”的“服务器”模式连接 `https://4-3rail.top/` 的二次元小家独立书库服务：
+
+- 不需要账号或密码，进入页面即可查看、上传、下载、删除和同步阅读进度。
+- 列表和小封面优先加载；原书首次打开时后台下载并显示进度。
+- 下载完成后导入本地原生阅读引擎，之后打开与本地书籍一致，断网也可继续阅读。
+- 服务器支持 HTTP Range、大文件流式传输和原文件字节级保存，不转码书籍。
+- 它不读取文档中心的代码、账号、Cookie、数据库、环境变量或审计记录。
+
+服务端扩展位于 `Server/`，线上安装在 `/home/admin/inkshelf-server`，以独立 systemd 服务运行在 `127.0.0.1:8001`，由 Nginx 仅代理 `/inkshelf-api/`。书籍存放在 `/home/admin/inkshelf-server/data/books`。
+
+按当前需求，服务端故意不设置访问密码。因此，任何知道地址的人都可以查看、上传和删除书籍；它适合个人使用，但不应把 API 地址公开传播。
+
+## “无损”的含义
+
+导入、上传和缓存均复制源文件字节，不对 PDF、图片或电子书重新编码。书架封面是单独生成的轻量缓存，不会替换或修改源文件。漫画压缩包会为本地阅读展开独立页面，但原压缩包仍然保留。
+
+## 云端生成 IPA（不需要本地 Mac）
+
+1. 打开 GitHub 仓库的 **Actions** 页面。
+2. 运行 **Build unsigned IPA**，或推送到 `main` 自动触发。
+3. 构建完成后下载 `InkShelf-unsigned-ipa` artifact。
+4. 使用个人证书或侧载工具为无签名 IPA 签名并安装。
+
+工作流使用 GitHub macOS runner、XcodeGen 和可用的最新 Xcode SDK；同时运行单元测试、模拟器构建和真机 Release 构建。
+
+## 在线覆盖更新
+
+从 1.9.0 起，设置中提供“在线更新”中心。应用从独立的 `https://4-3rail.top/inkshelf-update/` 发布通道读取版本信息；发现新版本后会先在 App Documents 内备份 `library.json`、`shelf-groups.json` 和更新安全清单，再通过 iOS 的安装服务覆盖应用本体。
+
+- 必须使用和已安装版本相同的 Bundle ID（`com.inkshelf.reader`）及兼容的签名描述文件。
+- 覆盖安装不会删除 Documents、UserDefaults 或书籍缓存；用户不可先从桌面删除旧应用。
+- iOS 不允许应用修改自己的已签名程序包，所以程序更新发布完整的已签名 IPA，而不是在本机拼接二进制补丁。
+- 发布入口只接受 SSH，公开地址仅提供只读版本元数据、manifest 和 IPA 下载。
+
+发布新的已签名 IPA：
+
+```powershell
+.\scripts\Publish-OnlineUpdate.ps1 -SignedIpa "D:\path\二次元小家-signed.ipa" -Version "1.9.1" -Build 15 -Notes "阅读体验优化","问题修复"
+```
+
+## X 图片珍藏与 Sharp 清晰化
+
+- 在书架分组内发起导入，新读物会直接进入当前分组；从“珍藏”页导入的个人图片会自动标为珍藏。
+- “从 X 收藏帖子图片”通过独立的 `/inkshelf-media/` 通道读取公开帖子，先预览、勾选，再下载原图；不接触 X 登录信息。
+- 阅读页右上角 AI 按钮是单击开关。开启后，本机 Vision OCR 会识别中文、日文和英文；识别到日文时，DeepSeek V4 Pro 会同时生成按对白、旁白、拟声分类的自然中文翻译并缓存。
+- 当前图片或 PDF 页默认直接在 iPhone/iPad 本地使用 Core ML 分块清晰化，原图不离开设备。固定使用 `realesrgan-x4plus-anime` 放大 4 倍，再以 Lanczos 缩回 2 倍并保存无损 PNG；完成结果自动进入珍藏。
+- 超大页面超过设备安全内存限制时，可以选填自己的 Windows 电脑桥作为自动备用。运行：
+
+```powershell
+.\scripts\Start-InkShelfSharpBridge.ps1
+```
+
+然后在应用“设置 → Sharp 图片清晰化”填写窗口显示的局域网地址。内置模型和电脑桥都会核验模型、Profile 和倍率，不会换用普通 `realesrgan-x4plus` 或 `animevideov3`。
+
+## 本地 Mac 构建（可选）
+
+```sh
+brew install xcodegen
+xcodegen generate
+open InkShelf.xcodeproj
+```
+
+在 Xcode 的 Signing & Capabilities 中选择自己的 Team 后即可安装到设备。
+
+## 本机数据位置
+
+导入、iCloud 按需下载和服务器缓存内容保存在 App Documents 下的 `InkShelf Library`：
+
+- PDF：`<book-id>/source.pdf`
+- CBZ/ZIP：`<book-id>/source.cbz|zip` 与 `<book-id>/pages/`
+- 图片画集：`<book-id>/pages/`
+- 电子书：`<book-id>/source.*`、解析资源与 `ebook.json`
+- 元数据：`library.json`
+
+启用了文件共享，必要时可通过系统文件管理或设备备份取回内容。删除本地书架项目只会删除该项目的本地副本；iCloud 原文件保持不变。删除服务器项目则会单独确认，而且不会删除已经缓存的本地副本。

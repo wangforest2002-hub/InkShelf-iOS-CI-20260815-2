@@ -1,0 +1,31 @@
+name: Convert Sharp Core ML model
+
+on:
+  workflow_dispatch:
+
+jobs:
+  convert:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Install pinned conversion tools
+        run: |
+          python3 -m venv .venv
+          .venv/bin/python -m pip install torch==2.5.0 coremltools==8.3.0 numpy==1.26.4
+      - name: Convert the official checked model
+        run: |
+          .venv/bin/python scripts/convert_realesrgan_anime_coreml.py \
+            --output RealESRGANAnimeSharp.mlpackage
+          test -f RealESRGANAnimeSharp.mlpackage/Manifest.json
+          du -sh RealESRGANAnimeSharp.mlpackage
+      - name: Upload converted model
+        uses: actions/upload-artifact@v4
+        with:
+          name: RealESRGANAnimeSharp-CoreML
+          path: RealESRGANAnimeSharp.mlpackage
+          if-no-files-found: error
+          retention-days: 7

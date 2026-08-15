@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <title>二次元小家 · 更新</title>
+  <style>
+    :root { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC", sans-serif; color: #513c32; background: #fff8ed; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: radial-gradient(circle at 20% 10%, #ffe3d2, transparent 34%), radial-gradient(circle at 80% 82%, #dff6f4, transparent 38%), #fff9ef; }
+    main { width: min(88vw, 520px); padding: 30px; border: 1px solid #ffffffb8; border-radius: 30px; background: #ffffffa6; box-shadow: 0 22px 70px #b8876324; backdrop-filter: blur(24px); }
+    .icon { width: 76px; height: 76px; display: grid; place-items: center; border-radius: 25px; background: linear-gradient(145deg,#ffbc86,#75d9cd); color: white; font-size: 36px; }
+    h1 { margin: 22px 0 5px; font-size: 30px; }
+    .muted { color: #8b7a70; line-height: 1.65; }
+    ul { padding-left: 1.25em; line-height: 1.8; }
+    a { display: block; margin-top: 22px; padding: 15px 18px; border-radius: 18px; text-align: center; color: white; background: #3d8df5; text-decoration: none; font-weight: 700; }
+    a[hidden] { display: none; }
+    .safe { margin-top: 18px; padding: 13px 15px; border-radius: 16px; background: #6ed0b71e; color: #318c75; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="icon">⌂</div>
+    <h1>二次元小家</h1>
+    <p id="version" class="muted">正在查看最新版本…</p>
+    <ul id="notes"></ul>
+    <div class="safe">覆盖更新会保留书架、画册缓存、收藏和阅读记录。请勿先删除旧应用。</div>
+    <a id="install" hidden>在线更新</a>
+    <p id="waiting" class="muted"></p>
+  </main>
+  <script>
+    fetch('/inkshelf-update/latest.json', { cache: 'no-store' })
+      .then(response => response.json())
+      .then(release => {
+        document.querySelector('#version').textContent = `最新版本 ${release.version}（${release.build}）`;
+        document.querySelector('#notes').innerHTML = release.notes.map(note => `<li>${note}</li>`).join('');
+        if (release.install_url) {
+          const button = document.querySelector('#install');
+          button.href = release.install_url;
+          button.hidden = false;
+        } else {
+          document.querySelector('#waiting').textContent = '安装包正在签名发布。';
+        }
+      })
+      .catch(() => document.querySelector('#version').textContent = '暂时无法获取版本信息');
+  </script>
+</body>
+</html>

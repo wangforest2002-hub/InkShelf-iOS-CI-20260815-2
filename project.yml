@@ -1,0 +1,183 @@
+name: InkShelf
+
+options:
+  bundleIdPrefix: com.inkshelf
+  deploymentTarget:
+    iOS: "18.0"
+  developmentLanguage: zh-Hans
+  xcodeVersion: "27.0"
+  createIntermediateGroups: true
+
+configs:
+  Debug: debug
+  Release: release
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    SWIFT_STRICT_CONCURRENCY: targeted
+    IPHONEOS_DEPLOYMENT_TARGET: "18.0"
+    TARGETED_DEVICE_FAMILY: "1,2"
+    SUPPORTS_MACCATALYST: false
+    ENABLE_USER_SCRIPT_SANDBOXING: true
+    ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS: true
+    LOCALIZATION_PREFERS_STRING_CATALOGS: true
+
+packages:
+  ZIPFoundation:
+    url: https://github.com/weichsel/ZIPFoundation.git
+    exactVersion: 0.9.20
+
+targets:
+  InkShelf:
+    type: application
+    platform: iOS
+    sources:
+      - path: InkShelf
+        excludes:
+          - Resources
+      - path: InkShelf/Resources/Assets.xcassets
+        buildPhase: resources
+    dependencies:
+      - package: ZIPFoundation
+    info:
+      path: InkShelf/Resources/Info.plist
+      properties:
+        CFBundleDisplayName: 二次元小家
+        CFBundleURLTypes:
+          - CFBundleTypeRole: Viewer
+            CFBundleURLName: com.inkshelf.reader.social-import
+            CFBundleURLSchemes:
+              - nijigenhome
+        CFBundleShortVersionString: "1.9.0"
+        CFBundleVersion: "14"
+        NSPhotoLibraryAddUsageDescription: 用于把你喜欢的当前画面保存到系统照片图库。
+        NSLocalNetworkUsageDescription: 用于连接你自己的 Windows 电脑，按 Sharp 方案清晰化当前图片。
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        LSRequiresIPhoneOS: true
+        LSSupportsOpeningDocumentsInPlace: true
+        UIFileSharingEnabled: true
+        UIApplicationSupportsIndirectInputEvents: true
+        UIRequiresFullScreen: false
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: PDF 文档
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes:
+              - com.adobe.pdf
+          - CFBundleTypeName: 漫画压缩包
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes:
+              - com.inkshelf.cbz
+              - public.zip-archive
+          - CFBundleTypeName: 图片
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes:
+              - public.image
+          - CFBundleTypeName: EPUB 电子书
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes:
+              - org.idpf.epub-container
+          - CFBundleTypeName: 文本电子书
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes:
+              - public.plain-text
+              - public.html
+              - public.rtf
+              - net.daringfireball.markdown
+              - org.fictionbook.fb2
+        UTImportedTypeDeclarations:
+          - UTTypeIdentifier: org.idpf.epub-container
+            UTTypeDescription: EPUB 电子书
+            UTTypeConformsTo:
+              - public.zip-archive
+            UTTypeTagSpecification:
+              public.filename-extension:
+                - epub
+              public.mime-type:
+                - application/epub+zip
+          - UTTypeIdentifier: com.inkshelf.cbz
+            UTTypeDescription: Comic Book Archive
+            UTTypeConformsTo:
+              - public.zip-archive
+            UTTypeTagSpecification:
+              public.filename-extension:
+                - cbz
+              public.mime-type:
+                - application/vnd.comicbook+zip
+          - UTTypeIdentifier: org.fictionbook.fb2
+            UTTypeDescription: FictionBook 电子书
+            UTTypeConformsTo:
+              - public.xml
+            UTTypeTagSpecification:
+              public.filename-extension:
+                - fb2
+              public.mime-type:
+                - application/x-fictionbook+xml
+          - UTTypeIdentifier: net.daringfireball.markdown
+            UTTypeDescription: Markdown 文档
+            UTTypeConformsTo:
+              - public.plain-text
+            UTTypeTagSpecification:
+              public.filename-extension:
+                - md
+                - markdown
+              public.mime-type:
+                - text/markdown
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.inkshelf.reader
+        PRODUCT_NAME: InkShelf
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: ""
+      Release:
+        SWIFT_COMPILATION_MODE: wholemodule
+        SWIFT_OPTIMIZATION_LEVEL: -O
+    scheme:
+      testTargets:
+        - InkShelfTests
+        - InkShelfUITests
+      gatherCoverageData: true
+
+  InkShelfTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: InkShelfTests
+    dependencies:
+      - target: InkShelf
+      - package: ZIPFoundation
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.inkshelf.reader.tests
+        GENERATE_INFOPLIST_FILE: true
+
+  InkShelfUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: InkShelfUITests
+    dependencies:
+      - target: InkShelf
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.inkshelf.reader.uitests
+        GENERATE_INFOPLIST_FILE: true
+        TEST_TARGET_NAME: InkShelf
