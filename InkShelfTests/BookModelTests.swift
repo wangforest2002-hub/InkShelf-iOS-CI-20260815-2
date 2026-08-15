@@ -1,4 +1,5 @@
 import XCTest
+import ImageIO
 import UniformTypeIdentifiers
 import UIKit
 import ZIPFoundation
@@ -591,6 +592,32 @@ final class BookModelTests: XCTestCase {
         XCTAssertEqual(status.tileSize, 128)
         XCTAssertEqual(status.upscale, 4)
         XCTAssertEqual(status.finalScale, 2)
+    }
+
+    @MainActor
+    func testOnDeviceSharpProducesLosslessTwoTimesPNG() async throws {
+        let fileManager = FileManager.default
+        let inputRoot = fileManager.temporaryDirectory
+            .appendingPathComponent("InkShelfSharpTest-\(UUID().uuidString)", isDirectory: true)
+        try fileManager.createDirectory(at: inputRoot, withIntermediateDirectories: true)
+        defer { try? fileManager.removeItem(at: inputRoot) }
+        let inputURL = inputRoot.appendingPathComponent("source.png")
+        try testPNG(color: .systemPink).write(to: inputURL, options: .atomic)
+
+        let result = try await OnDeviceSharpProcessor.shared.enhance(
+            source: .image(inputURL),
+            outputName: "device-smoke.png"
+        )
+        defer { try? fileManager.removeItem(at: result.temporaryRoot) }
+        XCTAssertEqual(result.executionLocation, .device)
+        XCTAssertEqual(result.outputURL.pathExtension.lowercased(), "png")
+
+        let data = try Data(contentsOf: result.outputURL)
+        XCTAssertEqual(Array(data.prefix(8)), [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
+        let source = try XCTUnwrap(CGImageSourceCreateWithURL(result.outputURL as CFURL, nil))
+        let properties = try XCTUnwrap(CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any])
+        XCTAssertEqual(properties[kCGImagePropertyPixelWidth] as? Int, 96)
+        XCTAssertEqual(properties[kCGImagePropertyPixelHeight] as? Int, 128)
     }
 
     @MainActor
