@@ -358,7 +358,7 @@ private struct RemoteCover: View {
         AsyncImage(url: coverURL, transaction: Transaction(animation: .smooth)) { phase in
             switch phase {
             case .success(let image):
-                image.resizable().scaledToFill()
+                AdaptiveCoverImage(image: image)
             case .empty:
                 ZStack {
                     placeholder

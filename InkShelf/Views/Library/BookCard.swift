@@ -119,13 +119,42 @@ struct CoverArtwork: View {
         Group {
             if let firstImageURL = coverURL ?? previewURLs.first,
                let image = UIImage(contentsOfFile: firstImageURL.path) {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFill()
+                AdaptiveCoverImage(image: Image(uiImage: image))
             } else {
                 PlaceholderCover(book: book)
             }
         }
+        .background(Color(.secondarySystemBackground))
+    }
+}
+
+/// Keeps every cover's original composition inside the shelf's portrait card.
+/// Landscape and unusually narrow artwork is letterboxed over a soft extension
+/// of itself, so it never gets stretched or aggressively cropped.
+struct AdaptiveCoverImage: View {
+    let image: Image
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack {
+                image
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: proxy.size.width, height: proxy.size.height)
+                    .scaleEffect(1.12)
+                    .saturation(0.82)
+                    .blur(radius: 18)
+                    .overlay(Color.black.opacity(0.10))
+                    .accessibilityHidden(true)
+
+                image
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: proxy.size.width, height: proxy.size.height)
+                    .shadow(color: .black.opacity(0.10), radius: 4, y: 1)
+            }
+        }
+        .clipped()
         .background(Color(.secondarySystemBackground))
     }
 }

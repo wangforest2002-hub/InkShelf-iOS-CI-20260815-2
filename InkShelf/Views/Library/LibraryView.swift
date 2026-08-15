@@ -551,9 +551,7 @@ private struct ContinueReadingCard: View {
         HStack(spacing: 16) {
             Group {
                 if let coverURL, let image = UIImage(contentsOfFile: coverURL.path) {
-                    Image(uiImage: image)
-                        .resizable()
-                        .scaledToFill()
+                    AdaptiveCoverImage(image: Image(uiImage: image))
                 } else {
                     LinearGradient(
                         colors: [AppTheme.accent.opacity(0.75), .cyan.opacity(0.5)],

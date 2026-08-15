@@ -87,7 +87,7 @@ private struct StorageBookRow: View {
         HStack(spacing: 13) {
             Group {
                 if let coverURL, let image = UIImage(contentsOfFile: coverURL.path) {
-                    Image(uiImage: image).resizable().scaledToFill()
+                    AdaptiveCoverImage(image: Image(uiImage: image))
                 } else {
                     Image(systemName: book.kind.systemImage)
                         .foregroundStyle(AppTheme.accent)
