@@ -34,6 +34,24 @@ try {
     if (-not ($names -match '^Payload/[^/]+\.app/embedded\.mobileprovision$')) {
         throw "IPA 没有内嵌描述文件，无法在线安装。"
     }
+
+    $infoEntry = $archive.Entries | Where-Object FullName -Match '^Payload/[^/]+\.app/Info\.plist$' | Select-Object -First 1
+    $profileEntry = $archive.Entries | Where-Object FullName -Match '^Payload/[^/]+\.app/embedded\.mobileprovision$' | Select-Object -First 1
+    foreach ($entry in @($infoEntry, $profileEntry)) {
+        if ($null -eq $entry) { throw "IPA 缺少应用身份信息。" }
+        $stream = $entry.Open()
+        $memory = [IO.MemoryStream]::new()
+        try {
+            $stream.CopyTo($memory)
+            $identityText = [Text.Encoding]::UTF8.GetString($memory.ToArray())
+            if (-not $identityText.Contains($bundleIdentifier, [StringComparison]::Ordinal)) {
+                throw "IPA 的 Bundle ID 不是 $bundleIdentifier；为避免覆盖到错误应用，已停止发布。"
+            }
+        } finally {
+            $memory.Dispose()
+            $stream.Dispose()
+        }
+    }
 } finally {
     $archive.Dispose()
 }
