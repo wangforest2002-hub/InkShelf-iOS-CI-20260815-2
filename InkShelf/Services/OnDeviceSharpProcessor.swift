@@ -96,7 +96,7 @@ actor OnDeviceSharpProcessor {
                 let provider = try MLDictionaryFeatureProvider(dictionary: [
                     "input": MLFeatureValue(pixelBuffer: inputBuffer)
                 ])
-                let prediction = try model.prediction(from: provider)
+                let prediction = try await model.prediction(from: provider)
                 guard let fourXBuffer = prediction.featureValue(for: "output")?.imageBufferValue else {
                     throw OnDeviceSharpError.invalidModelOutput
                 }
