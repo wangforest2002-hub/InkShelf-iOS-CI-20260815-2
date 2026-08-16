@@ -15,6 +15,8 @@ jobs:
   build:
     runs-on: macos-26
     timeout-minutes: 30
+    env:
+      IOS_SIGNING_ENABLED: ${{ secrets.IOS_P12_BASE64 != '' && secrets.IOS_MOBILEPROVISION_BASE64 != '' }}
 
     steps:
       - name: Checkout
@@ -177,6 +179,7 @@ jobs:
           retention-days: 30
 
       - name: Import private iOS signing identity
+        if: env.IOS_SIGNING_ENABLED == 'true'
         env:
           IOS_P12_BASE64: ${{ secrets.IOS_P12_BASE64 }}
           IOS_P12_PASSWORD: ${{ secrets.IOS_P12_PASSWORD }}
@@ -209,6 +212,7 @@ jobs:
           echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
 
       - name: Sign and verify the device IPA
+        if: env.IOS_SIGNING_ENABLED == 'true'
         run: |
           set -euo pipefail
           APP_PATH="build/Build/Products/Release-iphoneos/InkShelf.app"
@@ -244,6 +248,7 @@ jobs:
           (cd SignedPackage && ditto -c -k --sequesterRsrc --keepParent Payload "$GITHUB_WORKSPACE/InkShelf-signed.ipa")
 
       - name: Upload signed IPA
+        if: env.IOS_SIGNING_ENABLED == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: InkShelf-signed-ipa
