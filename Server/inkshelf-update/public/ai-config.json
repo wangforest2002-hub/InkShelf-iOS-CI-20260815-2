@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "revision": 1,
+  "minimum_build": 15,
+  "request_timeout_seconds": 24,
+  "maximum_attempts": 3,
+  "retry_base_delay_ms": 650
+}

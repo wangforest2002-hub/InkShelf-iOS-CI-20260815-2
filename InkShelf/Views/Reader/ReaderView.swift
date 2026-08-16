@@ -151,6 +151,7 @@ struct ReaderView: View {
                     ebookFlow: ebookFlow,
                     isEBook: book.kind == .ebook,
                     aiEnabled: aiEnabled && companion.hasAPIKey,
+                    aiActivity: companion.currentBookID == book.id ? companion.activity : .idle,
                     isFavorite: favoriteState,
                     isPageFavorite: pageFavoriteState,
                     canUsePageActions: book.kind != .ebook && !pdfLocked,
@@ -292,6 +293,10 @@ struct ReaderView: View {
                   !showAICompanion
             else { return }
             showEndComments = true
+        }
+        .onChange(of: companion.errorMessage) { _, message in
+            guard aiEnabled, let message, !message.isEmpty else { return }
+            showNotice(message)
         }
         .onChange(of: achievements.latestUnlock?.id) { _, newValue in
             guard newValue != nil else { return }
@@ -550,7 +555,7 @@ struct ReaderView: View {
         }
         aiEnabled = true
         prepareAIPage(force: true)
-        showNotice("AI 陪读已开启")
+        showNotice("AI 陪读已开启 · 正在理解本页")
     }
 
     private func prepareAIPage(force: Bool = false) {
@@ -654,6 +659,7 @@ private struct ReaderControls: View {
     let ebookFlow: EBookFlow
     let isEBook: Bool
     let aiEnabled: Bool
+    let aiActivity: AICompanionActivity
     let isFavorite: Bool
     let isPageFavorite: Bool
     let canUsePageActions: Bool
@@ -697,14 +703,22 @@ private struct ReaderControls: View {
                     Spacer(minLength: 4)
 
                     Button { perform(toggleAI) } label: {
-                        Image(systemName: aiEnabled ? "sparkles.square.fill" : "sparkles")
-                            .foregroundStyle(aiEnabled ? AppTheme.accent : .secondary)
-                            .frame(width: 34, height: 34)
-                            .contentTransition(.symbolEffect(.replace))
+                        ZStack {
+                            Image(systemName: aiEnabled ? "sparkles.square.fill" : "sparkles")
+                                .foregroundStyle(aiEnabled ? AppTheme.accent : .secondary)
+                                .opacity(aiActivity.isBusy ? 0.18 : 1)
+                                .contentTransition(.symbolEffect(.replace))
+                            if aiEnabled, aiActivity.isBusy {
+                                ProgressView()
+                                    .controlSize(.small)
+                                    .tint(AppTheme.accent)
+                            }
+                        }
+                        .frame(width: 34, height: 34)
                     }
                     .adaptiveGlassButton()
                     .accessibilityIdentifier("reader-ai-toggle")
-                    .accessibilityLabel(aiEnabled ? "关闭 AI 陪读" : "开启 AI 陪读")
+                    .accessibilityLabel(aiActivity.isBusy ? "AI 正在理解当前页，点按关闭" : (aiEnabled ? "关闭 AI 陪读" : "开启 AI 陪读"))
 
                     Button { perform(toggleFavorite) } label: {
                         Image(systemName: isFavorite ? "star.fill" : "star")

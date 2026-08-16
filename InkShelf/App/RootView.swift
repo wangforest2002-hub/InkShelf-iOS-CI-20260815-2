@@ -41,6 +41,9 @@ struct RootView: View {
                 guard hasSeenWelcome, library.interruptedReadingBook == nil else { return }
                 await offerUpdateIfAvailable()
             }
+            .task {
+                _ = await AIReliabilityConfigurationService.shared.refresh()
+            }
             .sheet(item: $updatePrompt) { release in
                 AppUpdatePromptView(release: release)
             }

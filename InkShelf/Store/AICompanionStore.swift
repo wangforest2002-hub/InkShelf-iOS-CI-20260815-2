@@ -17,6 +17,8 @@ final class AICompanionStore {
     private(set) var isWriting = false
     var errorMessage: String?
 
+    var selectedModelTitle: String { requestSettings.model.title }
+
     @ObservationIgnored private static let keyAccount = "deepseek-api-key"
     @ObservationIgnored private var pageTask: Task<Void, Never>?
     @ObservationIgnored private var discussionTask: Task<Void, Never>?
@@ -88,8 +90,10 @@ final class AICompanionStore {
             return
         }
 
+        activity = .readingPage(page)
+
         pageTask = Task { [weak self] in
-            try? await Task.sleep(for: .milliseconds(force ? 80 : 850))
+            try? await Task.sleep(for: .milliseconds(force ? 20 : 280))
             guard !Task.isCancelled, let self else { return }
             await self.loadOrGeneratePage(force: force)
         }
@@ -140,6 +144,10 @@ final class AICompanionStore {
             chatMessages.append(AIChatMessage(role: .companion, text: answer))
         } catch {
             errorMessage = error.localizedDescription
+            chatMessages.append(AIChatMessage(
+                role: .companion,
+                text: "云端刚刚没有回应。问题已经保留，网络恢复后可以再发一次，我仍会陪你看这一页。"
+            ))
         }
         activity = .idle
     }
@@ -236,17 +244,34 @@ final class AICompanionStore {
         }
 
         activity = .readingPage(context.page)
+        let insight: AIPageInsight
         do {
-            let insight = try await PageInsightService.shared.analyze(
+            insight = try await PageInsightService.shared.analyze(
                 source: context.source,
                 page: context.page,
                 pageCount: context.pageCount
             )
-            guard !Task.isCancelled,
-                  currentBookID == context.book.id,
-                  currentPage == context.page
-            else { return }
+        } catch is CancellationError {
+            activity = .idle
+            return
+        } catch {
+            insight = AIPageInsight(
+                page: context.page,
+                pageCount: context.pageCount,
+                recognizedText: "",
+                visualLabels: [],
+                faceCount: 0,
+                sourceKind: context.book.kind.label
+            )
+        }
 
+        guard !Task.isCancelled,
+              currentBookID == context.book.id,
+              currentPage == context.page
+        else { return }
+        currentInsight = insight
+
+        do {
             let recent = reactions.values
                 .filter { $0.page < context.page }
                 .sorted { $0.page < $1.page }
@@ -272,7 +297,9 @@ final class AICompanionStore {
             activity = .idle
         } catch {
             guard currentBookID == context.book.id, currentPage == context.page else { return }
-            errorMessage = error.localizedDescription
+            currentInsight = insight
+            currentReaction = LocalCompanionFallback.pageReaction(insight: insight, settings: settings)
+            errorMessage = "云端暂时没回应，已切换本地陪伴；点刷新可以重试。"
             activity = .idle
         }
     }
@@ -306,7 +333,11 @@ final class AICompanionStore {
             // Page navigation can cancel a pending discussion without surfacing an error.
         } catch {
             guard currentBookID == context.book.id else { return }
-            errorMessage = error.localizedDescription
+            endDiscussion = LocalCompanionFallback.endDiscussion(
+                bookTitle: context.book.title,
+                pageCount: context.pageCount
+            )
+            errorMessage = "云端暂时没回应，先生成了本地片尾评论。"
         }
         activity = .idle
     }

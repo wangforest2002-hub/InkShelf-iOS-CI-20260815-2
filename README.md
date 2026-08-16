@@ -81,6 +81,8 @@
 
 从 1.9.0 起，设置中提供“在线更新”中心。应用从独立的 `https://4-3rail.top/inkshelf-update/` 发布通道读取版本信息；发现新版本后会先在 App Documents 内备份 `library.json`、`shelf-groups.json` 和更新安全清单，再通过 iOS 的安装服务覆盖应用本体。
 
+从 1.9.1 起，AI 请求的超时与重试策略还可通过 `ai-config.json` 安全在线调优。配置仅能在应用限定的范围内生效，不会下载或执行远程代码；界面和原生功能更新仍使用已签名 IPA 覆盖安装。
+
 - 必须使用和已安装版本相同的 Bundle ID（`com.inkshelf.reader`）及兼容的签名描述文件。
 - 覆盖安装不会删除 Documents、UserDefaults 或书籍缓存；用户不可先从桌面删除旧应用。
 - iOS 不允许应用修改自己的已签名程序包，所以程序更新发布完整的已签名 IPA，而不是在本机拼接二进制补丁。

@@ -153,7 +153,8 @@ jobs:
         run: |
           APP_PATH="build/Build/Products/Release-iphoneos/InkShelf.app"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$APP_PATH/Info.plist")" = "二次元小家"
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Info.plist")" = "1.9.0"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Info.plist")" = "1.9.1"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_PATH/Info.plist")" = "15"
           /usr/libexec/PlistBuddy -c 'Print :CFBundleIcons' "$APP_PATH/Info.plist" >/dev/null
           find "$APP_PATH" -maxdepth 1 -type f \( -name 'AppIcon*.png' -o -name 'Assets.car' \) | grep -q .
           test -d "$APP_PATH/RealESRGANAnimeSharp.mlmodelc"
@@ -174,3 +175,78 @@ jobs:
           path: InkShelf-unsigned.ipa
           if-no-files-found: error
           retention-days: 30
+
+      - name: Import private iOS signing identity
+        env:
+          IOS_P12_BASE64: ${{ secrets.IOS_P12_BASE64 }}
+          IOS_P12_PASSWORD: ${{ secrets.IOS_P12_PASSWORD }}
+          IOS_MOBILEPROVISION_BASE64: ${{ secrets.IOS_MOBILEPROVISION_BASE64 }}
+        run: |
+          set -euo pipefail
+          test -n "$IOS_P12_BASE64"
+          test -n "$IOS_MOBILEPROVISION_BASE64"
+          SIGNING_ROOT="$RUNNER_TEMP/inkshelf-signing"
+          mkdir -p "$SIGNING_ROOT"
+          printf '%s' "$IOS_P12_BASE64" | base64 --decode > "$SIGNING_ROOT/signing.p12"
+          printf '%s' "$IOS_MOBILEPROVISION_BASE64" | base64 --decode > "$SIGNING_ROOT/profile.mobileprovision"
+          KEYCHAIN_PATH="$SIGNING_ROOT/build.keychain-db"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$SIGNING_ROOT/signing.p12" \
+            -k "$KEYCHAIN_PATH" \
+            -P "$IOS_P12_PASSWORD" \
+            -A \
+            -T /usr/bin/codesign
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign: \
+            -s \
+            -k "$KEYCHAIN_PASSWORD" \
+            "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH"
+          echo "SIGNING_ROOT=$SIGNING_ROOT" >> "$GITHUB_ENV"
+          echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
+
+      - name: Sign and verify the device IPA
+        run: |
+          set -euo pipefail
+          APP_PATH="build/Build/Products/Release-iphoneos/InkShelf.app"
+          PROFILE="$SIGNING_ROOT/profile.mobileprovision"
+          PROFILE_PLIST="$SIGNING_ROOT/profile.plist"
+          ENTITLEMENTS="$SIGNING_ROOT/entitlements.plist"
+          security cms -D -i "$PROFILE" > "$PROFILE_PLIST"
+          PROFILE_APP_ID=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' "$PROFILE_PLIST")
+          test "${PROFILE_APP_ID#*.}" = "com.inkshelf.reader"
+          /usr/libexec/PlistBuddy -x -c 'Print :Entitlements' "$PROFILE_PLIST" > "$ENTITLEMENTS"
+          cp "$PROFILE" "$APP_PATH/embedded.mobileprovision"
+          IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | awk '/[0-9A-F]{40}/ {print $2; exit}')
+          test -n "$IDENTITY"
+          while IFS= read -r -d '' NESTED; do
+            codesign --force --sign "$IDENTITY" --timestamp=none "$NESTED"
+          done < <(find "$APP_PATH" -depth \( -name '*.framework' -o -name '*.appex' -o -name '*.dylib' \) -print0)
+          codesign \
+            --force \
+            --sign "$IDENTITY" \
+            --entitlements "$ENTITLEMENTS" \
+            --generate-entitlement-der \
+            --timestamp=none \
+            "$APP_PATH"
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+          SIGNED_BUNDLE_ID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP_PATH/Info.plist")
+          SIGNED_VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Info.plist")
+          SIGNED_BUILD=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_PATH/Info.plist")
+          test "$SIGNED_BUNDLE_ID" = "com.inkshelf.reader"
+          test "$SIGNED_VERSION" = "1.9.1"
+          test "$SIGNED_BUILD" = "15"
+          mkdir -p SignedPackage/Payload
+          cp -R "$APP_PATH" SignedPackage/Payload/
+          (cd SignedPackage && ditto -c -k --sequesterRsrc --keepParent Payload "$GITHUB_WORKSPACE/InkShelf-signed.ipa")
+
+      - name: Upload signed IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: InkShelf-signed-ipa
+          path: InkShelf-signed.ipa
+          if-no-files-found: error
+          retention-days: 14

@@ -150,8 +150,49 @@ final class BookModelTests: XCTestCase {
 
         var legacy = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
         legacy.removeValue(forKey: "translation")
+        legacy.removeValue(forKey: "source")
         let legacyData = try JSONSerialization.data(withJSONObject: legacy)
-        XCTAssertNil(try JSONDecoder().decode(AIPageReaction.self, from: legacyData).translation)
+        let legacyReaction = try JSONDecoder().decode(AIPageReaction.self, from: legacyData)
+        XCTAssertNil(legacyReaction.translation)
+        XCTAssertNil(legacyReaction.source)
+        XCTAssertFalse(legacyReaction.isLocalFallback)
+    }
+
+    func testAIReliabilityConfigurationRejectsUnsafeRemoteValues() {
+        XCTAssertNotNil(AIReliabilityConfiguration.bundled.validated(forBuild: 15))
+        let unsafe = AIReliabilityConfiguration(
+            schema: 1,
+            revision: 1,
+            minimumBuild: 15,
+            requestTimeoutSeconds: 5,
+            maximumAttempts: 20,
+            retryBaseDelayMilliseconds: 1
+        )
+        XCTAssertNil(unsafe.validated(forBuild: 15))
+    }
+
+    func testLocalCompanionFallbackAlwaysProducesVisiblePageContent() {
+        let insight = AIPageInsight(
+            page: 4,
+            pageCount: 20,
+            recognizedText: "おかえり",
+            visualLabels: ["illustration"],
+            faceCount: 1,
+            sourceKind: "画集"
+        )
+        let settings = DeepSeekPageSettings(
+            model: .pro,
+            persona: .friend,
+            density: .balanced,
+            strictSpoilers: true,
+            includeRecognizedText: true,
+            allowsCellularAccess: true
+        )
+        let reaction = LocalCompanionFallback.pageReaction(insight: insight, settings: settings)
+        XCTAssertTrue(reaction.isLocalFallback)
+        XCTAssertEqual(reaction.page, 4)
+        XCTAssertEqual(reaction.danmaku.count, AIDanmakuDensity.balanced.messageCount)
+        XCTAssertFalse(reaction.summary.isEmpty)
     }
 
     func testCoordinatedCopyPreservesOriginalBytes() async throws {

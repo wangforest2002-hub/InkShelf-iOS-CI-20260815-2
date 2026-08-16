@@ -49,12 +49,19 @@ struct AICompanionPanel: View {
                     }
 
                     if let error = companion.errorMessage {
-                        Label(error, systemImage: "exclamationmark.triangle.fill")
-                            .font(.footnote)
-                            .foregroundStyle(.red)
-                            .padding(14)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 16))
+                        HStack(spacing: 12) {
+                            Label(error, systemImage: "wifi.exclamationmark")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                            Spacer(minLength: 4)
+                            Button("重试") { companion.regenerateCurrentPage() }
+                                .buttonStyle(.bordered)
+                                .buttonBorderShape(.capsule)
+                                .disabled(companion.activity.isBusy)
+                        }
+                        .padding(14)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(AppTheme.accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 16))
                     }
 
                     ForEach(companion.chatMessages) { message in
@@ -126,7 +133,7 @@ struct AICompanionPanel: View {
             .frame(width: 42, height: 42)
             VStack(alignment: .leading, spacing: 3) {
                 Text(bookTitle).font(.headline).lineLimit(1)
-                Text("第 \(page + 1) / \(pageCount) 页 · DeepSeek V4 Pro")
+                Text("第 \(page + 1) / \(pageCount) 页 · \(companion.selectedModelTitle)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -140,7 +147,7 @@ struct AICompanionPanel: View {
                     .font(.caption.weight(.bold))
                     .foregroundStyle(AppTheme.accent)
                 Spacer()
-                Text("本机识别 + AI")
+                Text(reaction.isLocalFallback ? "本地轻陪伴" : "本机识别 + DeepSeek")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }

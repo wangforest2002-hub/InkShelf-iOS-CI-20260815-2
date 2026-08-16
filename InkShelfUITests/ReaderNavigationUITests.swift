@@ -37,7 +37,12 @@ final class ReaderNavigationUITests: XCTestCase {
         }
         XCTAssertTrue(back.waitForExistence(timeout: 2), "Tapping a valid local book did not enter ReaderView")
         XCTAssertTrue(app.sliders["reader-progress"].exists, "Reader controls did not finish loading")
-        XCTAssertTrue(app.buttons["reader-ai-toggle"].exists, "The AI control is not a simple on/off button")
+        let aiToggle = app.buttons["reader-ai-toggle"]
+        XCTAssertTrue(aiToggle.exists, "The AI control is not a simple on/off button")
+        aiToggle.tap()
+        let missingAIKey = app.alerts["还没有连接 AI"]
+        XCTAssertTrue(missingAIKey.waitForExistence(timeout: 2), "Tapping AI without a key produced no visible feedback")
+        missingAIKey.buttons["好"].tap()
         XCTAssertTrue(app.buttons["reader-sharp-enhance"].exists, "The Sharp current-page action is missing")
 
         XCTAssertTrue(app.buttons["reader-save-page"].waitForExistence(timeout: 2), "The current-page save action is missing")

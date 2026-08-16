@@ -77,16 +77,14 @@ actor DeepSeekService {
         翻译规则：只有识别文本中确有日文时 detected_japanese 才为 true，并尽量完整翻译；保持人物口吻、敬语强弱、吐槽和拟声词的活力。不要擅自补剧情。没有日文时仍返回 translation 对象，但 detected_japanese=false、segments=[]、note=""。
         """
 
-        let content = try await completion(
+        let payload: PagePayload = try await structuredCompletion(
             apiKey: apiKey,
             model: settings.model,
             messages: [ChatMessage(role: "system", content: Self.companionSystemPrompt), ChatMessage(role: "user", content: prompt)],
             maxTokens: 900,
             temperature: 0.95,
-            json: true,
             allowsCellularAccess: settings.allowsCellularAccess
         )
-        let payload = try decode(PagePayload.self, from: content)
         let messages = payload.danmaku
             .prefix(settings.density.messageCount)
             .compactMap { item -> AIDanmakuMessage? in
@@ -94,6 +92,7 @@ actor DeepSeekService {
                 guard !text.isEmpty else { return nil }
                 return AIDanmakuMessage(text: text, tone: AIDanmakuTone(rawValue: item.tone) ?? .normal)
             }
+        guard !messages.isEmpty else { throw DeepSeekError.invalidJSON }
 
         let translationSegments = payload.translation?.segments.prefix(30).compactMap { item -> AITranslationSegment? in
             let source = cleaned(item.source, limit: 180)
@@ -117,9 +116,11 @@ actor DeepSeekService {
             )
         }()
 
+        let summary = cleaned(payload.summary, limit: 90)
+        guard !summary.isEmpty else { throw DeepSeekError.invalidJSON }
         return AIPageReaction(
             page: insight.page,
-            summary: cleaned(payload.summary, limit: 90),
+            summary: summary,
             mood: cleaned(payload.mood, limit: 14),
             danmaku: messages,
             talkingPoints: payload.talkingPoints.prefix(3).map { cleaned($0, limit: 60) }.filter { !$0.isEmpty },
@@ -147,16 +148,14 @@ actor DeepSeekService {
         输出 JSON：
         {"title":"片尾评论区标题","closing_note":"AI陪读员给用户的两三句收尾陪伴","comments":[{"username":"虚构昵称","avatar_emoji":"单个emoji","body":"评论正文","likes":12,"badge":"可选短标签或空字符串"}]}
         """
-        let content = try await completion(
+        let payload: EndPayload = try await structuredCompletion(
             apiKey: apiKey,
             model: settings.model,
             messages: [ChatMessage(role: "system", content: Self.companionSystemPrompt), ChatMessage(role: "user", content: prompt)],
             maxTokens: 1_700,
             temperature: 1.05,
-            json: true,
             allowsCellularAccess: settings.allowsCellularAccess
         )
-        let payload = try decode(EndPayload.self, from: content)
         var seenNames = Set<String>()
         let comments = payload.comments.prefix(10).compactMap { item -> AISimulatedComment? in
             let username = cleaned(item.username, limit: 18)
@@ -170,6 +169,7 @@ actor DeepSeekService {
                 badge: cleaned(item.badge ?? "", limit: 10).nilIfEmpty
             )
         }
+        guard !comments.isEmpty else { throw DeepSeekError.invalidJSON }
         return AIEndDiscussion(
             title: cleaned(payload.title, limit: 40),
             closingNote: cleaned(payload.closingNote, limit: 260),
@@ -263,6 +263,8 @@ actor DeepSeekService {
         let key = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty else { throw DeepSeekError.missingKey }
 
+        let reliability = await AIReliabilityConfigurationService.shared.current()
+
         let body = ChatRequest(
             model: model.modelID,
             messages: messages,
@@ -273,26 +275,133 @@ actor DeepSeekService {
         )
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
-        request.timeoutInterval = 50
+        request.timeoutInterval = Double(reliability.requestTimeoutSeconds)
         request.allowsCellularAccess = allowsCellularAccess
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
         request.httpBody = try JSONEncoder().encode(body)
 
         let configuration = URLSessionConfiguration.ephemeral
-        configuration.waitsForConnectivity = true
+        configuration.waitsForConnectivity = false
+        configuration.timeoutIntervalForRequest = Double(reliability.requestTimeoutSeconds)
+        configuration.timeoutIntervalForResource = Double(reliability.requestTimeoutSeconds + 5)
         let session = URLSession(configuration: configuration)
-        let (data, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse else { throw DeepSeekError.invalidResponse }
-        guard (200..<300).contains(http.statusCode) else {
-            let envelope = try? decoder.decode(APIErrorEnvelope.self, from: data)
-            throw DeepSeekError.server(status: http.statusCode, message: envelope?.error.message)
+
+        var lastError: Error = DeepSeekError.invalidResponse
+        for attempt in 1...reliability.maximumAttempts {
+            do {
+                try Task.checkCancellation()
+                let (data, response) = try await session.data(for: request)
+                guard let http = response as? HTTPURLResponse else {
+                    throw DeepSeekError.invalidResponse
+                }
+                guard (200..<300).contains(http.statusCode) else {
+                    let envelope = try? decoder.decode(APIErrorEnvelope.self, from: data)
+                    throw DeepSeekError.server(status: http.statusCode, message: envelope?.error.message)
+                }
+                let decoded = try decoder.decode(ChatResponse.self, from: data)
+                guard let choice = decoded.choices.first else { throw DeepSeekError.emptyResponse }
+                switch choice.finishReason {
+                case "length":
+                    throw DeepSeekError.truncatedResponse
+                case "insufficient_system_resource":
+                    throw DeepSeekError.temporarilyUnavailable
+                case "content_filter":
+                    throw DeepSeekError.invalidResponse
+                default:
+                    break
+                }
+                guard let content = choice.message.content,
+                      !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                else { throw DeepSeekError.emptyResponse }
+                return content
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch let error as URLError where error.code == .cancelled && Task.isCancelled {
+                throw CancellationError()
+            } catch {
+                let normalized = normalize(error)
+                lastError = normalized
+                let allowedAttempts = maximumAttempts(for: normalized, configured: reliability.maximumAttempts)
+                guard attempt < allowedAttempts, isRetryable(normalized) else {
+                    throw normalized
+                }
+                let multiplier = 1 << (attempt - 1)
+                let delay = reliability.retryBaseDelayMilliseconds * multiplier
+                try await Task.sleep(for: .milliseconds(delay))
+            }
         }
-        let decoded = try decoder.decode(ChatResponse.self, from: data)
-        guard let content = decoded.choices.first?.message.content,
-              !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        else { throw DeepSeekError.emptyResponse }
-        return content
+        throw lastError
+    }
+
+    private func structuredCompletion<T: Decodable>(
+        apiKey: String,
+        model: AIModelChoice,
+        messages: [ChatMessage],
+        maxTokens: Int,
+        temperature: Double,
+        allowsCellularAccess: Bool
+    ) async throws -> T {
+        var repairMessages = messages
+        var lastError: Error = DeepSeekError.invalidJSON
+        for formattingAttempt in 1...2 {
+            let content = try await completion(
+                apiKey: apiKey,
+                model: model,
+                messages: repairMessages,
+                maxTokens: formattingAttempt == 1 ? maxTokens : maxTokens + 300,
+                temperature: formattingAttempt == 1 ? temperature : min(temperature, 0.7),
+                json: true,
+                allowsCellularAccess: allowsCellularAccess
+            )
+            do {
+                return try decode(T.self, from: content)
+            } catch {
+                lastError = error
+                guard formattingAttempt < 2 else { break }
+                repairMessages.append(ChatMessage(
+                    role: "user",
+                    content: "上一份输出不是完整、可解析的 JSON。请重新生成，只返回完整 JSON 对象，不要使用 Markdown 代码块，也不要省略任何必填字段。"
+                ))
+            }
+        }
+        throw lastError
+    }
+
+    private func normalize(_ error: Error) -> Error {
+        guard let urlError = error as? URLError else { return error }
+        switch urlError.code {
+        case .timedOut:
+            return DeepSeekError.timeout
+        case .notConnectedToInternet, .networkConnectionLost, .cannotConnectToHost,
+             .cannotFindHost, .dnsLookupFailed, .internationalRoamingOff, .dataNotAllowed:
+            return DeepSeekError.networkUnavailable
+        default:
+            return DeepSeekError.transport
+        }
+    }
+
+    private func isRetryable(_ error: Error) -> Bool {
+        guard let deepSeekError = error as? DeepSeekError else { return false }
+        switch deepSeekError {
+        case .emptyResponse, .truncatedResponse, .temporarilyUnavailable, .timeout, .networkUnavailable, .transport:
+            return true
+        case .server(let status, _):
+            return [408, 425, 429, 500, 502, 503, 504].contains(status)
+        case .missingKey, .invalidResponse, .invalidJSON:
+            return false
+        }
+    }
+
+    private func maximumAttempts(for error: Error, configured: Int) -> Int {
+        guard let deepSeekError = error as? DeepSeekError else { return 1 }
+        switch deepSeekError {
+        case .timeout, .networkUnavailable, .transport:
+            return min(2, configured)
+        default:
+            return configured
+        }
     }
 
     private func decode<T: Decodable>(_ type: T.Type, from content: String) throws -> T {
@@ -319,6 +428,11 @@ enum DeepSeekError: LocalizedError {
     case invalidResponse
     case emptyResponse
     case invalidJSON
+    case truncatedResponse
+    case temporarilyUnavailable
+    case timeout
+    case networkUnavailable
+    case transport
     case server(status: Int, message: String?)
 
     var errorDescription: String? {
@@ -327,6 +441,11 @@ enum DeepSeekError: LocalizedError {
         case .invalidResponse: return "DeepSeek 返回了无法识别的响应。"
         case .emptyResponse: return "AI 这次没有生成内容，请稍后重试。"
         case .invalidJSON: return "AI 返回的内容格式不完整，请重试。"
+        case .truncatedResponse: return "AI 内容没有生成完整，已自动重试；请稍后再试。"
+        case .temporarilyUnavailable: return "DeepSeek 当前繁忙，已自动重试；请稍后再试。"
+        case .timeout: return "AI 响应超时，已切换本地陪伴。"
+        case .networkUnavailable: return "当前网络不可用，已切换本地陪伴。"
+        case .transport: return "暂时无法连接 DeepSeek，已切换本地陪伴。"
         case .server(let status, let message):
             if status == 401 { return "DeepSeek 密钥无效或已失效，请重新填写。" }
             if status == 402 { return "DeepSeek 账户余额不足。" }
@@ -361,7 +480,10 @@ private struct ResponseFormat: Encodable { let type: String }
 
 private struct ChatResponse: Decodable {
     let choices: [Choice]
-    struct Choice: Decodable { let message: ResponseMessage }
+    struct Choice: Decodable {
+        let message: ResponseMessage
+        let finishReason: String?
+    }
     struct ResponseMessage: Decodable { let content: String? }
 }
 

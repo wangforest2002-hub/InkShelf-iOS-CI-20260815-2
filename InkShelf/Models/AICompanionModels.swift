@@ -190,6 +190,11 @@ struct AIPageTranslation: Codable, Hashable, Sendable {
     let note: String?
 }
 
+enum AIReactionSource: String, Codable, Sendable {
+    case deepSeek
+    case localFallback
+}
+
 struct AIPageReaction: Identifiable, Codable, Hashable, Sendable {
     let id: UUID
     let page: Int
@@ -198,6 +203,7 @@ struct AIPageReaction: Identifiable, Codable, Hashable, Sendable {
     let danmaku: [AIDanmakuMessage]
     let talkingPoints: [String]
     let translation: AIPageTranslation?
+    let source: AIReactionSource?
     let createdAt: Date
 
     init(
@@ -208,6 +214,7 @@ struct AIPageReaction: Identifiable, Codable, Hashable, Sendable {
         danmaku: [AIDanmakuMessage],
         talkingPoints: [String],
         translation: AIPageTranslation? = nil,
+        source: AIReactionSource = .deepSeek,
         createdAt: Date = .now
     ) {
         self.id = id
@@ -217,8 +224,11 @@ struct AIPageReaction: Identifiable, Codable, Hashable, Sendable {
         self.danmaku = danmaku
         self.talkingPoints = talkingPoints
         self.translation = translation
+        self.source = source
         self.createdAt = createdAt
     }
+
+    var isLocalFallback: Bool { source == .localFallback }
 }
 
 struct AISimulatedComment: Identifiable, Codable, Hashable, Sendable {
