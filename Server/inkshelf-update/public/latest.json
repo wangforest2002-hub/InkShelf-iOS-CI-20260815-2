@@ -3,7 +3,7 @@
   "version": "1.9.1",
   "build": 15,
   "minimum_ios": "18.0",
-  "published_at": "2026-08-16T00:00:00+07:00",
+  "published_at": "2026-08-16T12:05:29+07:00",
   "title": "AI 陪读不再悄悄失联",
   "notes": [
     "点按 AI 后立即显示开启和识别状态",
@@ -14,8 +14,8 @@
   ],
   "mandatory": false,
   "bundle_identifier": "com.inkshelf.reader",
-  "package_size": null,
-  "sha256": null,
-  "install_url": null,
+  "package_size": 29844084,
+  "sha256": "2A5082E3176F768AD58CE694193151F6F2386575059F431F68F139DC2906B150",
+  "install_url": "itms-services://?action=download-manifest&url=https%3A%2F%2F4-3rail.top%2Finkshelf-update%2Freleases%2FInkShelf-1.9.1-15.plist",
   "data_policy": "preserve_app_container"
 }

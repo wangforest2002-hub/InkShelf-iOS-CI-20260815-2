@@ -37,20 +37,43 @@ try {
 
     $infoEntry = $archive.Entries | Where-Object FullName -Match '^Payload/[^/]+\.app/Info\.plist$' | Select-Object -First 1
     $profileEntry = $archive.Entries | Where-Object FullName -Match '^Payload/[^/]+\.app/embedded\.mobileprovision$' | Select-Object -First 1
-    foreach ($entry in @($infoEntry, $profileEntry)) {
-        if ($null -eq $entry) { throw "IPA 缺少应用身份信息。" }
+    if ($null -eq $infoEntry -or $null -eq $profileEntry) {
+        throw "IPA 缺少应用身份信息。"
+    }
+
+    function Read-ArchiveEntryBytes([IO.Compression.ZipArchiveEntry]$entry) {
         $stream = $entry.Open()
         $memory = [IO.MemoryStream]::new()
         try {
             $stream.CopyTo($memory)
-            $identityText = [Text.Encoding]::UTF8.GetString($memory.ToArray())
-            if (-not $identityText.Contains($bundleIdentifier, [StringComparison]::Ordinal)) {
-                throw "IPA 的 Bundle ID 不是 $bundleIdentifier；为避免覆盖到错误应用，已停止发布。"
-            }
+            return $memory.ToArray()
         } finally {
             $memory.Dispose()
             $stream.Dispose()
         }
+    }
+
+    $infoText = [Text.Encoding]::UTF8.GetString((Read-ArchiveEntryBytes $infoEntry))
+    if (-not $infoText.Contains($bundleIdentifier, [StringComparison]::Ordinal)) {
+        throw "IPA 的 Bundle ID 不是 $bundleIdentifier；为避免覆盖到错误应用，已停止发布。"
+    }
+
+    try { Add-Type -AssemblyName System.Security.Cryptography.Pkcs } catch {}
+    $profileCMS = [Security.Cryptography.Pkcs.SignedCms]::new()
+    $profileCMS.Decode((Read-ArchiveEntryBytes $profileEntry))
+    $profileText = [Text.Encoding]::UTF8.GetString($profileCMS.ContentInfo.Content)
+    if (-not $profileText.Contains('<key>application-identifier</key>', [StringComparison]::Ordinal) -or
+        -not $profileText.Contains('<key>ProvisionedDevices</key>', [StringComparison]::Ordinal)) {
+        throw "描述文件缺少应用身份或目标设备，已停止发布。"
+    }
+    $expirationMatch = [regex]::Match(
+        $profileText,
+        '<key>\s*ExpirationDate\s*</key>\s*<date>(?<value>.*?)</date>',
+        [Text.RegularExpressions.RegexOptions]::Singleline
+    )
+    if (-not $expirationMatch.Success -or
+        [DateTimeOffset]::Parse($expirationMatch.Groups['value'].Value) -le [DateTimeOffset]::UtcNow) {
+        throw "签名描述文件已经过期或无法读取，已停止发布。"
     }
 } finally {
     $archive.Dispose()
@@ -73,9 +96,10 @@ try {
     $stagedLatest = Join-Path $publishRoot "latest.json.next"
     Copy-Item -LiteralPath $resolvedIpa -Destination $stagedIpa
 
-    $escapedIpaURL = [Security.SecurityElement]::Escape($ipaURL)
-    $escapedBundleID = [Security.SecurityElement]::Escape($bundleIdentifier)
-    $escapedVersion = [Security.SecurityElement]::Escape($Version)
+$escapedIpaURL = [Security.SecurityElement]::Escape($ipaURL)
+$escapedBundleID = [Security.SecurityElement]::Escape($bundleIdentifier)
+$escapedBuild = [Security.SecurityElement]::Escape([string]$Build)
+$escapedHash = [Security.SecurityElement]::Escape($hash.ToLowerInvariant())
     $manifest = @"
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -89,12 +113,13 @@ try {
         <dict>
           <key>kind</key><string>software-package</string>
           <key>url</key><string>$escapedIpaURL</string>
+          <key>sha256</key><string>$escapedHash</string>
         </dict>
       </array>
       <key>metadata</key>
       <dict>
         <key>bundle-identifier</key><string>$escapedBundleID</string>
-        <key>bundle-version</key><string>$escapedVersion</string>
+        <key>bundle-version</key><string>$escapedBuild</string>
         <key>kind</key><string>software</string>
         <key>title</key><string>二次元小家</string>
       </dict>
