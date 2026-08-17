@@ -11,7 +11,9 @@ struct RootView: View {
     var body: some View {
         MainTabView()
             .task {
-                if !hasSeenWelcome {
+                if ProcessInfo.processInfo.arguments.contains("INKSHELF_UI_TEST_HOME") {
+                    launchDestination = nil
+                } else if !hasSeenWelcome {
                     launchDestination = .welcome
                 } else if let book = library.interruptedReadingBook {
                     launchDestination = .reader(book)
@@ -66,7 +68,8 @@ struct RootView: View {
     @MainActor
     private func offerUpdateIfAvailable() async {
         guard !ProcessInfo.processInfo.arguments.contains("INKSHELF_UI_TEST_SEED"),
-              !ProcessInfo.processInfo.arguments.contains("INKSHELF_UI_TEST_PICKER")
+              !ProcessInfo.processInfo.arguments.contains("INKSHELF_UI_TEST_PICKER"),
+              !ProcessInfo.processInfo.arguments.contains("INKSHELF_UI_TEST_HOME")
         else { return }
         if !updates.didCheckThisLaunch {
             await updates.checkForUpdates(silent: true)
@@ -91,7 +94,24 @@ private enum LaunchDestination: Identifiable, Equatable {
     }
 }
 
+private enum MainTab: Hashable {
+    case home
+    case library
+    case recent
+    case favorites
+    case settings
+}
+
 private struct MainTabView: View {
+    @State private var selection: MainTab
+
+    init() {
+        let arguments = ProcessInfo.processInfo.arguments
+        let startsOnShelf = arguments.contains("INKSHELF_UI_TEST_SEED")
+            || arguments.contains("INKSHELF_UI_TEST_PICKER")
+        _selection = State(initialValue: startsOnShelf ? .library : .home)
+    }
+
     var body: some View {
         Group {
             if #available(iOS 26.0, *) {
@@ -105,24 +125,24 @@ private struct MainTabView: View {
     }
 
     private var tabs: some View {
-        TabView {
-            Tab("小家", systemImage: "house.fill") {
+        TabView(selection: $selection) {
+            Tab("小家", systemImage: "house.fill", value: .home) {
                 HomeWorldView()
             }
 
-            Tab("书架", systemImage: "books.vertical.fill") {
+            Tab("书架", systemImage: "books.vertical.fill", value: .library) {
                 LibraryView(scope: .all)
             }
 
-            Tab("最近", systemImage: "clock.fill") {
+            Tab("最近", systemImage: "clock.fill", value: .recent) {
                 LibraryView(scope: .recent)
             }
 
-            Tab("珍藏", systemImage: "star.fill") {
+            Tab("珍藏", systemImage: "star.fill", value: .favorites) {
                 LibraryView(scope: .favorites)
             }
 
-            Tab("设置", systemImage: "gearshape.fill") {
+            Tab("设置", systemImage: "gearshape.fill", value: .settings) {
                 SettingsView()
             }
         }

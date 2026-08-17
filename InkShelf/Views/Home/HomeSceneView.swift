@@ -231,7 +231,7 @@ struct HomeSceneView: UIViewRepresentable {
             }
             var node: SCNNode? = hit.node
             while let current = node {
-                if current.userData?["isKoko"] as? Bool == true || current.name == "koko" {
+                if current.name == "koko" {
                     parent.onKokoTapped()
                     return
                 }

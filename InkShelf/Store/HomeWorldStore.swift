@@ -233,8 +233,8 @@ final class HomeWorldStore {
         state.schema = HomeWorldState.currentSchema
         state.placements = state.placements.filter { placement in
             switch placement.kind {
-            case .furniture: placement.furniture != nil
-            case .book: placement.bookID != nil
+            case .furniture: return placement.furniture != nil
+            case .book: return placement.bookID != nil
             case .artwork:
                 guard let id = placement.artworkID,
                       let artwork = state.artworks.first(where: { $0.id == id })

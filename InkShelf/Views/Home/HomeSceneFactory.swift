@@ -117,10 +117,6 @@ final class HomeSceneFactory {
             root = makeArtwork(artwork)
         }
         root.name = "placement:\(placement.id.uuidString.lowercased())"
-        root.userData = [
-            "bookID": placement.bookID?.uuidString ?? "",
-            "placementKind": placement.kind.rawValue
-        ]
         apply(placement.transform, to: root)
         setSelected(false, node: root)
         return root
@@ -177,7 +173,6 @@ final class HomeSceneFactory {
     func makeKokoNode() -> SCNNode {
         let wrapper = SCNNode()
         wrapper.name = "koko"
-        wrapper.userData = ["isKoko": true]
         if let url = Bundle.main.url(forResource: "Koko", withExtension: "usdz", subdirectory: "Models")
             ?? Bundle.main.url(forResource: "Koko", withExtension: "usdz"),
            let reference = SCNReferenceNode(url: url) {
