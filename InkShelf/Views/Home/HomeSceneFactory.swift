@@ -44,7 +44,7 @@ final class HomeSceneFactory {
         let ambient = SCNLight()
         ambient.type = .ambient
         ambient.color = palette.ambient
-        ambient.intensity = theme == .moonlight ? 390 : 560
+        ambient.intensity = theme == .moonlight ? 320 : 430
         let ambientNode = SCNNode()
         ambientNode.light = ambient
         room.addChildNode(ambientNode)
@@ -52,7 +52,7 @@ final class HomeSceneFactory {
         let sun = SCNLight()
         sun.type = .directional
         sun.color = palette.sun
-        sun.intensity = theme == .moonlight ? 520 : 940
+        sun.intensity = theme == .moonlight ? 430 : 700
         sun.castsShadow = true
         sun.shadowMode = .deferred
         sun.shadowRadius = 5
@@ -173,7 +173,7 @@ final class HomeSceneFactory {
     func makeKokoNode() -> SCNNode {
         let wrapper = SCNNode()
         wrapper.name = "koko"
-        let platform = SCNCylinder(radius: 0.34, height: 0.018)
+        let platform = SCNCylinder(radius: 0.38, height: 0.018)
         platform.radialSegmentCount = 48
         let platformMaterial = materialWith(
             color: UIColor(red: 0.58, green: 0.82, blue: 1, alpha: 0.42),
@@ -196,6 +196,7 @@ final class HomeSceneFactory {
            ]) {
             let importedRoot = importedScene.rootNode.clone()
             importedRoot.name = "koko-model"
+            importedRoot.scale = SCNVector3(1.08, 1.08, 1.08)
             let renderableNodes = importedRoot.childNodes(passingTest: { node, _ in node.geometry != nil })
             renderableNodes.forEach { node in
                 node.opacity = 1
@@ -225,11 +226,11 @@ final class HomeSceneFactory {
             fallback.name = "koko-model-fallback"
             wrapper.addChildNode(fallback)
         }
-        let collider = SCNCapsule(capRadius: 0.22, height: 1.58)
+        let collider = SCNCapsule(capRadius: 0.24, height: 1.72)
         let colliderNode = SCNNode(geometry: collider)
         colliderNode.name = "koko-hit-target"
         colliderNode.opacity = 0.001
-        colliderNode.position.y = 0.79
+        colliderNode.position.y = 0.86
         wrapper.addChildNode(colliderNode)
         return wrapper
     }
@@ -418,7 +419,7 @@ final class HomeSceneFactory {
         let light = SCNLight()
         light.type = .omni
         light.color = UIColor(red: 1, green: 0.72, blue: 0.44, alpha: 1)
-        light.intensity = 430
+        light.intensity = 285
         light.attenuationStartDistance = 0.4
         light.attenuationEndDistance = 3.2
         let lightNode = SCNNode()

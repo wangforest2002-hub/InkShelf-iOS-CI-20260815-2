@@ -10,6 +10,9 @@ final class KokoSceneController {
     private var expressionNodes: [SCNNode] = []
     private var obstacles: [KokoObstacle] = []
     private var randomSeed: UInt64 = 0xC0C0_2026
+    // The imported VRoid avatar faces -Z, while SceneKit's movement heading
+    // calculations below treat +Z as forward.
+    private let modelForwardCorrection: Float = .pi
 
     private let animatedBones = [
         "J_Bip_C_Hips", "J_Bip_C_Spine", "J_Bip_C_Chest", "J_Bip_C_UpperChest",
@@ -33,7 +36,7 @@ final class KokoSceneController {
         self.reduceMotion = reduceMotion
         obstacles = makeObstacles(from: placements)
         root.position = SCNVector3(zone.centerX, 0, zone.centerZ + min(0.45, zone.depth * 0.18))
-        root.eulerAngles.y = .pi
+        root.eulerAngles.y = modelForwardCorrection
         configureComfortableBasePose()
         restRotations = Dictionary(uniqueKeysWithValues: animatedBones.compactMap { name in
             root.childNode(withName: name, recursively: true).map { (name, $0.eulerAngles) }
@@ -129,7 +132,7 @@ final class KokoSceneController {
         }
         switch action {
         case .greet, .wave:
-            return resolvedDestination(SCNVector3(zone.centerX - 0.72, 0, zone.centerZ + 0.58))
+            return resolvedDestination(SCNVector3(zone.centerX - 0.62, 0, zone.centerZ + 0.98))
         case .admireBook, .read:
             if let target {
                 let world = target.presentation.position
@@ -164,7 +167,7 @@ final class KokoSceneController {
             let segmentDistance = sqrt(segmentX * segmentX + segmentZ * segmentZ)
             let turn = SCNAction.rotateTo(
                 x: 0,
-                y: CGFloat(atan2(segmentX, segmentZ)),
+                y: CGFloat(atan2(segmentX, segmentZ) + modelForwardCorrection),
                 z: 0,
                 duration: 0.30,
                 usesShortestUnitArc: true
@@ -198,7 +201,7 @@ final class KokoSceneController {
         let yaw = atan2(target.x - position.x, target.z - position.z)
         let action = SCNAction.rotateTo(
             x: 0,
-            y: CGFloat(yaw),
+            y: CGFloat(yaw + modelForwardCorrection),
             z: 0,
             duration: 0.34,
             usesShortestUnitArc: true
@@ -248,15 +251,21 @@ final class KokoSceneController {
         case .greet, .wave:
             let upper = root.childNode(withName: "J_Bip_R_UpperArm", recursively: true)
             let lower = root.childNode(withName: "J_Bip_R_LowerArm", recursively: true)
+            let hand = root.childNode(withName: "J_Bip_R_Hand", recursively: true)
+            let chest = root.childNode(withName: "J_Bip_C_Chest", recursively: true)
+            let head = root.childNode(withName: "J_Bip_C_Head", recursively: true)
             let raise = SCNAction.run { _ in
-                upper?.runAction(.rotateBy(x: -0.20, y: 0, z: 1.15, duration: 0.42))
-                lower?.runAction(.rotateBy(x: 0, y: 0, z: 0.72, duration: 0.42))
+                upper?.runAction(.rotateBy(x: -0.16, y: 0.05, z: 1.72, duration: 0.52))
+                lower?.runAction(.rotateBy(x: 0.05, y: 0, z: 1.12, duration: 0.52))
+                hand?.runAction(.rotateBy(x: 0, y: 0.08, z: 0.14, duration: 0.52))
+                chest?.runAction(.rotateBy(x: 0, y: -0.055, z: 0, duration: 0.52))
+                head?.runAction(.rotateBy(x: 0, y: 0.075, z: -0.07, duration: 0.52))
             }
             let wave = SCNAction.repeat(
                 .sequence([
-                    .run { _ in lower?.runAction(.rotateBy(x: 0, y: 0.30, z: 0, duration: 0.24)) },
+                    .run { _ in hand?.runAction(.rotateBy(x: 0, y: 0, z: 0.24, duration: 0.22)) },
                     .wait(duration: 0.25),
-                    .run { _ in lower?.runAction(.rotateBy(x: 0, y: -0.30, z: 0, duration: 0.24)) },
+                    .run { _ in hand?.runAction(.rotateBy(x: 0, y: 0, z: -0.24, duration: 0.22)) },
                     .wait(duration: 0.25)
                 ]),
                 count: 3
@@ -382,7 +391,7 @@ final class KokoSceneController {
         guard let root else { return }
         let dx = target.x - root.position.x
         let dz = target.z - root.position.z
-        root.eulerAngles.y = atan2(dx, dz)
+        root.eulerAngles.y = atan2(dx, dz) + modelForwardCorrection
     }
 
     private func clamped(_ position: SCNVector3) -> SCNVector3 {

@@ -77,8 +77,8 @@ struct HomeSceneView: UIViewRepresentable {
             camera.zNear = 0.05
             camera.zFar = 80
             camera.wantsHDR = true
-            camera.wantsExposureAdaptation = true
-            camera.exposureOffset = -0.05
+            camera.wantsExposureAdaptation = false
+            camera.exposureOffset = -0.18
             cameraNode.camera = camera
             let constraint = SCNLookAtConstraint(target: cameraTarget)
             constraint.isGimbalLockEnabled = true
@@ -362,9 +362,13 @@ struct HomeSceneView: UIViewRepresentable {
                   sceneView.bounds.height > 0
             else { return }
             let isPortrait = sceneView.bounds.height > sceneView.bounds.width
-            cameraYaw = isPortrait ? 0.48 : 0.62
-            cameraPitch = isPortrait ? 0.46 : 0.52
-            cameraDistance = isPortrait ? 11.7 : 8.2
+            cameraYaw = isPortrait ? 0.50 : 0.62
+            cameraPitch = isPortrait ? 0.44 : 0.52
+            cameraDistance = isPortrait ? 10.35 : 8.2
+            cameraTarget.position = isPortrait
+                ? SCNVector3(0, 0.56, -0.18)
+                : SCNVector3(0, 0.88, -0.08)
+            cameraNode.camera?.fieldOfView = isPortrait ? 50 : 52
             hasAppliedResponsiveFraming = true
             updateCamera(animated: false)
         }
