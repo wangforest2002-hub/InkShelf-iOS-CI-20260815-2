@@ -1,5 +1,6 @@
 import XCTest
 import ImageIO
+import SceneKit
 import UniformTypeIdentifiers
 import UIKit
 import ZIPFoundation
@@ -535,6 +536,21 @@ final class BookModelTests: XCTestCase {
         var recovered = tiredState
         recovered.apply(.rest, localHour: 15)
         XCTAssertGreaterThan(recovered.energy, tiredState.energy)
+    }
+
+    @MainActor
+    func testBundledKokoModelLoadsRenderableGeometry() throws {
+        let root = HomeSceneFactory().makeKokoNode()
+        let model = try XCTUnwrap(root.childNode(withName: "koko-model", recursively: false))
+        var geometryCount = 0
+        model.enumerateChildNodes { node, _ in
+            if node.geometry != nil { geometryCount += 1 }
+        }
+        XCTAssertGreaterThanOrEqual(geometryCount, 3, "Koko.usdz loaded without its visible meshes")
+        let bounds = model.boundingBox
+        XCTAssertGreaterThan(bounds.max.y - bounds.min.y, 1.2, "Koko.usdz is not using the SceneKit Y-up orientation")
+        XCTAssertLessThan(bounds.max.y - bounds.min.y, 2.2, "Koko.usdz has an unsafe scene scale")
+        XCTAssertNil(root.childNode(withName: "koko-model-fallback", recursively: false))
     }
 
     @MainActor

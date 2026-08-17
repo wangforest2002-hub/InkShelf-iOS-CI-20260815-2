@@ -173,17 +173,51 @@ final class HomeSceneFactory {
     func makeKokoNode() -> SCNNode {
         let wrapper = SCNNode()
         wrapper.name = "koko"
+        let platform = SCNCylinder(radius: 0.34, height: 0.018)
+        platform.radialSegmentCount = 48
+        let platformMaterial = materialWith(
+            color: UIColor(red: 0.58, green: 0.82, blue: 1, alpha: 0.42),
+            roughness: 0.32,
+            transparency: 0.52
+        )
+        platformMaterial.emission.contents = UIColor(red: 0.36, green: 0.70, blue: 1, alpha: 0.32)
+        platformMaterial.emission.intensity = 0.28
+        platform.materials = [platformMaterial]
+        let platformNode = SCNNode(geometry: platform)
+        platformNode.name = "koko-platform"
+        platformNode.position.y = 0.009
+        wrapper.addChildNode(platformNode)
+
         if let url = Bundle.main.url(forResource: "Koko", withExtension: "usdz", subdirectory: "Models")
             ?? Bundle.main.url(forResource: "Koko", withExtension: "usdz"),
-           let reference = SCNReferenceNode(url: url) {
-            reference.load()
-            reference.name = "koko-model"
-            reference.childNodes(passingTest: { node, _ in node.geometry != nil }).forEach { node in
+           let importedScene = try? SCNScene(url: url, options: [
+               .checkConsistency: true,
+               .createNormalsIfAbsent: true
+           ]) {
+            let importedRoot = importedScene.rootNode.clone()
+            importedRoot.name = "koko-model"
+            let renderableNodes = importedRoot.childNodes(passingTest: { node, _ in node.geometry != nil })
+            renderableNodes.forEach { node in
+                node.opacity = 1
                 node.castsShadow = true
+                node.geometry?.materials.forEach { material in
+                    material.transparency = 1
+                    material.readsFromDepthBuffer = true
+                    material.writesToDepthBuffer = true
+                    material.isDoubleSided = true
+                }
             }
-            wrapper.addChildNode(reference)
+            if renderableNodes.isEmpty {
+                let fallback = makeKokoFallback()
+                fallback.name = "koko-model-fallback"
+                wrapper.addChildNode(fallback)
+            } else {
+                wrapper.addChildNode(importedRoot)
+            }
         } else {
-            wrapper.addChildNode(makeKokoFallback())
+            let fallback = makeKokoFallback()
+            fallback.name = "koko-model-fallback"
+            wrapper.addChildNode(fallback)
         }
         let collider = SCNCapsule(capRadius: 0.22, height: 1.58)
         let colliderNode = SCNNode(geometry: collider)

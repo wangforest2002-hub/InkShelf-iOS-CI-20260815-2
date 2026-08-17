@@ -129,7 +129,7 @@ final class KokoSceneController {
         }
         switch action {
         case .greet, .wave:
-            return resolvedDestination(SCNVector3(zone.centerX + 0.18, 0, zone.centerZ + 0.12))
+            return resolvedDestination(SCNVector3(zone.centerX - 0.72, 0, zone.centerZ + 0.58))
         case .admireBook, .read:
             if let target {
                 let world = target.presentation.position

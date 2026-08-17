@@ -186,6 +186,9 @@ def main() -> None:
         export_textures_mode="KEEP",
         relative_paths=True,
         usdz_downscale_size="1024",
+        convert_orientation=True,
+        export_global_forward_selection="NEGATIVE_Z",
+        export_global_up_selection="Y",
         convert_scene_units="METERS",
     )
 
