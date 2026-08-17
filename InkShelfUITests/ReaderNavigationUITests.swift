@@ -38,14 +38,14 @@ final class ReaderNavigationUITests: XCTestCase {
         kokoSettings.tap()
         XCTAssertTrue(app.navigationBars["可可的活动范围"].waitForExistence(timeout: 3))
         attachScreenshot(app, name: "04-koko-autonomy")
-        app.buttons["完成"].tap()
+        app.navigationBars["可可的活动范围"].buttons["完成"].tap()
 
         let furniture = app.buttons["家具"].firstMatch
         XCTAssertTrue(furniture.waitForExistence(timeout: 3))
         furniture.tap()
         XCTAssertTrue(app.navigationBars["添加家具"].waitForExistence(timeout: 3))
         attachScreenshot(app, name: "05-furniture-catalog")
-        app.buttons["完成"].tap()
+        app.navigationBars["添加家具"].buttons["完成"].tap()
 
         XCTAssertTrue(edit.isHittable, "The editing completion button became unreachable")
         edit.tap()
@@ -101,27 +101,24 @@ final class ReaderNavigationUITests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["reader-notice"].waitForExistence(timeout: 2))
         XCTAssertEqual(pageFavorite.label, "取消收藏当前页")
 
-        let settings = app.buttons["reader-settings"]
-        XCTAssertTrue(settings.waitForExistence(timeout: 2), "The reader settings button is not hittable")
+        let settings = revealReaderControls(app, probeIdentifier: "reader-settings")
         settings.tap()
         XCTAssertTrue(app.navigationBars["阅读设置"].waitForExistence(timeout: 2), "Reader settings did not open")
         attachScreenshot(app, name: "08-reader-settings")
-        app.buttons["完成"].tap()
+        app.navigationBars["阅读设置"].buttons["完成"].tap()
 
-        let thumbnails = app.buttons["reader-thumbnails"]
-        XCTAssertTrue(thumbnails.waitForExistence(timeout: 2), "The thumbnail button disappeared after closing settings")
+        let thumbnails = revealReaderControls(app, probeIdentifier: "reader-thumbnails")
         thumbnails.tap()
         XCTAssertTrue(app.navigationBars["页面"].waitForExistence(timeout: 2), "Thumbnail navigation did not open")
         attachScreenshot(app, name: "09-page-browser")
-        app.buttons["完成"].tap()
+        app.navigationBars["页面"].buttons["完成"].tap()
 
-        let layout = app.buttons["reader-layout"]
-        XCTAssertTrue(layout.waitForExistence(timeout: 2), "The layout button is not hittable")
+        let layout = revealReaderControls(app, probeIdentifier: "reader-layout")
         let originalLayoutLabel = layout.label
         layout.tap()
         XCTAssertNotEqual(layout.label, originalLayoutLabel, "The layout button did not change reader layout")
 
-        back.tap()
+        revealReaderControls(app, probeIdentifier: "reader-close").tap()
         XCTAssertTrue(book.waitForExistence(timeout: 4), "Returning from ReaderView did not restore the shelf")
         XCTAssertTrue(app.tabBars.buttons["最近"].exists)
         XCTAssertTrue(app.tabBars.buttons["珍藏"].exists)
@@ -251,5 +248,16 @@ final class ReaderNavigationUITests: XCTestCase {
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
+    }
+
+    private func revealReaderControls(_ app: XCUIApplication, probeIdentifier: String) -> XCUIElement {
+        var probe = app.buttons[probeIdentifier]
+        if !probe.exists || !probe.isHittable {
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+            probe = app.buttons[probeIdentifier]
+        }
+        XCTAssertTrue(probe.waitForExistence(timeout: 2), "Reader controls did not reappear")
+        XCTAssertTrue(probe.isHittable, "Reader control \(probeIdentifier) is covered")
+        return probe
     }
 }
