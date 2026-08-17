@@ -165,13 +165,15 @@ struct HomeSceneView: UIViewRepresentable {
                     root: koko,
                     zone: value.state.koko.activityZone,
                     roamingEnabled: value.state.koko.roamingEnabled,
-                    reduceMotion: value.reduceMotion
+                    reduceMotion: value.reduceMotion,
+                    placements: value.state.placements
                 )
             } else {
                 kokoController.update(
                     zone: value.state.koko.activityZone,
                     roamingEnabled: value.state.koko.roamingEnabled,
-                    reduceMotion: value.reduceMotion
+                    reduceMotion: value.reduceMotion,
+                    placements: value.state.placements
                 )
             }
 

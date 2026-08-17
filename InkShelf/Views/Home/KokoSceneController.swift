@@ -8,6 +8,7 @@ final class KokoSceneController {
     private var roamingEnabled = true
     private var restRotations: [String: SCNVector3] = [:]
     private var expressionNodes: [SCNNode] = []
+    private var obstacles: [KokoObstacle] = []
     private var randomSeed: UInt64 = 0xC0C0_2026
 
     private let animatedBones = [
@@ -23,12 +24,14 @@ final class KokoSceneController {
         root: SCNNode,
         zone: KokoActivityZone,
         roamingEnabled: Bool,
-        reduceMotion: Bool
+        reduceMotion: Bool,
+        placements: [HomePlacement]
     ) {
         self.root = root
         self.zone = zone
         self.roamingEnabled = roamingEnabled
         self.reduceMotion = reduceMotion
+        obstacles = makeObstacles(from: placements)
         root.position = SCNVector3(zone.centerX, 0, zone.centerZ + min(0.45, zone.depth * 0.18))
         root.eulerAngles.y = .pi
         configureComfortableBasePose()
@@ -40,10 +43,16 @@ final class KokoSceneController {
         startBlinking()
     }
 
-    func update(zone: KokoActivityZone, roamingEnabled: Bool, reduceMotion: Bool) {
+    func update(
+        zone: KokoActivityZone,
+        roamingEnabled: Bool,
+        reduceMotion: Bool,
+        placements: [HomePlacement]
+    ) {
         self.zone = zone
         self.roamingEnabled = roamingEnabled
         self.reduceMotion = reduceMotion
+        obstacles = makeObstacles(from: placements)
         guard let root else { return }
         root.position = clamped(root.position)
         if reduceMotion {
@@ -63,14 +72,21 @@ final class KokoSceneController {
 
         let destination = destination(for: decision.action, target: target)
         let movement = moveAction(from: root.position, to: destination)
+        let focus = focusPoint(for: decision.action, target: target, destination: destination)
+        let orientation = turnAction(from: destination, toward: focus)
         let pose = poseAction(for: decision.action, duration: decision.duration)
+        let returnToNeutral = SCNAction.run { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.resetPose(animated: true)
+            }
+        }
         let sequence: SCNAction
         if reduceMotion {
             root.position = destination
-            face(target?.presentation.position ?? SCNVector3(0, root.position.y, 2.8))
-            sequence = pose
+            face(focus)
+            sequence = .sequence([pose, returnToNeutral])
         } else {
-            sequence = .sequence([movement, pose])
+            sequence = .sequence([movement, orientation, pose, returnToNeutral])
         }
         root.runAction(sequence, forKey: "koko-intention")
     }
@@ -113,21 +129,21 @@ final class KokoSceneController {
         }
         switch action {
         case .greet, .wave:
-            return clamped(SCNVector3(zone.centerX + 0.25, 0, zone.centerZ + zone.depth * 0.38))
+            return resolvedDestination(SCNVector3(zone.centerX + 0.25, 0, zone.centerZ + zone.depth * 0.38))
         case .admireBook, .read:
             if let target {
                 let world = target.presentation.position
-                return clamped(SCNVector3(world.x + 0.42, 0, world.z + 0.62))
+                return resolvedDestination(SCNVector3(world.x + 0.42, 0, world.z + 0.62))
             }
             return randomPoint()
         case .lookOutWindow:
-            return clamped(SCNVector3(1.25, 0, -1.55))
+            return resolvedDestination(SCNVector3(1.25, 0, -1.55))
         case .sit:
-            return clamped(SCNVector3(0.95, 0, 0.85))
+            return resolvedDestination(SCNVector3(0.95, 0, 0.85))
         case .tidy:
-            return clamped(SCNVector3(-0.35, 0, -0.75))
+            return resolvedDestination(SCNVector3(-0.35, 0, -0.75))
         case .rest:
-            return clamped(SCNVector3(0.65, 0, 0.95))
+            return resolvedDestination(SCNVector3(0.65, 0, 0.95))
         case .stroll:
             return randomPoint()
         }
@@ -139,13 +155,56 @@ final class KokoSceneController {
         let dz = end.z - start.z
         let distance = sqrt(dx * dx + dz * dz)
         guard distance > 0.06 else { return .wait(duration: 0.18) }
-        let yaw = atan2(dx, dz)
-        let turn = SCNAction.rotateTo(x: 0, y: CGFloat(yaw), z: 0, duration: 0.34, usesShortestUnitArc: true)
-        turn.timingMode = .easeInEaseOut
-        let move = SCNAction.move(to: end, duration: TimeInterval(max(0.8, distance / 0.72)))
-        move.timingMode = .easeInEaseOut
         startWalkCycle(on: root)
-        return .sequence([turn, move, .run { [weak self] _ in self?.stopWalkCycle() }])
+        var cursor = start
+        var actions: [SCNAction] = []
+        for point in route(from: start, to: end) {
+            let segmentX = point.x - cursor.x
+            let segmentZ = point.z - cursor.z
+            let segmentDistance = sqrt(segmentX * segmentX + segmentZ * segmentZ)
+            let turn = SCNAction.rotateTo(
+                x: 0,
+                y: CGFloat(atan2(segmentX, segmentZ)),
+                z: 0,
+                duration: 0.30,
+                usesShortestUnitArc: true
+            )
+            turn.timingMode = .easeInEaseOut
+            let move = SCNAction.move(to: point, duration: TimeInterval(max(0.45, segmentDistance / 0.72)))
+            move.timingMode = .easeInEaseOut
+            actions.append(contentsOf: [turn, move])
+            cursor = point
+        }
+        actions.append(.run { [weak self] _ in self?.stopWalkCycle() })
+        return .sequence(actions)
+    }
+
+    private func focusPoint(for action: KokoAction, target: SCNNode?, destination: SCNVector3) -> SCNVector3 {
+        switch action {
+        case .admireBook, .read:
+            return target?.presentation.position ?? SCNVector3(0, 0.8, -2.1)
+        case .lookOutWindow:
+            return SCNVector3(1.35, 1.45, -2.5)
+        case .tidy:
+            return SCNVector3(destination.x - 0.4, 0.4, destination.z - 0.5)
+        case .greet, .wave, .sit, .rest:
+            return SCNVector3(0, 1.2, 2.8)
+        case .stroll:
+            return SCNVector3(destination.x, 1.1, destination.z + 1)
+        }
+    }
+
+    private func turnAction(from position: SCNVector3, toward target: SCNVector3) -> SCNAction {
+        let yaw = atan2(target.x - position.x, target.z - position.z)
+        let action = SCNAction.rotateTo(
+            x: 0,
+            y: CGFloat(yaw),
+            z: 0,
+            duration: 0.34,
+            usesShortestUnitArc: true
+        )
+        action.timingMode = .easeInEaseOut
+        return action
     }
 
     private func startWalkCycle(on root: SCNNode) {
@@ -238,7 +297,6 @@ final class KokoSceneController {
                 settle
             ])
         case .lookOutWindow:
-            face(SCNVector3(1.35, 1.4, -2.5))
             let head = root.childNode(withName: "J_Bip_C_Head", recursively: true)
             return .group([
                 settle,
@@ -341,19 +399,122 @@ final class KokoSceneController {
     }
 
     private func randomPoint() -> SCNVector3 {
-        let unitX = nextRandomUnit()
-        let unitZ = nextRandomUnit()
-        return clamped(SCNVector3(
-            zone.centerX + (unitX - 0.5) * max(0.3, zone.width - 0.7),
+        for _ in 0..<8 {
+            let unitX = nextRandomUnit()
+            let unitZ = nextRandomUnit()
+            let candidate = clamped(SCNVector3(
+                zone.centerX + (unitX - 0.5) * max(0.3, zone.width - 0.7),
+                0,
+                zone.centerZ + (unitZ - 0.5) * max(0.3, zone.depth - 0.7)
+            ))
+            if isClear(candidate, margin: 0.30) { return candidate }
+        }
+        return resolvedDestination(SCNVector3(zone.centerX, 0, zone.centerZ))
+    }
+
+    private func resolvedDestination(_ proposed: SCNVector3) -> SCNVector3 {
+        var result = clamped(proposed)
+        for obstacle in obstacles {
+            let dx = result.x - obstacle.x
+            let dz = result.z - obstacle.z
+            let distance = max(sqrt(dx * dx + dz * dz), 0.001)
+            let safeRadius = obstacle.radius + 0.30
+            guard distance < safeRadius else { continue }
+            result.x = obstacle.x + dx / distance * safeRadius
+            result.z = obstacle.z + dz / distance * safeRadius
+            result = clamped(result)
+        }
+        return result
+    }
+
+    private func route(from start: SCNVector3, to end: SCNVector3) -> [SCNVector3] {
+        guard let obstacle = obstacles.first(where: {
+            distanceFromSegment(x: $0.x, z: $0.z, start: start, end: end) < $0.radius + 0.26
+        }) else { return [end] }
+
+        let dx = end.x - start.x
+        let dz = end.z - start.z
+        let length = max(sqrt(dx * dx + dz * dz), 0.001)
+        let offset = obstacle.radius + 0.42
+        let perpendicularX = -dz / length
+        let perpendicularZ = dx / length
+        let first = resolvedDestination(SCNVector3(
+            obstacle.x + perpendicularX * offset,
             0,
-            zone.centerZ + (unitZ - 0.5) * max(0.3, zone.depth - 0.7)
+            obstacle.z + perpendicularZ * offset
         ))
+        let second = resolvedDestination(SCNVector3(
+            obstacle.x - perpendicularX * offset,
+            0,
+            obstacle.z - perpendicularZ * offset
+        ))
+        let firstCost = planarDistance(start, first) + planarDistance(first, end)
+        let secondCost = planarDistance(start, second) + planarDistance(second, end)
+        return [firstCost <= secondCost ? first : second, end]
+    }
+
+    private func isClear(_ point: SCNVector3, margin: Float) -> Bool {
+        obstacles.allSatisfy { obstacle in
+            let dx = point.x - obstacle.x
+            let dz = point.z - obstacle.z
+            return sqrt(dx * dx + dz * dz) >= obstacle.radius + margin
+        }
+    }
+
+    private func distanceFromSegment(x: Float, z: Float, start: SCNVector3, end: SCNVector3) -> Float {
+        let dx = end.x - start.x
+        let dz = end.z - start.z
+        let denominator = dx * dx + dz * dz
+        guard denominator > 0.0001 else {
+            let pointX = x - start.x
+            let pointZ = z - start.z
+            return sqrt(pointX * pointX + pointZ * pointZ)
+        }
+        let t = min(max(((x - start.x) * dx + (z - start.z) * dz) / denominator, 0), 1)
+        let pointX = x - (start.x + dx * t)
+        let pointZ = z - (start.z + dz * t)
+        return sqrt(pointX * pointX + pointZ * pointZ)
+    }
+
+    private func planarDistance(_ first: SCNVector3, _ second: SCNVector3) -> Float {
+        let dx = first.x - second.x
+        let dz = first.z - second.z
+        return sqrt(dx * dx + dz * dz)
+    }
+
+    private func makeObstacles(from placements: [HomePlacement]) -> [KokoObstacle] {
+        placements.compactMap { placement in
+            guard placement.kind == .furniture,
+                  let furniture = placement.furniture,
+                  ![.rug, .cushion].contains(furniture)
+            else { return nil }
+            let baseRadius: Float
+            switch furniture {
+            case .sofa, .bed: baseRadius = 0.78
+            case .bookshelf, .displayCabinet, .desk, .screen: baseRadius = 0.58
+            case .lowTable: baseRadius = 0.48
+            case .stool: baseRadius = 0.31
+            case .floorLamp, .plant: baseRadius = 0.24
+            case .rug, .cushion: return nil
+            }
+            return KokoObstacle(
+                x: placement.transform.x,
+                z: placement.transform.z,
+                radius: baseRadius * placement.transform.scale
+            )
+        }
     }
 
     private func nextRandomUnit() -> Float {
         randomSeed = randomSeed &* 6_364_136_223_846_793_005 &+ 1
         return Float((randomSeed >> 40) & 0xFF_FFFF) / Float(0xFF_FFFF)
     }
+}
+
+private struct KokoObstacle {
+    let x: Float
+    let z: Float
+    let radius: Float
 }
 
 private extension SCNNode {
