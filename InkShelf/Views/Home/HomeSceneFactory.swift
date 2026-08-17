@@ -202,15 +202,18 @@ final class HomeSceneFactory {
                 node.opacity = 1
                 node.castsShadow = true
                 node.geometry?.materials.forEach { material in
-                    if let texture = kokoTexture(named: material.name) {
+                    let materialName = material.name ?? ""
+                    if let texture = kokoTexture(named: materialName) {
                         material.diffuse.contents = texture
                         material.diffuse.wrapS = .repeat
                         material.diffuse.wrapT = .repeat
-                        material.blendMode = .alpha
                     }
+                    let needsTransparency = kokoMaterialNeedsTransparency(materialName)
+                    material.blendMode = needsTransparency ? .alpha : .replace
                     material.transparency = 1
+                    material.transparencyMode = .aOne
                     material.readsFromDepthBuffer = true
-                    material.writesToDepthBuffer = true
+                    material.writesToDepthBuffer = !needsTransparency
                     material.isDoubleSided = true
                 }
             }
@@ -248,6 +251,14 @@ final class HomeSceneFactory {
             }
         }
         return nil
+    }
+
+    private func kokoMaterialNeedsTransparency(_ materialName: String) -> Bool {
+        [
+            "EyeExtra", "EyeHighlight", "EyeIris",
+            "FaceBrow", "FaceEyelash", "FaceEyeline",
+            "HairBack"
+        ].contains { materialName.localizedCaseInsensitiveContains($0) }
     }
 
     private func makeWindow(palette: HomeScenePalette) -> SCNNode {

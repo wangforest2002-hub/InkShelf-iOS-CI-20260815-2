@@ -544,14 +544,24 @@ final class BookModelTests: XCTestCase {
         let model = try XCTUnwrap(root.childNode(withName: "koko-model", recursively: false))
         var geometryCount = 0
         var texturedMaterialCount = 0
+        var bodyMaterial: SCNMaterial?
+        var transparentMaterialCount = 0
         model.enumerateChildNodes { node, _ in
             if let geometry = node.geometry {
                 geometryCount += 1
                 texturedMaterialCount += geometry.materials.filter { $0.diffuse.contents is UIImage }.count
+                transparentMaterialCount += geometry.materials.filter { $0.blendMode == .alpha }.count
+                bodyMaterial = bodyMaterial ?? geometry.materials.first {
+                    $0.name?.localizedCaseInsensitiveContains("Body_00_SKIN") == true
+                }
             }
         }
         XCTAssertGreaterThanOrEqual(geometryCount, 3, "Koko.usdz loaded without its visible meshes")
         XCTAssertGreaterThanOrEqual(texturedMaterialCount, 12, "Koko loaded without her face, hair, or clothing textures")
+        XCTAssertGreaterThanOrEqual(transparentMaterialCount, 6, "Koko's hair and facial overlays lost alpha rendering")
+        let body = try XCTUnwrap(bodyMaterial)
+        XCTAssertEqual(body.blendMode, .replace, "Koko's body must not be alpha-sorted behind her clothes")
+        XCTAssertTrue(body.writesToDepthBuffer, "Koko's opaque body must write depth so her legs remain visible")
         let bounds = model.boundingBox
         XCTAssertGreaterThan(bounds.max.y - bounds.min.y, 1.2, "Koko.usdz is not using the SceneKit Y-up orientation")
         XCTAssertLessThan(bounds.max.y - bounds.min.y, 2.2, "Koko.usdz has an unsafe scene scale")
