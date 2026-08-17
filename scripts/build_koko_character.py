@@ -145,6 +145,26 @@ def add_preview_camera_and_lights(preview_path: Path) -> None:
     bpy.ops.render.render(write_still=True)
 
 
+def pose_preview_character(armature: bpy.types.Object) -> None:
+    """Give the generated reference preview the same relaxed wave used in-app."""
+    rotations = {
+        "J_Bip_L_UpperArm": (0.0, 0.0, 1.18),
+        "J_Bip_L_LowerArm": (0.0, 0.0, 0.10),
+        "J_Bip_R_UpperArm": (-0.16, 0.05, 0.54),
+        "J_Bip_R_LowerArm": (0.05, 0.0, 1.02),
+        "J_Bip_R_Hand": (0.0, 0.08, 0.14),
+        "J_Bip_C_Chest": (0.0, -0.055, 0.0),
+        "J_Bip_C_Head": (-0.035, 0.075, -0.07),
+    }
+    for name, rotation in rotations.items():
+        bone = armature.pose.bones.get(name)
+        if bone is None:
+            continue
+        bone.rotation_mode = "XYZ"
+        bone.rotation_euler = rotation
+    bpy.context.view_layer.update()
+
+
 def main() -> None:
     source_path, output_path, preview_path = script_arguments()
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -220,6 +240,7 @@ def main() -> None:
     if not output_path.exists() or output_path.stat().st_size < 100_000:
         raise RuntimeError("USDZ export did not create a valid character asset")
 
+    pose_preview_character(armature)
     add_preview_camera_and_lights(preview_path)
     print(
         json.dumps(
