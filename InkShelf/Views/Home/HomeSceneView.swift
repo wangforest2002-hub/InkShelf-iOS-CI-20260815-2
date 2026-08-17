@@ -112,18 +112,14 @@ struct HomeSceneView: UIViewRepresentable {
             view.accessibilityIdentifier = "home-3d-scene"
             view.accessibilityLabel = "可自由布置的三维小家"
             view.accessibilityHint = "拖动调整视角，双指缩放；布置模式下可移动物品"
+            Task { @MainActor [weak self] in
+                self?.applyResponsiveFramingIfNeeded()
+            }
         }
 
         func sync(with value: HomeSceneView) {
             guard let sceneView else { return }
-            if !hasAppliedResponsiveFraming, sceneView.bounds.width > 0, sceneView.bounds.height > 0 {
-                let isPortrait = sceneView.bounds.height > sceneView.bounds.width
-                cameraYaw = isPortrait ? 0.48 : 0.62
-                cameraPitch = isPortrait ? 0.46 : 0.52
-                cameraDistance = isPortrait ? 11.7 : 8.2
-                hasAppliedResponsiveFraming = true
-                updateCamera(animated: false)
-            }
+            applyResponsiveFramingIfNeeded()
             if currentTheme != value.state.theme {
                 roomNode?.removeFromParentNode()
                 let room = factory.makeRoom(theme: value.state.theme)
@@ -357,6 +353,20 @@ struct HomeSceneView: UIViewRepresentable {
             } else {
                 cameraNode.position = position
             }
+        }
+
+        private func applyResponsiveFramingIfNeeded() {
+            guard !hasAppliedResponsiveFraming,
+                  let sceneView,
+                  sceneView.bounds.width > 0,
+                  sceneView.bounds.height > 0
+            else { return }
+            let isPortrait = sceneView.bounds.height > sceneView.bounds.width
+            cameraYaw = isPortrait ? 0.48 : 0.62
+            cameraPitch = isPortrait ? 0.46 : 0.52
+            cameraDistance = isPortrait ? 11.7 : 8.2
+            hasAppliedResponsiveFraming = true
+            updateCamera(animated: false)
         }
     }
 }
