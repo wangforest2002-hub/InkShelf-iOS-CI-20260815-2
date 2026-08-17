@@ -112,6 +112,7 @@ struct HomeWorldView: View {
                     } else {
                         HomeLivingDock(
                             actionTitle: koko.decision.action.title,
+                            moodTitle: koko.innerState.mood.title,
                             theme: home.state.theme,
                             edit: beginEditing,
                             talk: { showsKokoChat = true },
@@ -337,6 +338,7 @@ struct HomeWorldView: View {
 
 private struct HomeLivingDock: View {
     let actionTitle: String
+    let moodTitle: String
     let theme: HomeRoomTheme
     let edit: () -> Void
     let talk: () -> Void
@@ -346,7 +348,7 @@ private struct HomeLivingDock: View {
         HStack(spacing: 10) {
             Button(action: talk) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("可可正在")
+                    Text("可可 · \(moodTitle)")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                     Text(actionTitle)
@@ -706,11 +708,24 @@ private struct HomeThemePickerView: View {
 
 private struct KokoHomeSettingsView: View {
     @Environment(HomeWorldStore.self) private var home
+    @Environment(KokoAgentStore.self) private var koko
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         NavigationStack {
             Form {
+                Section {
+                    LabeledContent("心情", value: koko.innerState.mood.title)
+                    KokoStateMeter(title: "精力", value: koko.innerState.energy, tint: AppTheme.honey)
+                    KokoStateMeter(title: "好奇心", value: koko.innerState.curiosity, tint: AppTheme.lilac)
+                    KokoStateMeter(title: "陪伴意愿", value: koko.innerState.socialNeed, tint: AppTheme.mint)
+                    KokoStateMeter(title: "整理意愿", value: koko.innerState.orderNeed, tint: AppTheme.cyan)
+                } header: {
+                    Text("可可此刻")
+                } footer: {
+                    Text("这是保存在本机的模拟自主状态，会随着时间、阅读和房间变化缓慢改变。")
+                }
+
                 Section {
                     Toggle("自主活动", isOn: Binding(
                         get: { home.state.koko.roamingEnabled },
@@ -759,6 +774,25 @@ private struct KokoHomeSettingsView: View {
                 home.updateKokoZone(zone)
             }
         )
+    }
+}
+
+private struct KokoStateMeter: View {
+    let title: String
+    let value: Double
+    let tint: Color
+
+    var body: some View {
+        HStack(spacing: 14) {
+            Text(title)
+                .frame(width: 72, alignment: .leading)
+            ProgressView(value: value)
+                .tint(tint)
+            Text(value, format: .percent.precision(.fractionLength(0)))
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+                .frame(width: 38, alignment: .trailing)
+        }
     }
 }
 

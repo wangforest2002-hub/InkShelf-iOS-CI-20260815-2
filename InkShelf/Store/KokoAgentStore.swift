@@ -12,6 +12,7 @@ final class KokoAgentStore {
     )
     private(set) var decisionRevision = 0
     private(set) var memories: [KokoMemory] = []
+    private(set) var innerState: KokoInnerState
     private(set) var conversation: [AIChatMessage] = []
     private(set) var isThinking = false
     private(set) var isReplying = false
@@ -19,6 +20,7 @@ final class KokoAgentStore {
 
     @ObservationIgnored private let fileManager: FileManager
     @ObservationIgnored private let memoryURL: URL
+    @ObservationIgnored private let innerStateURL: URL
     @ObservationIgnored private var autonomyTask: Task<Void, Never>?
     @ObservationIgnored private var decisionTask: Task<Void, Never>?
     @ObservationIgnored private var lastAIRequestAt: Date?
@@ -30,7 +32,9 @@ final class KokoAgentStore {
         let documents = documentsURL ?? fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let root = documents.appendingPathComponent("InkShelf Library", isDirectory: true)
         memoryURL = root.appendingPathComponent("koko-memory.json")
+        innerStateURL = root.appendingPathComponent("koko-state.json")
         memories = Self.loadMemories(from: memoryURL)
+        innerState = Self.loadInnerState(from: innerStateURL) ?? KokoInnerState()
     }
 
     func start(world: HomeWorldState, books: [Book]) {
@@ -160,6 +164,8 @@ final class KokoAgentStore {
     }
 
     private func makePerception(trigger: KokoTrigger, world: HomeWorldState, books: [Book]) -> KokoPerception {
+        let localHour = Calendar.current.component(.hour, from: .now)
+        innerState.refresh(localHour: localHour)
         let furniture = world.placements.compactMap(\.furniture).map(\.title)
         let candidates = books
             .sorted { ($0.lastOpenedAt ?? $0.importedAt) > ($1.lastOpenedAt ?? $1.importedAt) }
@@ -178,18 +184,31 @@ final class KokoAgentStore {
         }
         return KokoPerception(
             trigger: trigger,
-            localHour: Calendar.current.component(.hour, from: .now),
+            localHour: localHour,
             roomTheme: world.theme,
             furnitureNames: furniture,
             books: candidates,
             displayedBookIDs: world.placements.compactMap(\.bookID),
-            recentMemories: memoryNotes
+            recentMemories: memoryNotes,
+            recentActions: memories.suffix(8).map(\.action),
+            innerState: innerState
         )
     }
 
     private func apply(_ newDecision: KokoDecision, trigger: KokoTrigger) {
         decision = newDecision
         decisionRevision &+= 1
+        if newDecision.generatedByAI,
+           let last = memories.last,
+           last.trigger == trigger,
+           Date().timeIntervalSince(last.createdAt) < 12 {
+            memories.removeLast()
+        } else {
+            innerState.apply(
+                newDecision.action,
+                localHour: Calendar.current.component(.hour, from: .now)
+            )
+        }
         memories.append(KokoMemory(
             trigger: trigger,
             action: newDecision.action,
@@ -197,16 +216,17 @@ final class KokoAgentStore {
             note: newDecision.innerThought
         ))
         memories = Array(memories.suffix(40))
-        saveMemories()
+        saveAgentState()
     }
 
-    private func saveMemories() {
+    private func saveAgentState() {
         do {
             try fileManager.createDirectory(at: memoryURL.deletingLastPathComponent(), withIntermediateDirectories: true)
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             encoder.dateEncodingStrategy = .iso8601
             try encoder.encode(memories).write(to: memoryURL, options: .atomic)
+            try encoder.encode(innerState).write(to: innerStateURL, options: .atomic)
         } catch {
             errorMessage = "可可的本地记忆没有保存好：\(error.localizedDescription)"
         }
@@ -217,5 +237,12 @@ final class KokoAgentStore {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         return (try? decoder.decode([KokoMemory].self, from: data)).map { Array($0.suffix(40)) } ?? []
+    }
+
+    private static func loadInnerState(from url: URL) -> KokoInnerState? {
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try? decoder.decode(KokoInnerState.self, from: data)
     }
 }

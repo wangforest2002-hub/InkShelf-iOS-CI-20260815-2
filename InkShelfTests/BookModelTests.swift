@@ -508,6 +508,65 @@ final class BookModelTests: XCTestCase {
         }
     }
 
+    func testKokoAutonomyUsesNeedsBeforePickingAnActivity() {
+        let tiredState = KokoInnerState(
+            mood: .sleepy,
+            energy: 0.12,
+            curiosity: 0.95,
+            socialNeed: 0.90,
+            orderNeed: 0.90
+        )
+        let perception = KokoPerception(
+            trigger: .periodic,
+            localHour: 15,
+            roomTheme: .sunset,
+            furnitureNames: ["画集书架"],
+            books: [],
+            displayedBookIDs: [],
+            recentMemories: [],
+            recentActions: [.stroll],
+            innerState: tiredState
+        )
+
+        let decision = KokoDecision.localFallback(for: perception)
+        XCTAssertEqual(decision.action, .rest)
+        XCTAssertFalse(decision.phrase.isEmpty)
+
+        var recovered = tiredState
+        recovered.apply(.rest, localHour: 15)
+        XCTAssertGreaterThan(recovered.energy, tiredState.energy)
+    }
+
+    @MainActor
+    func testHomeWorldPersistsLayoutArtworkAndKokoZone() throws {
+        let fileManager = FileManager.default
+        let root = fileManager.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? fileManager.removeItem(at: root) }
+
+        var store: HomeWorldStore? = HomeWorldStore(fileManager: fileManager, documentsURL: root)
+        store?.setTheme(.rain)
+        let furnitureID = try XCTUnwrap(store?.addFurniture(.desk))
+        store?.updatePlacement(
+            furnitureID,
+            transform: HomeTransform(x: 1.2, y: 0, z: -0.4, yaw: 0.7, scale: 1.1)
+        )
+        store?.updateKokoZone(KokoActivityZone(centerX: 0.4, centerZ: 0.2, width: 3.2, depth: 2.4))
+        let artData = testPNG(color: .systemPink)
+        _ = try store?.importArtwork(data: artData, kind: .standee, title: "旅行纪念")
+        store?.flush()
+        store = nil
+
+        let restored = HomeWorldStore(fileManager: fileManager, documentsURL: root)
+        XCTAssertEqual(restored.state.theme, .rain)
+        let restoredFurniture = try XCTUnwrap(restored.placement(withID: furnitureID))
+        XCTAssertEqual(restoredFurniture.furniture, .desk)
+        XCTAssertEqual(restoredFurniture.transform.x, 1.2, accuracy: 0.001)
+        XCTAssertEqual(restored.state.koko.activityZone.width, 3.2, accuracy: 0.001)
+        let artwork = try XCTUnwrap(restored.state.artworks.first)
+        XCTAssertEqual(artwork.title, "旅行纪念")
+        XCTAssertTrue(fileManager.fileExists(atPath: restored.artworkURL(for: artwork).path))
+    }
+
     @MainActor
     func testImageBookCanBecomeLowQualityPreviewWithoutTouchingCover() throws {
         let fileManager = FileManager.default

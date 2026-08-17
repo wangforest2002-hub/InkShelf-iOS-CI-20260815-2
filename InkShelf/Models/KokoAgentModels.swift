@@ -35,6 +35,120 @@ enum KokoTrigger: String, Codable, Sendable {
     case conversation
 }
 
+enum KokoMood: String, Codable, Sendable {
+    case cheerful
+    case calm
+    case curious
+    case focused
+    case sleepy
+
+    var title: String {
+        switch self {
+        case .cheerful: "开心"
+        case .calm: "安宁"
+        case .curious: "好奇"
+        case .focused: "专注"
+        case .sleepy: "有点困"
+        }
+    }
+}
+
+struct KokoInnerState: Codable, Hashable, Sendable {
+    static let currentSchema = 1
+
+    var schema: Int
+    var mood: KokoMood
+    var energy: Double
+    var curiosity: Double
+    var socialNeed: Double
+    var orderNeed: Double
+    var updatedAt: Date
+
+    init(
+        schema: Int = KokoInnerState.currentSchema,
+        mood: KokoMood = .calm,
+        energy: Double = 0.72,
+        curiosity: Double = 0.64,
+        socialNeed: Double = 0.36,
+        orderNeed: Double = 0.30,
+        updatedAt: Date = .now
+    ) {
+        self.schema = schema
+        self.mood = mood
+        self.energy = energy
+        self.curiosity = curiosity
+        self.socialNeed = socialNeed
+        self.orderNeed = orderNeed
+        self.updatedAt = updatedAt
+        clamp()
+    }
+
+    mutating func refresh(at date: Date = .now, localHour: Int) {
+        let elapsedHours = min(max(date.timeIntervalSince(updatedAt) / 3_600, 0), 24)
+        curiosity += elapsedHours * 0.025
+        socialNeed += elapsedHours * 0.018
+        orderNeed += elapsedHours * 0.012
+        if localHour >= 23 || localHour < 6 {
+            energy -= elapsedHours * 0.045
+        } else {
+            energy += elapsedHours * 0.018
+        }
+        updatedAt = date
+        updateMood(localHour: localHour)
+        clamp()
+    }
+
+    mutating func apply(_ action: KokoAction, at date: Date = .now, localHour: Int) {
+        switch action {
+        case .greet, .wave:
+            socialNeed -= 0.24
+            energy -= 0.025
+        case .stroll:
+            curiosity -= 0.08
+            energy -= 0.09
+        case .admireBook:
+            curiosity -= 0.18
+            energy -= 0.035
+        case .read:
+            curiosity -= 0.26
+            energy -= 0.10
+        case .tidy:
+            orderNeed -= 0.42
+            energy -= 0.12
+        case .lookOutWindow, .sit:
+            socialNeed -= action == .sit ? 0.16 : 0.04
+            energy += 0.06
+        case .rest:
+            energy += 0.30
+        }
+        updatedAt = date
+        updateMood(localHour: localHour)
+        clamp()
+    }
+
+    private mutating func updateMood(localHour: Int) {
+        if energy < 0.28 || ((localHour >= 23 || localHour < 6) && energy < 0.48) {
+            mood = .sleepy
+        } else if curiosity > 0.70 {
+            mood = .curious
+        } else if orderNeed > 0.72 {
+            mood = .focused
+        } else if socialNeed < 0.24 {
+            mood = .cheerful
+        } else {
+            mood = .calm
+        }
+    }
+
+    private mutating func clamp() {
+        schema = Self.currentSchema
+        energy = min(max(energy, 0), 1)
+        curiosity = min(max(curiosity, 0), 1)
+        socialNeed = min(max(socialNeed, 0), 1)
+        orderNeed = min(max(orderNeed, 0), 1)
+    }
+}
+
 struct KokoBookCandidate: Codable, Hashable, Sendable {
     let id: UUID
     let title: String
@@ -51,6 +165,8 @@ struct KokoPerception: Codable, Hashable, Sendable {
     let books: [KokoBookCandidate]
     let displayedBookIDs: [UUID]
     let recentMemories: [String]
+    let recentActions: [KokoAction]
+    let innerState: KokoInnerState
 }
 
 struct KokoDecision: Codable, Hashable, Sendable {
@@ -110,6 +226,7 @@ extension KokoDecision {
             .sorted { ($0.lastOpenedAt ?? .distantPast) > ($1.lastOpenedAt ?? .distantPast) }
             .first
         let favorite = perception.books.first(where: \.isFavorite)
+        let lastAction = perception.recentActions.last
 
         switch perception.trigger {
         case .enteredHome:
@@ -146,6 +263,30 @@ extension KokoDecision {
                 innerThought: "房间变了，先熟悉新的走动路线。"
             )
         case .periodic:
+            if perception.innerState.energy < 0.28 {
+                return KokoDecision(
+                    action: .rest,
+                    phrase: "我先靠一会儿。屋里的灯光让人很安心。",
+                    innerThought: "有点困了，先恢复一点精神。",
+                    duration: 24
+                )
+            }
+            if perception.innerState.orderNeed > 0.72, lastAction != .tidy {
+                return KokoDecision(
+                    action: .tidy,
+                    phrase: "我把刚才挪动过的角落顺手整理一下。",
+                    innerThought: "房间需要恢复整洁，走动也会更舒服。",
+                    duration: 18
+                )
+            }
+            if perception.innerState.socialNeed > 0.76, lastAction != .sit {
+                return KokoDecision(
+                    action: .sit,
+                    phrase: "我来这边坐一会儿。你看你的书就好。",
+                    innerThought: "想靠近一点，但不打扰阅读。",
+                    duration: 22
+                )
+            }
             if perception.localHour >= 20 || perception.localHour < 6 {
                 return KokoDecision(
                     action: .lookOutWindow,
@@ -154,13 +295,22 @@ extension KokoDecision {
                     duration: 18
                 )
             }
-            if let book = recentlyOpened ?? favorite {
+            if let book = recentlyOpened ?? favorite,
+               (perception.innerState.curiosity > 0.52 || lastAction != .read) {
                 return KokoDecision(
                     action: .read,
                     targetBookID: book.id,
                     phrase: "我想再翻翻《\(book.title)》。你之前停留的地方，好像很喜欢。",
                     innerThought: "想从他的阅读痕迹里理解他喜欢什么。",
                     duration: 22
+                )
+            }
+            if lastAction == .stroll {
+                return KokoDecision(
+                    action: .lookOutWindow,
+                    phrase: "走到窗边时，正好想看看今天的光。",
+                    innerThought: "散步后在窗边停留片刻。",
+                    duration: 17
                 )
             }
             return KokoDecision(

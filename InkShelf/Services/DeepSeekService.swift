@@ -270,6 +270,7 @@ actor DeepSeekService {
         触发原因：\(perception.trigger.rawValue)
         当地时间：\(perception.localHour):00
         房间：\(perception.roomTheme.title)
+        可可此刻：心情\(perception.innerState.mood.title)，精力\(Int((perception.innerState.energy * 100).rounded()))%，好奇心\(Int((perception.innerState.curiosity * 100).rounded()))%，想陪伴\(Int((perception.innerState.socialNeed * 100).rounded()))%，整理意愿\(Int((perception.innerState.orderNeed * 100).rounded()))%
         家具：\(furniture.isEmpty ? "还没有家具" : furniture)
         已摆在房间的画集 ID：\(displayed.isEmpty ? "无" : displayed.sorted().joined(separator: "、"))
         可选画集：
@@ -279,7 +280,7 @@ actor DeepSeekService {
 
         仅从下列动作选一个：greet, stroll, admireBook, read, tidy, lookOutWindow, sit, rest, wave。
         如果选择 admireBook 或 read，target_book_id 必须是上方列表中真实存在的 ID；其他动作返回空字符串。
-        行为要考虑时间、用户刚做的事和之前记忆，不要连续重复同一句话。不用营销腔，不制造依赖、占有感或焦虑，不自称真实人类。
+        行为要考虑时间、可可此刻的内部状态、用户刚做的事和之前记忆，不要连续重复同一句话。不用营销腔，不制造依赖、占有感或焦虑，不自称真实人类。
         phrase 是可可偶尔显示的一句自然中文，最多 45 字；inner_thought 是用于记忆的简短意图，不直接显示给用户；duration 为 6 到 30 秒。
         只返回 JSON：
         {"action":"stroll","target_book_id":"","phrase":"","inner_thought":"","duration":12}
@@ -332,7 +333,7 @@ actor DeepSeekService {
             "《\($0.title)》（阅读进度 \(Int(($0.progress * 100).rounded()))%）"
         }.joined(separator: "、")
         let prompt = """
-        现在是 \(perception.localHour):00，你在“\(perception.roomTheme.title)”里。
+        现在是 \(perception.localHour):00，你在“\(perception.roomTheme.title)”里，心情是“\(perception.innerState.mood.title)”。
         你可以知道的画集：\(books.isEmpty ? "暂无" : books)
         最近对话：
         \(history.isEmpty ? "无" : history)
