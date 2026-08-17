@@ -58,6 +58,7 @@ struct HomeSceneView: UIViewRepresentable {
         private var cameraYaw: Float = 0.68
         private var cameraPitch: Float = 0.56
         private var cameraDistance: Float = 7.2
+        private var hasAppliedResponsiveFraming = false
         private var dragStartTransform: HomeTransform?
         private var rotationStart: Float?
 
@@ -72,7 +73,7 @@ struct HomeSceneView: UIViewRepresentable {
             cameraTarget.position = SCNVector3(0, 0.88, -0.08)
             scene.rootNode.addChildNode(cameraTarget)
             let camera = SCNCamera()
-            camera.fieldOfView = 43
+            camera.fieldOfView = 52
             camera.zNear = 0.05
             camera.zFar = 80
             camera.wantsHDR = true
@@ -115,6 +116,14 @@ struct HomeSceneView: UIViewRepresentable {
 
         func sync(with value: HomeSceneView) {
             guard let sceneView else { return }
+            if !hasAppliedResponsiveFraming, sceneView.bounds.width > 0, sceneView.bounds.height > 0 {
+                let isPortrait = sceneView.bounds.height > sceneView.bounds.width
+                cameraYaw = isPortrait ? 0.48 : 0.62
+                cameraPitch = isPortrait ? 0.46 : 0.52
+                cameraDistance = isPortrait ? 11.7 : 8.2
+                hasAppliedResponsiveFraming = true
+                updateCamera(animated: false)
+            }
             if currentTheme != value.state.theme {
                 roomNode?.removeFromParentNode()
                 let room = factory.makeRoom(theme: value.state.theme)
@@ -303,7 +312,7 @@ struct HomeSceneView: UIViewRepresentable {
 
         @objc private func pinched(_ recognizer: UIPinchGestureRecognizer) {
             guard recognizer.state == .changed else { return }
-            cameraDistance = min(max(cameraDistance / Float(recognizer.scale), 4.1), 10.2)
+            cameraDistance = min(max(cameraDistance / Float(recognizer.scale), 4.1), 13.5)
             recognizer.scale = 1
             updateCamera(animated: false)
         }
