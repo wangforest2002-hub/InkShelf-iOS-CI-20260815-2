@@ -31,6 +31,7 @@ enum KokoTrigger: String, Codable, Sendable {
     case tapped
     case roomChanged
     case bookPlaced
+    case returnedFromReading
     case periodic
     case conversation
 }
@@ -255,6 +256,22 @@ extension KokoDecision {
                 targetBookID: recentlyOpened?.id ?? favorite?.id,
                 phrase: "放在这里很好看。这个角落一下子有了你的气息。",
                 innerThought: "新的收藏值得好好看一看。"
+            )
+        case .returnedFromReading:
+            if let book = recentlyOpened {
+                return KokoDecision(
+                    action: .sit,
+                    targetBookID: book.id,
+                    phrase: "看完一会儿啦。《\(book.title)》先替你放在手边。",
+                    innerThought: "他刚从阅读里回来，留一点安静的余韵。",
+                    duration: 16
+                )
+            }
+            return KokoDecision(
+                action: .sit,
+                phrase: "回来啦。我们先让眼睛休息一下。",
+                innerThought: "阅读告一段落，安静陪他休息。",
+                duration: 15
             )
         case .roomChanged:
             return KokoDecision(

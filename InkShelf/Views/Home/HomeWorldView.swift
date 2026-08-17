@@ -146,7 +146,15 @@ struct HomeWorldView: View {
                 }
             }
             .navigationDestination(item: $openedBook) { book in
-                ReaderView(book: book) { openedBook = nil }
+                ReaderView(book: book) {
+                    openedBook = nil
+                    koko.react(
+                        to: .returnedFromReading,
+                        world: home.state,
+                        books: library.books,
+                        prefersAI: true
+                    )
+                }
             }
         }
         .sheet(isPresented: $showsFurnitureCatalog) {

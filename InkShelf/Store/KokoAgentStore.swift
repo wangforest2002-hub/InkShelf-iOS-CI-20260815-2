@@ -41,7 +41,9 @@ final class KokoAgentStore {
         latestWorld = world
         latestBooks = books
         if autonomyTask == nil {
-            react(to: .enteredHome, world: world, books: books, prefersAI: true)
+            if world.koko.welcomesHome {
+                react(to: .enteredHome, world: world, books: books, prefersAI: true)
+            }
             autonomyTask = Task { [weak self] in
                 while !Task.isCancelled {
                     try? await Task.sleep(for: .seconds(78))
