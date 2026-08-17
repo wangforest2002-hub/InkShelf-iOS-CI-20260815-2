@@ -9,3 +9,4 @@ Payload/
 *.ipa
 __pycache__/
 *.pyc
+.tmp/

@@ -38,6 +38,14 @@
 - DeepSeek 密钥只保存在 iOS Keychain；App 不把 PDF 或整页原图直接上传给 AI。
 - AI 是可选功能，关闭后阅读器完全不发起 DeepSeek 请求。
 
+## 三维小家与可可
+
+- “小家”是可旋转、缩放和自由布置的原生三维房间，可在夕照、雨声与月光三种氛围间切换。
+- 画集可以作为实体书摆进书架；个人图片可以制成挂画、立牌或手办展示，家具与藏品均可移动、旋转、缩放、锁定。
+- 可可是带完整骨骼、服装、头发和表情目标的三维角色，会呼吸、眨眼、散步、挥手、阅读、整理、休息和在窗边停留。
+- 可可在本机维护精力、好奇心、聊天与整理需求，保留最近行为记忆并在家具间避让；即使断网也会立即作出本地行为。
+- 开启 AI 后，DeepSeek V4 Pro 只负责结合时间、房间、画集与本地记忆选择高层意图和自然语言，移动、动作与安全边界仍由设备端执行。
+
 ## iCloud Drive 书库
 
 “云书库”默认使用 iCloud。第一次在系统“文件”选择存放画集的 iCloud Drive 文件夹后，二次元小家会保存系统授予的文件夹访问权限：
@@ -91,7 +99,7 @@
 发布新的已签名 IPA：
 
 ```powershell
-.\scripts\Publish-OnlineUpdate.ps1 -SignedIpa "D:\path\二次元小家-signed.ipa" -Version "1.9.1" -Build 15 -Notes "阅读体验优化","问题修复"
+.\scripts\Publish-OnlineUpdate.ps1 -SignedIpa "D:\path\二次元小家-signed.ipa" -Version "2.0.0" -Build 16 -Notes "三维小家与可可","阅读体验优化"
 ```
 
 ## X 图片珍藏与 Sharp 清晰化

@@ -182,7 +182,7 @@ struct SettingsView: View {
                 }
 
                 Section("关于") {
-                    LabeledContent("二次元小家", value: "1.9.1")
+                    LabeledContent("二次元小家", value: AppIdentity.version)
                     Button("重新查看欢迎页") {
                         hasSeenWelcome = false
                     }
