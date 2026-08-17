@@ -15,6 +15,14 @@ final class ReaderNavigationUITests: XCTestCase {
             "The native 3D home scene did not appear"
         )
         XCTAssertTrue(app.descendants(matching: .any)["home-theme"].exists)
+        attachScreenshot(app, name: "01-home-living")
+
+        let chat = app.buttons["和可可聊聊"].firstMatch
+        XCTAssertTrue(chat.waitForExistence(timeout: 3), "Koko chat entry point is missing")
+        chat.tap()
+        XCTAssertTrue(app.navigationBars["和可可聊聊"].waitForExistence(timeout: 3))
+        attachScreenshot(app, name: "02-koko-chat")
+        app.buttons["关闭"].tap()
 
         let edit = app.buttons["home-edit-toggle"]
         XCTAssertTrue(edit.waitForExistence(timeout: 3), "The home editing entry point is missing")
@@ -23,6 +31,22 @@ final class ReaderNavigationUITests: XCTestCase {
         XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "家具")).firstMatch.waitForExistence(timeout: 3))
         XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "画集")).firstMatch.exists)
         XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "收藏")).firstMatch.exists)
+        attachScreenshot(app, name: "03-home-editing")
+
+        let kokoSettings = app.buttons["可可"].firstMatch
+        XCTAssertTrue(kokoSettings.isHittable)
+        kokoSettings.tap()
+        XCTAssertTrue(app.navigationBars["可可的活动范围"].waitForExistence(timeout: 3))
+        attachScreenshot(app, name: "04-koko-autonomy")
+        app.buttons["完成"].tap()
+
+        let furniture = app.buttons["家具"].firstMatch
+        XCTAssertTrue(furniture.waitForExistence(timeout: 3))
+        furniture.tap()
+        XCTAssertTrue(app.navigationBars["添加家具"].waitForExistence(timeout: 3))
+        attachScreenshot(app, name: "05-furniture-catalog")
+        app.buttons["完成"].tap()
+
         XCTAssertTrue(edit.isHittable, "The editing completion button became unreachable")
         edit.tap()
     }
@@ -41,6 +65,7 @@ final class ReaderNavigationUITests: XCTestCase {
             app.buttons["shelf-new-group"].waitForExistence(timeout: 4),
             "The custom shelf-group entry point is missing"
         )
+        attachScreenshot(app, name: "06-shelf")
 
         let book = app.descendants(matching: .any)["book-a11ce000-0000-4000-8000-000000000001"]
         XCTAssertTrue(book.waitForExistence(timeout: 8), "The seeded local book never appeared on the shelf")
@@ -59,6 +84,7 @@ final class ReaderNavigationUITests: XCTestCase {
         }
         XCTAssertTrue(back.waitForExistence(timeout: 2), "Tapping a valid local book did not enter ReaderView")
         XCTAssertTrue(app.sliders["reader-progress"].exists, "Reader controls did not finish loading")
+        attachScreenshot(app, name: "07-reader")
         let aiToggle = app.buttons["reader-ai-toggle"]
         XCTAssertTrue(aiToggle.exists, "The AI control is not a simple on/off button")
         aiToggle.tap()
@@ -79,12 +105,14 @@ final class ReaderNavigationUITests: XCTestCase {
         XCTAssertTrue(settings.waitForExistence(timeout: 2), "The reader settings button is not hittable")
         settings.tap()
         XCTAssertTrue(app.navigationBars["阅读设置"].waitForExistence(timeout: 2), "Reader settings did not open")
+        attachScreenshot(app, name: "08-reader-settings")
         app.buttons["完成"].tap()
 
         let thumbnails = app.buttons["reader-thumbnails"]
         XCTAssertTrue(thumbnails.waitForExistence(timeout: 2), "The thumbnail button disappeared after closing settings")
         thumbnails.tap()
         XCTAssertTrue(app.navigationBars["页面"].waitForExistence(timeout: 2), "Thumbnail navigation did not open")
+        attachScreenshot(app, name: "09-page-browser")
         app.buttons["完成"].tap()
 
         let layout = app.buttons["reader-layout"]
@@ -216,5 +244,12 @@ final class ReaderNavigationUITests: XCTestCase {
             Thread.sleep(forTimeInterval: 0.2)
         }
         return false
+    }
+
+    private func attachScreenshot(_ app: XCUIApplication, name: String) {
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
     }
 }

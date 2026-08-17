@@ -118,6 +118,26 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+      - name: Export showcase screenshots
+        if: always()
+        run: |
+          rm -rf ui-showcase
+          mkdir -p ui-showcase
+          xcrun xcresulttool export attachments \
+            --path ui-tests.xcresult \
+            --output-path ui-showcase
+          find ui-showcase -type f -name '*.png' -print
+          test "$(find ui-showcase -type f -name '*.png' | wc -l | tr -d ' ')" -ge 9
+
+      - name: Upload showcase screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: InkShelf-ui-showcase
+          path: ui-showcase
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Launch app and capture UI smoke screenshot
         run: |
           APP_PATH="build-simulator/Build/Products/Debug-iphonesimulator/InkShelf.app"
