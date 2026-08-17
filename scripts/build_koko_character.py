@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 import struct
 import sys
 from pathlib import Path
@@ -68,6 +69,28 @@ def vrm_expression_names(path: Path) -> dict[int, str]:
 def look_at(node: bpy.types.Object, target: Vector) -> None:
     direction = target - node.location
     node.rotation_euler = direction.to_track_quat("-Z", "Y").to_euler()
+
+
+def export_runtime_textures(directory: Path) -> int:
+    """Write one predictable PNG for every material used by SceneKit."""
+    directory.mkdir(parents=True, exist_ok=True)
+    count = 0
+    for material in bpy.data.materials:
+        if not material.node_tree:
+            continue
+        image_nodes = [node for node in material.node_tree.nodes if node.type == "TEX_IMAGE" and node.image]
+        if not image_nodes:
+            continue
+        image = image_nodes[0].image
+        safe_name = re.sub(r"[^A-Za-z0-9_.-]+", "_", material.name).strip("._")
+        destination = directory / f"{safe_name or f'material-{count:02d}'}.png"
+        image.filepath_raw = str(destination)
+        image.file_format = "PNG"
+        image.save()
+        if not destination.exists():
+            raise RuntimeError(f"Could not materialize texture for: {material.name}")
+        count += 1
+    return count
 
 
 def add_preview_camera_and_lights(preview_path: Path) -> None:
@@ -170,6 +193,7 @@ def main() -> None:
         item.select_set(True)
     bpy.context.view_layer.objects.active = armature
 
+    texture_count = export_runtime_textures(output_path.parent / "KokoTextures")
     bpy.ops.wm.usd_export(
         filepath=str(output_path),
         selected_objects_only=True,
@@ -183,7 +207,8 @@ def main() -> None:
         export_shapekeys=True,
         generate_preview_surface=True,
         export_textures=True,
-        export_textures_mode="KEEP",
+        export_textures_mode="NEW",
+        overwrite_textures=True,
         relative_paths=True,
         usdz_downscale_size="1024",
         convert_orientation=True,
@@ -204,6 +229,7 @@ def main() -> None:
                 "preview": str(preview_path),
                 "bones": len(armature.data.bones),
                 "meshes": sum(1 for item in character_objects if item.type == "MESH"),
+                "textures": texture_count,
                 "expressions": sorted(set(expressions.values())),
             },
             ensure_ascii=False,

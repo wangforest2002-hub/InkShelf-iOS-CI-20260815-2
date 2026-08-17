@@ -161,6 +161,7 @@ jobs:
           find "$APP_PATH" -maxdepth 1 -type f \( -name 'AppIcon*.png' -o -name 'Assets.car' \) | grep -q .
           test -d "$APP_PATH/RealESRGANAnimeSharp.mlmodelc"
           test -s "$APP_PATH/Koko.usdz"
+          test "$(find "$APP_PATH" -type f -name 'F00_*.png' | wc -l | tr -d ' ')" -ge 17
 
       - name: Package unsigned IPA
         run: |

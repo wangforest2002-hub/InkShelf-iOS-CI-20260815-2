@@ -201,6 +201,12 @@ final class HomeSceneFactory {
                 node.opacity = 1
                 node.castsShadow = true
                 node.geometry?.materials.forEach { material in
+                    if let texture = kokoTexture(named: material.name) {
+                        material.diffuse.contents = texture
+                        material.diffuse.wrapS = .repeat
+                        material.diffuse.wrapT = .repeat
+                        material.blendMode = .alpha
+                    }
                     material.transparency = 1
                     material.readsFromDepthBuffer = true
                     material.writesToDepthBuffer = true
@@ -226,6 +232,21 @@ final class HomeSceneFactory {
         colliderNode.position.y = 0.79
         wrapper.addChildNode(colliderNode)
         return wrapper
+    }
+
+    private func kokoTexture(named materialName: String?) -> UIImage? {
+        guard let materialName, !materialName.isEmpty else { return nil }
+        let locations = ["Models/KokoTextures", "KokoTextures", nil]
+        for subdirectory in locations {
+            if let url = Bundle.main.url(
+                forResource: materialName,
+                withExtension: "png",
+                subdirectory: subdirectory
+            ), let image = UIImage(contentsOfFile: url.path) {
+                return image
+            }
+        }
+        return nil
     }
 
     private func makeWindow(palette: HomeScenePalette) -> SCNNode {

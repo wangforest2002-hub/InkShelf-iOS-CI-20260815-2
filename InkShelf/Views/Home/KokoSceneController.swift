@@ -95,10 +95,10 @@ final class KokoSceneController {
         guard let root else { return }
         // VRM files use a T-pose as their bind pose. Lowering both arms at
         // runtime keeps the full original rig intact for later gestures.
-        root.childNode(withName: "J_Bip_L_UpperArm", recursively: true)?.eulerAngles.z -= 1.18
-        root.childNode(withName: "J_Bip_R_UpperArm", recursively: true)?.eulerAngles.z += 1.18
-        root.childNode(withName: "J_Bip_L_LowerArm", recursively: true)?.eulerAngles.z -= 0.10
-        root.childNode(withName: "J_Bip_R_LowerArm", recursively: true)?.eulerAngles.z += 0.10
+        root.childNode(withName: "J_Bip_L_UpperArm", recursively: true)?.eulerAngles.z += 1.18
+        root.childNode(withName: "J_Bip_R_UpperArm", recursively: true)?.eulerAngles.z -= 1.18
+        root.childNode(withName: "J_Bip_L_LowerArm", recursively: true)?.eulerAngles.z += 0.10
+        root.childNode(withName: "J_Bip_R_LowerArm", recursively: true)?.eulerAngles.z -= 0.10
         root.childNode(withName: "J_Bip_C_Head", recursively: true)?.eulerAngles.x -= 0.035
     }
 
@@ -249,8 +249,8 @@ final class KokoSceneController {
             let upper = root.childNode(withName: "J_Bip_R_UpperArm", recursively: true)
             let lower = root.childNode(withName: "J_Bip_R_LowerArm", recursively: true)
             let raise = SCNAction.run { _ in
-                upper?.runAction(.rotateBy(x: -0.20, y: 0, z: -1.15, duration: 0.42))
-                lower?.runAction(.rotateBy(x: 0, y: 0, z: -0.72, duration: 0.42))
+                upper?.runAction(.rotateBy(x: -0.20, y: 0, z: 1.15, duration: 0.42))
+                lower?.runAction(.rotateBy(x: 0, y: 0, z: 0.72, duration: 0.42))
             }
             let wave = SCNAction.repeat(
                 .sequence([
