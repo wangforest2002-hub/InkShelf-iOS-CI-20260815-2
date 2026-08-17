@@ -5,6 +5,28 @@ final class ReaderNavigationUITests: XCTestCase {
         continueAfterFailure = false
     }
 
+    func testHomeWorldOpensAndEditingControlsRemainHittable() throws {
+        let app = XCUIApplication()
+        app.launchArguments.append("INKSHELF_UI_TEST_HOME")
+        app.launch()
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["home-3d-scene"].waitForExistence(timeout: 8),
+            "The native 3D home scene did not appear"
+        )
+        XCTAssertTrue(app.descendants(matching: .any)["home-theme"].exists)
+
+        let edit = app.buttons["home-edit-toggle"]
+        XCTAssertTrue(edit.waitForExistence(timeout: 3), "The home editing entry point is missing")
+        XCTAssertTrue(edit.isHittable, "The home editing entry point is covered by another view")
+        edit.tap()
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "家具")).firstMatch.waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "画集")).firstMatch.exists)
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "收藏")).firstMatch.exists)
+        XCTAssertTrue(edit.isHittable, "The editing completion button became unreachable")
+        edit.tap()
+    }
+
     func testSeededLocalBookOpensAndReturnsFromReader() throws {
         let app = XCUIApplication()
         app.launchArguments.append("INKSHELF_UI_TEST_SEED")
