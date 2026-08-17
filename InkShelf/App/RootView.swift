@@ -106,6 +106,10 @@ private struct MainTabView: View {
 
     private var tabs: some View {
         TabView {
+            Tab("小家", systemImage: "house.fill") {
+                HomeWorldView()
+            }
+
             Tab("书架", systemImage: "books.vertical.fill") {
                 LibraryView(scope: .all)
             }

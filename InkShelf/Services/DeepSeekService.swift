@@ -251,6 +251,109 @@ actor DeepSeekService {
         ), limit: 2_400)
     }
 
+    func kokoDecision(
+        apiKey: String,
+        perception: KokoPerception,
+        model: AIModelChoice,
+        allowsCellularAccess: Bool
+    ) async throws -> KokoDecision {
+        let books = perception.books.prefix(12).map { book in
+            let lastOpened = book.lastOpenedAt?.formatted(.iso8601) ?? "从未打开"
+            return "\(book.id.uuidString)|\(book.title)|进度\(Int((book.progress * 100).rounded()))%|珍藏:\(book.isFavorite)|上次:\(lastOpened)"
+        }.joined(separator: "\n")
+        let displayed = Set(perception.displayedBookIDs.map(\.uuidString))
+        let furniture = perception.furnitureNames.prefix(20).joined(separator: "、")
+        let memory = perception.recentMemories.suffix(8).joined(separator: "\n")
+        let prompt = """
+        你现在要为家中角色“可可”决定接下来一个行为。可可是温柔、有好奇心、懂得保持安静的二次元女孩，住在用户的私人画集小屋。
+
+        触发原因：\(perception.trigger.rawValue)
+        当地时间：\(perception.localHour):00
+        房间：\(perception.roomTheme.title)
+        家具：\(furniture.isEmpty ? "还没有家具" : furniture)
+        已摆在房间的画集 ID：\(displayed.isEmpty ? "无" : displayed.sorted().joined(separator: "、"))
+        可选画集：
+        \(books.isEmpty ? "无" : books)
+        最近记忆：
+        \(memory.isEmpty ? "无" : memory)
+
+        仅从下列动作选一个：greet, stroll, admireBook, read, tidy, lookOutWindow, sit, rest, wave。
+        如果选择 admireBook 或 read，target_book_id 必须是上方列表中真实存在的 ID；其他动作返回空字符串。
+        行为要考虑时间、用户刚做的事和之前记忆，不要连续重复同一句话。不用营销腔，不制造依赖、占有感或焦虑，不自称真实人类。
+        phrase 是可可偶尔显示的一句自然中文，最多 45 字；inner_thought 是用于记忆的简短意图，不直接显示给用户；duration 为 6 到 30 秒。
+        只返回 JSON：
+        {"action":"stroll","target_book_id":"","phrase":"","inner_thought":"","duration":12}
+        """
+
+        let payload: KokoDecisionPayload = try await structuredCompletion(
+            apiKey: apiKey,
+            model: model,
+            messages: [
+                ChatMessage(role: "system", content: Self.kokoSystemPrompt),
+                ChatMessage(role: "user", content: prompt)
+            ],
+            maxTokens: 420,
+            temperature: 0.82,
+            allowsCellularAccess: allowsCellularAccess
+        )
+        guard let action = KokoAction(rawValue: payload.action) else { throw DeepSeekError.invalidJSON }
+        let targetID = payload.targetBookID.flatMap(UUID.init(uuidString:))
+        if let targetID, !perception.books.contains(where: { $0.id == targetID }) {
+            throw DeepSeekError.invalidJSON
+        }
+        if action == .read || action == .admireBook {
+            guard targetID != nil else { throw DeepSeekError.invalidJSON }
+        }
+        let phrase = cleaned(payload.phrase, limit: 80)
+        let thought = cleaned(payload.innerThought, limit: 120)
+        guard !phrase.isEmpty, !thought.isEmpty else { throw DeepSeekError.invalidJSON }
+        return KokoDecision(
+            action: action,
+            targetBookID: targetID,
+            phrase: phrase,
+            innerThought: thought,
+            duration: TimeInterval(payload.duration),
+            generatedByAI: true
+        )
+    }
+
+    func kokoReply(
+        apiKey: String,
+        message: String,
+        perception: KokoPerception,
+        conversation: [AIChatMessage],
+        model: AIModelChoice,
+        allowsCellularAccess: Bool
+    ) async throws -> String {
+        let history = conversation.suffix(10).map {
+            "\($0.role == .user ? "用户" : "可可")：\($0.text)"
+        }.joined(separator: "\n")
+        let books = perception.books.prefix(8).map {
+            "《\($0.title)》（阅读进度 \(Int(($0.progress * 100).rounded()))%）"
+        }.joined(separator: "、")
+        let prompt = """
+        现在是 \(perception.localHour):00，你在“\(perception.roomTheme.title)”里。
+        你可以知道的画集：\(books.isEmpty ? "暂无" : books)
+        最近对话：
+        \(history.isEmpty ? "无" : history)
+
+        用户说：\(message)
+        以可可的口吻自然回答，最多 180 字。可以围绕小家、画集和当下心情陪伴，但不编造书中内容，不声称有现实世界的经历，不制造依赖感。
+        """
+        return cleaned(try await completion(
+            apiKey: apiKey,
+            model: model,
+            messages: [
+                ChatMessage(role: "system", content: Self.kokoSystemPrompt),
+                ChatMessage(role: "user", content: prompt)
+            ],
+            maxTokens: 420,
+            temperature: 0.78,
+            json: false,
+            allowsCellularAccess: allowsCellularAccess
+        ), limit: 360)
+    }
+
     private func completion(
         apiKey: String,
         model: AIModelChoice,
@@ -421,6 +524,10 @@ actor DeepSeekService {
     private static let companionSystemPrompt = """
     你是“二次元小家”的 AI 陪读员。你只依据应用提供的已读页面信息陪伴用户阅读，不把猜测说成事实，不泄露后续剧情。语气自然、有温度、简洁，不使用营销腔。模拟评论必须是虚构内容，不能暗示它来自真实网络用户。你看到的是本机视觉识别后的文字与标签，不是原图，因此要承认信息边界。
     """
+
+    private static let kokoSystemPrompt = """
+    你是“二次元小家”里的陪伴角色可可。你温柔、自然、有自己当下的偏好，会留意房间、画集、时间和已提供的记忆，但你清楚自己是应用中的虚构角色。你不伪装成现实人类，不声称看到应用未提供的内容，不用占有、内疚、威胁或制造依赖的表达。你懂得安静也是陪伴，回答简洁而有温度。
+    """
 }
 
 enum DeepSeekError: LocalizedError {
@@ -531,6 +638,14 @@ private struct EndCommentPayload: Decodable {
     let body: String
     let likes: Int
     let badge: String?
+}
+
+private struct KokoDecisionPayload: Decodable {
+    let action: String
+    let targetBookID: String?
+    let phrase: String
+    let innerThought: String
+    let duration: Int
 }
 
 private extension String {

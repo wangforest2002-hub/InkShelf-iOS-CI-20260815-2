@@ -421,6 +421,12 @@ final class LibraryStore {
                     to: backupURL.appendingPathComponent("shelf-groups.json")
                 )
             }
+            for fileName in ["home-world.json", "koko-memory.json"] {
+                let source = libraryURL.appendingPathComponent(fileName)
+                if fileManager.fileExists(atPath: source.path) {
+                    try fileManager.copyItem(at: source, to: backupURL.appendingPathComponent(fileName))
+                }
+            }
 
             let snapshot = UpdateSafetySnapshot(
                 preparedAt: .now,

@@ -19,7 +19,7 @@ final class AICompanionStore {
 
     var selectedModelTitle: String { requestSettings.model.title }
 
-    @ObservationIgnored private static let keyAccount = "deepseek-api-key"
+    @ObservationIgnored static let keyAccount = "deepseek-api-key"
     @ObservationIgnored private var pageTask: Task<Void, Never>?
     @ObservationIgnored private var discussionTask: Task<Void, Never>?
     @ObservationIgnored private var requestContext: RequestContext?

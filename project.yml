@@ -38,6 +38,8 @@ targets:
           - Resources
       - path: InkShelf/Resources/Assets.xcassets
         buildPhase: resources
+      - path: InkShelf/Resources/Models
+        buildPhase: resources
     dependencies:
       - package: ZIPFoundation
     info:

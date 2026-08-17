@@ -7,4 +7,5 @@ build/
 .swiftpm/
 Payload/
 *.ipa
-
+__pycache__/
+*.pyc
