@@ -349,30 +349,23 @@ private struct HomeLivingDock: View {
     let chooseTheme: () -> Void
 
     var body: some View {
-        VStack(spacing: 9) {
-            Label("拖动环顾 · 轻点空地走动 · 捏合前后移动", systemImage: "viewfinder")
-                .font(.caption2.weight(.medium))
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-            HStack(spacing: 10) {
-                Button(action: talk) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("东京小公寓")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                        Text("把喜欢的画集摆进家里")
-                            .font(.subheadline.weight(.semibold))
-                            .lineLimit(1)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+        HStack(spacing: 10) {
+            Button(action: talk) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("东京小公寓")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    Text("拖动环顾 · 轻点走动")
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(1)
                 }
-                .buttonStyle(.plain)
-
-                DockCircleButton(symbol: "bubble.left.and.text.bubble.right.fill", label: "和可可聊聊", action: talk)
-                DockCircleButton(symbol: theme.systemImage, label: "房间氛围", action: chooseTheme)
-                DockCircleButton(symbol: "paintbrush.pointed.fill", label: "布置小家", action: edit)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .buttonStyle(.plain)
+
+            DockCircleButton(symbol: "bubble.left.and.text.bubble.right.fill", label: "和可可聊聊", action: talk)
+            DockCircleButton(symbol: theme.systemImage, label: "房间氛围", action: chooseTheme)
+            DockCircleButton(symbol: "paintbrush.pointed.fill", label: "布置小家", action: edit)
         }
         .padding(12)
         .inkGlass(cornerRadius: 28)

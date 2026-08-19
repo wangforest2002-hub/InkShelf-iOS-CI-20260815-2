@@ -69,6 +69,7 @@ final class HomeSceneFactory {
         let ceiling = box(width: 6.16, height: 0.10, length: 5.16, material: ceilingMaterial, corner: 0.02)
         ceiling.position = SCNVector3(0, 3.28, 0)
         ceiling.name = "room-ceiling"
+        ceiling.castsShadow = false
         room.addChildNode(ceiling)
 
         room.addChildNode(makeEntryway(palette: palette))
@@ -83,7 +84,7 @@ final class HomeSceneFactory {
         let ambient = SCNLight()
         ambient.type = .ambient
         ambient.color = palette.ambient
-        ambient.intensity = theme == .moonlight ? 170 : 235
+        ambient.intensity = theme == .moonlight ? 280 : 420
         let ambientNode = SCNNode()
         ambientNode.light = ambient
         room.addChildNode(ambientNode)
@@ -91,7 +92,7 @@ final class HomeSceneFactory {
         let windowLight = SCNLight()
         windowLight.type = .directional
         windowLight.color = palette.sun
-        windowLight.intensity = theme == .moonlight ? 300 : 470
+        windowLight.intensity = theme == .moonlight ? 220 : 340
         windowLight.castsShadow = true
         windowLight.shadowMode = .deferred
         windowLight.shadowRadius = 7
@@ -108,7 +109,7 @@ final class HomeSceneFactory {
         let softFill = SCNLight()
         softFill.type = .omni
         softFill.color = palette.fill
-        softFill.intensity = theme == .moonlight ? 105 : 145
+        softFill.intensity = theme == .moonlight ? 145 : 185
         softFill.attenuationStartDistance = 1.0
         softFill.attenuationEndDistance = 6.5
         let softFillNode = SCNNode()
@@ -356,11 +357,10 @@ final class HomeSceneFactory {
         ceilingSide.position = SCNVector3(-2.95, 3.10, 0)
         room.addChildNode(ceilingSide)
 
-        for z: Float in stride(from: -2.12, through: 2.12, by: 0.53) {
-            let ceilingSlat = box(width: 6.04, height: 0.055, length: 0.075, material: timber, corner: 0.016)
-            ceilingSlat.position = SCNVector3(0, 3.04, z)
-            room.addChildNode(ceilingSlat)
-        }
+        let windowValance = box(width: 3.64, height: 0.075, length: 0.16, material: timber, corner: 0.018)
+        windowValance.position = SCNVector3(1.08, 3.03, -2.34)
+        windowValance.name = "room-window-valance"
+        room.addChildNode(windowValance)
 
         let floorBorder = materialWith(color: palette.floorBorder, roughness: 0.70)
         let backInlay = box(width: 5.82, height: 0.014, length: 0.055, material: floorBorder, corner: 0.012)
@@ -440,17 +440,21 @@ final class HomeSceneFactory {
         let scenery = SCNPlane(width: 3.34, height: 2.06)
         let sceneryMaterial = SCNMaterial()
         sceneryMaterial.lightingModel = .constant
-        sceneryMaterial.diffuse.contents = panoramaImage(theme: palette.theme)
+        let panorama = panoramaImage(theme: palette.theme)
+        sceneryMaterial.diffuse.contents = panorama
+        sceneryMaterial.emission.contents = panorama
+        sceneryMaterial.emission.intensity = 0.72
         sceneryMaterial.diffuse.wrapS = .clamp
         sceneryMaterial.diffuse.wrapT = .clamp
         scenery.materials = [sceneryMaterial]
         let sceneryNode = SCNNode(geometry: scenery)
         sceneryNode.name = "room-outdoor-panorama"
         sceneryNode.position.z = 0.012
+        sceneryNode.castsShadow = false
         root.addChildNode(sceneryNode)
 
         let glass = SCNPlane(width: 3.28, height: 2.00)
-        let glassMaterial = materialWith(color: palette.glass, roughness: 0.08, transparency: 0.18)
+        let glassMaterial = materialWith(color: palette.glass, roughness: 0.08, transparency: 0.055)
         glassMaterial.blendMode = .alpha
         glassMaterial.writesToDepthBuffer = false
         glassMaterial.metalness.contents = 0.08
@@ -629,7 +633,7 @@ final class HomeSceneFactory {
     private func makePendantLight(palette: HomeScenePalette) -> SCNNode {
         let root = SCNNode()
         root.name = "room-pendant-light"
-        root.position = SCNVector3(-0.45, 3.22, 0.25)
+        root.position = SCNVector3(-1.28, 3.22, -0.82)
         let metal = materialWith(color: palette.metal, roughness: 0.38)
         let cord = SCNCylinder(radius: 0.014, height: 0.62)
         cord.radialSegmentCount = 16
@@ -639,17 +643,17 @@ final class HomeSceneFactory {
         root.addChildNode(cordNode)
         let paper = materialWith(color: palette.lampShade, roughness: 0.96, transparency: 0.90)
         paper.emission.contents = palette.bulb.withAlphaComponent(0.11)
-        let shade = SCNSphere(radius: 0.35)
+        let shade = SCNSphere(radius: 0.28)
         shade.segmentCount = 48
         shade.materials = [paper]
         let shadeNode = SCNNode(geometry: shade)
         shadeNode.name = "room-washi-pendant"
-        shadeNode.scale = SCNVector3(1, 1.16, 1)
+        shadeNode.scale = SCNVector3(1, 1.12, 1)
         shadeNode.position.y = -0.78
         root.addChildNode(shadeNode)
         let ribMaterial = materialWith(color: palette.woodShadow.withAlphaComponent(0.60), roughness: 0.82, transparency: 0.72)
-        for y: Float in [-0.24, -0.12, 0, 0.12, 0.24] {
-            let radius = CGFloat(0.33 * sqrt(max(0.18, 1 - pow(y / 0.34, 2))))
+        for y: Float in [-0.19, -0.095, 0, 0.095, 0.19] {
+            let radius = CGFloat(0.265 * sqrt(max(0.18, 1 - pow(y / 0.27, 2))))
             let rib = SCNTorus(ringRadius: radius, pipeRadius: 0.006)
             rib.ringSegmentCount = 36
             rib.pipeSegmentCount = 6

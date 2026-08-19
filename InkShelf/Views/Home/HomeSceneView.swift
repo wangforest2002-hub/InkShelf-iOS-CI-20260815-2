@@ -60,9 +60,9 @@ struct HomeSceneView: UIViewRepresentable {
         private var cameraDistance: Float = 7.2
         private var usesFirstPersonCamera = true
         private var lastEditingState: Bool?
-        private var firstPersonPosition = SCNVector3(0, 1.52, 1.72)
+        private var firstPersonPosition = SCNVector3(-0.18, 1.52, 1.94)
         private var firstPersonYaw: Float = 2.88
-        private var firstPersonPitch: Float = 0.035
+        private var firstPersonPitch: Float = -0.14
         private var hasAppliedResponsiveFraming = false
         private var dragStartTransform: HomeTransform?
         private var rotationStart: Float?
@@ -82,8 +82,8 @@ struct HomeSceneView: UIViewRepresentable {
             camera.zNear = 0.05
             camera.zFar = 80
             camera.wantsHDR = true
-            camera.wantsExposureAdaptation = true
-            camera.exposureOffset = -0.08
+            camera.wantsExposureAdaptation = false
+            camera.exposureOffset = -0.24
             cameraNode.camera = camera
             let constraint = SCNLookAtConstraint(target: cameraTarget)
             constraint.isGimbalLockEnabled = true
@@ -425,11 +425,11 @@ struct HomeSceneView: UIViewRepresentable {
                 ? SCNVector3(0, 0.78, -0.18)
                 : SCNVector3(0, 0.88, -0.08)
             firstPersonPosition = isPortrait
-                ? SCNVector3(-0.18, 1.52, 1.72)
-                : SCNVector3(-0.28, 1.55, 1.56)
+                ? SCNVector3(-0.18, 1.52, 1.94)
+                : SCNVector3(-0.28, 1.55, 1.72)
             firstPersonYaw = isPortrait ? 2.88 : 2.84
-            firstPersonPitch = isPortrait ? 0.035 : 0.02
-            cameraNode.camera?.fieldOfView = usesFirstPersonCamera ? (isPortrait ? 66 : 72) : (isPortrait ? 50 : 52)
+            firstPersonPitch = isPortrait ? -0.14 : -0.11
+            cameraNode.camera?.fieldOfView = usesFirstPersonCamera ? (isPortrait ? 59 : 66) : (isPortrait ? 50 : 52)
             hasAppliedResponsiveFraming = true
             updateCamera(animated: false)
         }
