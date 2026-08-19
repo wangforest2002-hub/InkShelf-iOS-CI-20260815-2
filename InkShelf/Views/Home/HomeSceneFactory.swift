@@ -448,7 +448,7 @@ final class HomeSceneFactory {
         scenery.materials = [sceneryMaterial]
         let sceneryNode = SCNNode(geometry: scenery)
         sceneryNode.name = "room-outdoor-panorama"
-        sceneryNode.position.z = 0.012
+        sceneryNode.position.z = 0.075
         sceneryNode.castsShadow = false
         root.addChildNode(sceneryNode)
 
@@ -461,18 +461,18 @@ final class HomeSceneFactory {
         glass.materials = [glassMaterial]
         let glassNode = SCNNode(geometry: glass)
         glassNode.name = "room-window-glass"
-        glassNode.position.z = 0.052
+        glassNode.position.z = 0.105
         root.addChildNode(glassNode)
 
         let frameMaterial = materialWith(color: palette.windowFrame, roughness: 0.50)
         for x: Float in [-1.70, 0, 1.70] {
             let bar = box(width: x == 0 ? 0.055 : 0.085, height: 1.84, length: 0.105, material: frameMaterial, corner: 0.018)
-            bar.position = SCNVector3(x, 0, 0.11)
+            bar.position = SCNVector3(x, 0, 0.145)
             root.addChildNode(bar)
         }
         for y: Float in [-0.90, 0, 0.90] {
             let bar = box(width: 3.48, height: y == 0 ? 0.05 : 0.085, length: 0.105, material: frameMaterial, corner: 0.018)
-            bar.position = SCNVector3(0, y, 0.11)
+            bar.position = SCNVector3(0, y, 0.145)
             root.addChildNode(bar)
         }
 
@@ -1181,8 +1181,13 @@ final class HomeSceneFactory {
     }
 
     private func panoramaContents(theme: HomeRoomTheme) -> Any {
-        if theme == .sunset, let resourceURL = panoramaResourceURL() {
-            return resourceURL as NSURL
+        if theme == .sunset,
+           let resourceURL = panoramaResourceURL(),
+           let imageSource = CGImageSourceCreateWithURL(resourceURL as CFURL, nil),
+           let cgImage = CGImageSourceCreateImageAtIndex(imageSource, 0, [
+               kCGImageSourceShouldCacheImmediately: true
+           ] as CFDictionary) {
+            return cgImage
         }
         return panoramaImage(theme: theme)
     }
