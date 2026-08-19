@@ -590,6 +590,7 @@ final class BookModelTests: XCTestCase {
         }
 
         let panorama = try XCTUnwrap(room.childNode(withName: "room-outdoor-panorama", recursively: true))
+        XCTAssertTrue(panorama.geometry is SCNBox)
         let panoramaContents = panorama.geometry?.firstMaterial?.diffuse.contents
         XCTAssertTrue(panoramaContents is CGImage || panoramaContents is UIImage)
         XCTAssertEqual(panorama.geometry?.firstMaterial?.isDoubleSided, true)

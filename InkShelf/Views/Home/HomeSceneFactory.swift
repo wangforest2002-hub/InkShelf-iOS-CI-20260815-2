@@ -437,7 +437,7 @@ final class HomeSceneFactory {
         root.name = "room-balcony-window"
         root.position = SCNVector3(1.08, 1.74, -2.455)
 
-        let scenery = SCNPlane(width: 3.34, height: 1.67)
+        let scenery = SCNBox(width: 3.34, height: 1.67, length: 0.018, chamferRadius: 0)
         let sceneryMaterial = SCNMaterial()
         sceneryMaterial.lightingModel = .constant
         sceneryMaterial.diffuse.contents = panoramaContents(theme: palette.theme)
