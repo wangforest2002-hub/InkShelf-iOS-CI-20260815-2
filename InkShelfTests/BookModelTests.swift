@@ -595,6 +595,10 @@ final class BookModelTests: XCTestCase {
         XCTAssertEqual(texture.size.width, 1_024, accuracy: 0.5)
         XCTAssertEqual(texture.size.height, 512, accuracy: 0.5)
         XCTAssertEqual(panorama.geometry?.firstMaterial?.isDoubleSided, true)
+        XCTAssertNil(
+            room.childNode(withName: "room-window-glass", recursively: true),
+            "A full-window PBR glass plane clips the Tokyo panorama to white on iOS"
+        )
         var geometryCount = 0
         room.enumerateChildNodes { node, _ in
             if node.geometry != nil { geometryCount += 1 }

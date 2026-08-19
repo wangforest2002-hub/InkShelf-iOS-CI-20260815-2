@@ -83,7 +83,7 @@ final class HomeSceneFactory {
         let ambient = SCNLight()
         ambient.type = .ambient
         ambient.color = palette.ambient
-        ambient.intensity = theme == .moonlight ? 58 : 92
+        ambient.intensity = theme == .moonlight ? 50 : 76
         let ambientNode = SCNNode()
         ambientNode.light = ambient
         room.addChildNode(ambientNode)
@@ -91,7 +91,7 @@ final class HomeSceneFactory {
         let windowLight = SCNLight()
         windowLight.type = .directional
         windowLight.color = palette.sun
-        windowLight.intensity = theme == .moonlight ? 105 : 215
+        windowLight.intensity = theme == .moonlight ? 86 : 172
         windowLight.castsShadow = true
         windowLight.shadowMode = .deferred
         windowLight.shadowRadius = 7
@@ -108,7 +108,7 @@ final class HomeSceneFactory {
         let softFill = SCNLight()
         softFill.type = .omni
         softFill.color = palette.fill
-        softFill.intensity = theme == .moonlight ? 38 : 62
+        softFill.intensity = theme == .moonlight ? 32 : 52
         softFill.attenuationStartDistance = 1.0
         softFill.attenuationEndDistance = 6.5
         let softFillNode = SCNNode()
@@ -452,18 +452,6 @@ final class HomeSceneFactory {
         sceneryNode.position.z = 0.075
         sceneryNode.castsShadow = false
         root.addChildNode(sceneryNode)
-
-        let glass = SCNPlane(width: 3.28, height: 1.62)
-        let glassMaterial = materialWith(color: palette.glass, roughness: 0.08, transparency: 0.025)
-        glassMaterial.blendMode = .alpha
-        glassMaterial.writesToDepthBuffer = false
-        glassMaterial.metalness.contents = 0.08
-        glassMaterial.specular.contents = UIColor.white
-        glass.materials = [glassMaterial]
-        let glassNode = SCNNode(geometry: glass)
-        glassNode.name = "room-window-glass"
-        glassNode.position.z = 0.105
-        root.addChildNode(glassNode)
 
         let frameMaterial = materialWith(color: palette.windowFrame, roughness: 0.50)
         for x: Float in [-1.70, 0, 1.70] {
