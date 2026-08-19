@@ -1,4 +1,3 @@
-import ImageIO
 import SceneKit
 import UIKit
 
@@ -84,7 +83,7 @@ final class HomeSceneFactory {
         let ambient = SCNLight()
         ambient.type = .ambient
         ambient.color = palette.ambient
-        ambient.intensity = theme == .moonlight ? 170 : 235
+        ambient.intensity = theme == .moonlight ? 58 : 92
         let ambientNode = SCNNode()
         ambientNode.light = ambient
         room.addChildNode(ambientNode)
@@ -92,7 +91,7 @@ final class HomeSceneFactory {
         let windowLight = SCNLight()
         windowLight.type = .directional
         windowLight.color = palette.sun
-        windowLight.intensity = theme == .moonlight ? 280 : 430
+        windowLight.intensity = theme == .moonlight ? 105 : 215
         windowLight.castsShadow = true
         windowLight.shadowMode = .deferred
         windowLight.shadowRadius = 7
@@ -109,7 +108,7 @@ final class HomeSceneFactory {
         let softFill = SCNLight()
         softFill.type = .omni
         softFill.color = palette.fill
-        softFill.intensity = theme == .moonlight ? 105 : 145
+        softFill.intensity = theme == .moonlight ? 38 : 62
         softFill.attenuationStartDistance = 1.0
         softFill.attenuationEndDistance = 6.5
         let softFillNode = SCNNode()
@@ -442,11 +441,9 @@ final class HomeSceneFactory {
         sceneryMaterial.lightingModel = .constant
         let panorama = panoramaContents(theme: palette.theme)
         sceneryMaterial.diffuse.contents = panorama
-        sceneryMaterial.diffuse.intensity = palette.theme == .moonlight ? 0.62 : 0.78
+        sceneryMaterial.diffuse.intensity = palette.theme == .moonlight ? 0.58 : 0.92
         sceneryMaterial.diffuse.wrapS = .clamp
         sceneryMaterial.diffuse.wrapT = .clamp
-        sceneryMaterial.emission.contents = panorama
-        sceneryMaterial.emission.intensity = palette.theme == .moonlight ? 0.08 : 0.04
         sceneryMaterial.isDoubleSided = true
         sceneryMaterial.writesToDepthBuffer = true
         scenery.materials = [sceneryMaterial]
@@ -1145,27 +1142,33 @@ final class HomeSceneFactory {
         if let cached = generatedTextureCache[cacheKey] { return cached }
         let source = panoramaResourceURL().flatMap { UIImage(contentsOfFile: $0.path) }
             ?? backgroundImage(theme: theme, size: CGSize(width: 2_048, height: 1_024))
-        let base = croppedImage(source, toAspectRatio: 3.34 / 2.06)
+        let cropped = croppedImage(source, toAspectRatio: 2)
+        // Material textures created by UIGraphicsImageRenderer are stable across
+        // Metal/SceneKit versions, while handing a file-backed UIImage or CGImage
+        // directly to SCNMaterial can stay as an unrendered white placeholder.
+        let prepared = textureRenderer(size: CGSize(width: 1_024, height: 512)).image { _ in
+            cropped.draw(in: CGRect(x: 0, y: 0, width: 1_024, height: 512))
+        }
         guard theme != .sunset else {
-            generatedTextureCache[cacheKey] = base
-            return base
+            generatedTextureCache[cacheKey] = prepared
+            return prepared
         }
         let format = UIGraphicsImageRendererFormat()
         format.scale = 1
         format.opaque = true
-        let rendered = UIGraphicsImageRenderer(size: base.size, format: format).image { context in
-            base.draw(in: CGRect(origin: .zero, size: base.size))
+        let rendered = UIGraphicsImageRenderer(size: prepared.size, format: format).image { context in
+            prepared.draw(in: CGRect(origin: .zero, size: prepared.size))
             let overlay = theme == .rain
                 ? UIColor(red: 0.20, green: 0.35, blue: 0.48, alpha: 0.34)
                 : UIColor(red: 0.035, green: 0.055, blue: 0.18, alpha: 0.68)
             overlay.setFill()
-            context.fill(CGRect(origin: .zero, size: base.size))
+            context.fill(CGRect(origin: .zero, size: prepared.size))
             if theme == .rain {
                 UIColor.white.withAlphaComponent(0.16).setStroke()
                 context.cgContext.setLineWidth(1.4)
                 for index in 0..<92 {
-                    let x = CGFloat((index * 83) % 2_048) / 2_048 * base.size.width
-                    let y = CGFloat((index * 131) % 1_024) / 1_024 * base.size.height
+                    let x = CGFloat((index * 83) % 2_048) / 2_048 * prepared.size.width
+                    let y = CGFloat((index * 131) % 1_024) / 1_024 * prepared.size.height
                     context.cgContext.move(to: CGPoint(x: x, y: y))
                     context.cgContext.addLine(to: CGPoint(x: x - 8, y: y + 28))
                 }
@@ -1173,8 +1176,8 @@ final class HomeSceneFactory {
             } else {
                 UIColor(red: 0.80, green: 0.86, blue: 1, alpha: 0.72).setFill()
                 for index in 0..<48 {
-                    let x = CGFloat((index * 149 + 41) % 2_048) / 2_048 * base.size.width
-                    let y = CGFloat((index * 71 + 23) % 520) / 1_024 * base.size.height
+                    let x = CGFloat((index * 149 + 41) % 2_048) / 2_048 * prepared.size.width
+                    let y = CGFloat((index * 71 + 23) % 520) / 1_024 * prepared.size.height
                     let radius = CGFloat(1 + index % 3)
                     context.cgContext.fillEllipse(in: CGRect(x: x, y: y, width: radius, height: radius))
                 }
@@ -1185,14 +1188,6 @@ final class HomeSceneFactory {
     }
 
     private func panoramaContents(theme: HomeRoomTheme) -> Any {
-        if theme == .sunset,
-           let resourceURL = panoramaResourceURL(),
-           let imageSource = CGImageSourceCreateWithURL(resourceURL as CFURL, nil),
-           let cgImage = CGImageSourceCreateImageAtIndex(imageSource, 0, [
-               kCGImageSourceShouldCacheImmediately: true
-           ] as CFDictionary) {
-            return cgImage
-        }
         return panoramaImage(theme: theme)
     }
 
