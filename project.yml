@@ -40,6 +40,8 @@ targets:
         buildPhase: resources
       - path: InkShelf/Resources/Models
         buildPhase: resources
+      - path: InkShelf/Resources/Home
+        buildPhase: resources
     dependencies:
       - package: ZIPFoundation
     info:

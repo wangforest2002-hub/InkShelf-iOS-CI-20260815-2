@@ -15,7 +15,7 @@ struct HomeWorldView: View {
     @State private var showsThemePicker = false
     @State private var showsKokoSettings = false
     @State private var showsKokoChat = false
-    @State private var showsKokoBubble = true
+    @State private var showsKokoBubble = false
     @State private var confirmsRoomReset = false
     @State private var showsPhotoPicker = false
     @State private var pendingArtworkKind: HomeArtworkKind?
@@ -209,9 +209,6 @@ struct HomeWorldView: View {
             guard !items.isEmpty, let kind = pendingArtworkKind else { return }
             Task { await importArtwork(items, kind: kind) }
         }
-        .onChange(of: koko.decisionRevision) { _, _ in
-            showDecisionBubble()
-        }
         .onChange(of: home.state) { _, newState in
             koko.updateContext(world: newState, books: library.books)
         }
@@ -246,7 +243,6 @@ struct HomeWorldView: View {
             home.reconcileBooks(validIDs: Set(library.books.map(\.id)))
             home.seedRecentBooksIfNeeded(library.books)
             koko.start(world: home.state, books: library.books)
-            showDecisionBubble()
         }
         .onDisappear {
             bubbleTask?.cancel()
@@ -353,23 +349,30 @@ private struct HomeLivingDock: View {
     let chooseTheme: () -> Void
 
     var body: some View {
-        HStack(spacing: 10) {
-            Button(action: talk) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("可可 · \(moodTitle)")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                    Text(actionTitle)
-                        .font(.subheadline.weight(.semibold))
-                        .lineLimit(1)
-                }
+        VStack(spacing: 9) {
+            Label("拖动环顾 · 轻点空地走动 · 捏合前后移动", systemImage: "viewfinder")
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .buttonStyle(.plain)
 
-            DockCircleButton(symbol: "bubble.left.and.text.bubble.right.fill", label: "和可可聊聊", action: talk)
-            DockCircleButton(symbol: theme.systemImage, label: "房间氛围", action: chooseTheme)
-            DockCircleButton(symbol: "paintbrush.pointed.fill", label: "布置小家", action: edit)
+            HStack(spacing: 10) {
+                Button(action: talk) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("东京小公寓")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        Text("把喜欢的画集摆进家里")
+                            .font(.subheadline.weight(.semibold))
+                            .lineLimit(1)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .buttonStyle(.plain)
+
+                DockCircleButton(symbol: "bubble.left.and.text.bubble.right.fill", label: "和可可聊聊", action: talk)
+                DockCircleButton(symbol: theme.systemImage, label: "房间氛围", action: chooseTheme)
+                DockCircleButton(symbol: "paintbrush.pointed.fill", label: "布置小家", action: edit)
+            }
         }
         .padding(12)
         .inkGlass(cornerRadius: 28)

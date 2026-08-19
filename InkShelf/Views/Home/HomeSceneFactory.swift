@@ -18,58 +18,111 @@ struct HomeRenderableArtwork: Hashable {
 @MainActor
 final class HomeSceneFactory {
     private let imageCache = NSCache<NSURL, UIImage>()
+    private var generatedTextureCache: [String: UIImage] = [:]
 
     func makeRoom(theme: HomeRoomTheme) -> SCNNode {
         let palette = HomeScenePalette(theme: theme)
         let room = SCNNode()
         room.name = "room-shell"
 
-        let floor = box(width: 6, height: 0.10, length: 5, color: palette.floor, corner: 0.02)
-        floor.position = SCNVector3(0, -0.055, 0)
+        let floorMaterial = materialWith(color: palette.floor, roughness: 0.72)
+        floorMaterial.diffuse.contents = woodTexture(palette: palette)
+        floorMaterial.diffuse.wrapS = .repeat
+        floorMaterial.diffuse.wrapT = .repeat
+        floorMaterial.diffuse.contentsTransform = SCNMatrix4MakeScale(3.2, 2.6, 1)
+        let floor = box(width: 6.12, height: 0.12, length: 5.12, material: floorMaterial, corner: 0.035)
+        floor.position = SCNVector3(0, -0.065, 0)
         floor.name = "room-floor"
-        floor.geometry?.firstMaterial?.normal.contents = nil
         room.addChildNode(floor)
 
-        let backWall = box(width: 6.05, height: 3.25, length: 0.10, color: palette.wall, corner: 0.02)
-        backWall.position = SCNVector3(0, 1.56, -2.53)
+        let wallpaper = materialWith(color: palette.wall, roughness: 0.94)
+        wallpaper.diffuse.contents = wallpaperTexture(palette: palette)
+        wallpaper.diffuse.wrapS = .repeat
+        wallpaper.diffuse.wrapT = .repeat
+        wallpaper.diffuse.contentsTransform = SCNMatrix4MakeScale(3.0, 2.0, 1)
+        let backWall = box(width: 6.16, height: 3.35, length: 0.12, material: wallpaper, corner: 0.025)
+        backWall.position = SCNVector3(0, 1.62, -2.56)
+        backWall.name = "room-back-wall"
         room.addChildNode(backWall)
 
-        let leftWall = box(width: 0.10, height: 3.25, length: 5.05, color: palette.sideWall, corner: 0.02)
-        leftWall.position = SCNVector3(-3.03, 1.56, 0)
+        let sideMaterial = materialWith(color: palette.sideWall, roughness: 0.94)
+        sideMaterial.diffuse.contents = wallpaperTexture(palette: palette, side: true)
+        sideMaterial.diffuse.wrapS = .repeat
+        sideMaterial.diffuse.wrapT = .repeat
+        sideMaterial.diffuse.contentsTransform = SCNMatrix4MakeScale(2.5, 2.0, 1)
+        let leftWall = box(width: 0.12, height: 3.35, length: 5.16, material: sideMaterial, corner: 0.025)
+        leftWall.position = SCNVector3(-3.08, 1.62, 0)
+        leftWall.name = "room-left-wall"
         room.addChildNode(leftWall)
 
+        let rightWall = box(width: 0.12, height: 3.35, length: 5.16, material: wallpaper, corner: 0.025)
+        rightWall.position = SCNVector3(3.08, 1.62, 0)
+        rightWall.name = "room-right-wall"
+        room.addChildNode(rightWall)
+
+        let frontWall = box(width: 6.16, height: 3.35, length: 0.12, material: sideMaterial, corner: 0.025)
+        frontWall.position = SCNVector3(0, 1.62, 2.56)
+        frontWall.name = "room-front-wall"
+        room.addChildNode(frontWall)
+
+        let ceilingMaterial = materialWith(color: palette.wall, roughness: 0.98)
+        let ceiling = box(width: 6.16, height: 0.10, length: 5.16, material: ceilingMaterial, corner: 0.02)
+        ceiling.position = SCNVector3(0, 3.28, 0)
+        ceiling.name = "room-ceiling"
+        room.addChildNode(ceiling)
+
+        room.addChildNode(makeEntryway(palette: palette))
+
+        addArchitecturalTrim(to: room, palette: palette)
         room.addChildNode(makeWindow(palette: palette))
+        room.addChildNode(makeWindowSeat(palette: palette))
+        room.addChildNode(makeWallReadingNook(palette: palette))
         room.addChildNode(makeCeilingGarland(palette: palette))
+        room.addChildNode(makePendantLight(palette: palette))
 
         let ambient = SCNLight()
         ambient.type = .ambient
         ambient.color = palette.ambient
-        ambient.intensity = theme == .moonlight ? 320 : 430
+        ambient.intensity = theme == .moonlight ? 170 : 235
         let ambientNode = SCNNode()
         ambientNode.light = ambient
         room.addChildNode(ambientNode)
 
-        let sun = SCNLight()
-        sun.type = .directional
-        sun.color = palette.sun
-        sun.intensity = theme == .moonlight ? 430 : 700
-        sun.castsShadow = true
-        sun.shadowMode = .deferred
-        sun.shadowRadius = 5
-        sun.shadowColor = UIColor.black.withAlphaComponent(0.22)
-        sun.shadowMapSize = CGSize(width: 1_024, height: 1_024)
-        let sunNode = SCNNode()
-        sunNode.light = sun
-        sunNode.eulerAngles = SCNVector3(-0.82, -0.58, -0.16)
-        sunNode.position = SCNVector3(2.2, 3.4, 2.2)
-        room.addChildNode(sunNode)
+        let windowLight = SCNLight()
+        windowLight.type = .directional
+        windowLight.color = palette.sun
+        windowLight.intensity = theme == .moonlight ? 300 : 470
+        windowLight.castsShadow = true
+        windowLight.shadowMode = .deferred
+        windowLight.shadowRadius = 7
+        windowLight.shadowColor = UIColor.black.withAlphaComponent(0.20)
+        windowLight.shadowMapSize = CGSize(width: 2_048, height: 2_048)
+        windowLight.orthographicScale = 7.5
+        let windowLightNode = SCNNode()
+        windowLightNode.name = "room-window-light"
+        windowLightNode.light = windowLight
+        windowLightNode.eulerAngles = SCNVector3(-0.78, -0.86, -0.12)
+        windowLightNode.position = SCNVector3(2.4, 3.1, -0.4)
+        room.addChildNode(windowLightNode)
+
+        let softFill = SCNLight()
+        softFill.type = .omni
+        softFill.color = palette.fill
+        softFill.intensity = theme == .moonlight ? 105 : 145
+        softFill.attenuationStartDistance = 1.0
+        softFill.attenuationEndDistance = 6.5
+        let softFillNode = SCNNode()
+        softFillNode.name = "room-soft-fill"
+        softFillNode.light = softFill
+        softFillNode.position = SCNVector3(-1.8, 2.35, 1.4)
+        room.addChildNode(softFillNode)
 
         let dust = SCNParticleSystem()
-        dust.birthRate = theme == .rain ? 2.5 : 4
+        dust.birthRate = theme == .rain ? 1.6 : 2.4
         dust.particleLifeSpan = 8
         dust.particleLifeSpanVariation = 3
-        dust.particleSize = 0.012
-        dust.particleSizeVariation = 0.008
+        dust.particleSize = 0.008
+        dust.particleSizeVariation = 0.005
         dust.particleColor = palette.particle
         dust.emitterShape = SCNBox(width: 5.2, height: 2.4, length: 4.2, chamferRadius: 0)
         dust.birthLocation = .volume
@@ -82,6 +135,30 @@ final class HomeSceneFactory {
         room.addChildNode(dustNode)
 
         return room
+    }
+
+    private func makeEntryway(palette: HomeScenePalette) -> SCNNode {
+        let root = SCNNode()
+        root.name = "room-entryway"
+        root.position = SCNVector3(1.76, 0, 2.48)
+        let charcoal = materialWith(color: palette.windowFrame, roughness: 0.62)
+        let door = box(width: 1.12, height: 2.26, length: 0.075, material: charcoal, corner: 0.028)
+        door.position = SCNVector3(0, 1.13, 0)
+        root.addChildNode(door)
+        let inset = box(width: 0.91, height: 2.04, length: 0.028, material: materialWith(color: palette.woodShadow, roughness: 0.74), corner: 0.020)
+        inset.position = SCNVector3(0, 1.13, -0.055)
+        root.addChildNode(inset)
+        let handle = SCNCylinder(radius: 0.025, height: 0.20)
+        handle.radialSegmentCount = 18
+        handle.materials = [materialWith(color: UIColor(red: 0.72, green: 0.67, blue: 0.55, alpha: 1), roughness: 0.35)]
+        let handleNode = SCNNode(geometry: handle)
+        handleNode.eulerAngles.x = .pi / 2
+        handleNode.position = SCNVector3(-0.38, 1.08, -0.105)
+        root.addChildNode(handleNode)
+        let genkan = box(width: 1.42, height: 0.025, length: 0.78, material: materialWith(color: UIColor(red: 0.47, green: 0.48, blue: 0.46, alpha: 1), roughness: 0.96), corner: 0.02)
+        genkan.position = SCNVector3(0, -0.04, -0.35)
+        root.addChildNode(genkan)
+        return root
     }
 
     func backgroundImage(theme: HomeRoomTheme, size: CGSize = CGSize(width: 900, height: 1_200)) -> UIImage {
@@ -261,43 +338,336 @@ final class HomeSceneFactory {
         ].contains { materialName.localizedCaseInsensitiveContains($0) }
     }
 
+    private func addArchitecturalTrim(to room: SCNNode, palette: HomeScenePalette) {
+        let timber = materialWith(color: palette.lightWood, roughness: 0.76)
+        let darkEdge = materialWith(color: palette.woodShadow, roughness: 0.68)
+
+        let backBase = box(width: 6.12, height: 0.10, length: 0.075, material: timber, corner: 0.018)
+        backBase.position = SCNVector3(0, 0.05, -2.43)
+        room.addChildNode(backBase)
+        let leftBase = box(width: 0.075, height: 0.10, length: 5.08, material: timber, corner: 0.018)
+        leftBase.position = SCNVector3(-2.95, 0.05, 0)
+        room.addChildNode(leftBase)
+
+        let ceilingEdge = box(width: 6.10, height: 0.105, length: 0.08, material: timber, corner: 0.018)
+        ceilingEdge.position = SCNVector3(0, 3.10, -2.43)
+        room.addChildNode(ceilingEdge)
+        let ceilingSide = box(width: 0.08, height: 0.105, length: 5.08, material: timber, corner: 0.018)
+        ceilingSide.position = SCNVector3(-2.95, 3.10, 0)
+        room.addChildNode(ceilingSide)
+
+        for z: Float in stride(from: -2.12, through: 2.12, by: 0.53) {
+            let ceilingSlat = box(width: 6.04, height: 0.055, length: 0.075, material: timber, corner: 0.016)
+            ceilingSlat.position = SCNVector3(0, 3.04, z)
+            room.addChildNode(ceilingSlat)
+        }
+
+        let floorBorder = materialWith(color: palette.floorBorder, roughness: 0.70)
+        let backInlay = box(width: 5.82, height: 0.014, length: 0.055, material: floorBorder, corner: 0.012)
+        backInlay.position = SCNVector3(0, 0.008, -2.34)
+        room.addChildNode(backInlay)
+        let leftInlay = box(width: 0.055, height: 0.014, length: 4.82, material: floorBorder, corner: 0.012)
+        leftInlay.position = SCNVector3(-2.84, 0.008, 0)
+        room.addChildNode(leftInlay)
+
+        let threshold = box(width: 3.54, height: 0.045, length: 0.26, material: darkEdge, corner: 0.018)
+        threshold.position = SCNVector3(1.08, 0.026, -2.20)
+        threshold.name = "room-balcony-threshold"
+        room.addChildNode(threshold)
+
+        room.addChildNode(makeShojiPartition(palette: palette))
+        room.addChildNode(makeTatamiCorner(palette: palette))
+    }
+
+    private func makeShojiPartition(palette: HomeScenePalette) -> SCNNode {
+        let root = SCNNode()
+        root.name = "room-shoji-partition"
+        root.position = SCNVector3(-2.88, 1.26, 1.38)
+        root.eulerAngles.y = .pi / 2
+        let frame = materialWith(color: palette.lightWood, roughness: 0.78)
+        let paper = SCNMaterial()
+        paper.lightingModel = .physicallyBased
+        paper.diffuse.contents = shojiPaperTexture()
+        paper.roughness.contents = 0.98
+        paper.transparency = 0.90
+        paper.isDoubleSided = true
+        let panel = SCNPlane(width: 1.72, height: 2.34)
+        panel.materials = [paper]
+        let panelNode = SCNNode(geometry: panel)
+        root.addChildNode(panelNode)
+        for x: Float in [-0.88, -0.44, 0, 0.44, 0.88] {
+            let vertical = box(width: x == -0.88 || x == 0.88 ? 0.055 : 0.028, height: 2.42, length: 0.045, material: frame, corner: 0.008)
+            vertical.position = SCNVector3(x, 0, 0.03)
+            root.addChildNode(vertical)
+        }
+        for y: Float in [-1.20, -0.80, -0.40, 0, 0.40, 0.80, 1.20] {
+            let horizontal = box(width: 1.82, height: y == -1.20 || y == 1.20 ? 0.055 : 0.028, length: 0.045, material: frame, corner: 0.008)
+            horizontal.position = SCNVector3(0, y, 0.03)
+            root.addChildNode(horizontal)
+        }
+        return root
+    }
+
+    private func makeTatamiCorner(palette: HomeScenePalette) -> SCNNode {
+        let root = SCNNode()
+        root.name = "room-tatami-corner"
+        root.position = SCNVector3(-1.78, 0, 1.46)
+        let straw = materialWith(color: palette.tatami, roughness: 0.98)
+        straw.diffuse.contents = tatamiTexture(base: palette.tatami)
+        straw.diffuse.wrapS = .repeat
+        straw.diffuse.wrapT = .repeat
+        straw.diffuse.contentsTransform = SCNMatrix4MakeScale(1.3, 3.0, 1)
+        let border = materialWith(color: palette.tatamiBorder, roughness: 0.90)
+        for index in 0..<2 {
+            let mat = box(width: 0.76, height: 0.045, length: 1.78, material: straw, corner: 0.018)
+            mat.position = SCNVector3(-0.39 + Float(index) * 0.78, 0.026, 0)
+            mat.name = "room-tatami-mat-\(index)"
+            root.addChildNode(mat)
+            for x: Float in [-0.38, 0.38] {
+                let edge = box(width: 0.035, height: 0.052, length: 1.80, material: border, corner: 0.008)
+                edge.position = SCNVector3(mat.position.x + x, 0.030, 0)
+                root.addChildNode(edge)
+            }
+        }
+        return root
+    }
+
     private func makeWindow(palette: HomeScenePalette) -> SCNNode {
         let root = SCNNode()
-        root.position = SCNVector3(1.32, 1.85, -2.465)
-        let skyPlane = SCNPlane(width: 1.72, height: 1.38)
-        let skyMaterial = SCNMaterial()
-        skyMaterial.lightingModel = .constant
-        skyMaterial.diffuse.contents = backgroundImage(theme: palette.theme, size: CGSize(width: 600, height: 480))
-        skyPlane.materials = [skyMaterial]
-        root.addChildNode(SCNNode(geometry: skyPlane))
+        root.name = "room-balcony-window"
+        root.position = SCNVector3(1.08, 1.74, -2.455)
 
-        let frameMaterial = materialWith(color: UIColor.white.withAlphaComponent(0.92), roughness: 0.72)
-        for x: Float in [-0.88, 0, 0.88] {
-            let bar = box(width: 0.055, height: 1.48, length: 0.045, material: frameMaterial)
-            bar.position = SCNVector3(x, 0, 0.035)
+        let scenery = SCNPlane(width: 3.34, height: 2.06)
+        let sceneryMaterial = SCNMaterial()
+        sceneryMaterial.lightingModel = .constant
+        sceneryMaterial.diffuse.contents = panoramaImage(theme: palette.theme)
+        sceneryMaterial.diffuse.wrapS = .clamp
+        sceneryMaterial.diffuse.wrapT = .clamp
+        scenery.materials = [sceneryMaterial]
+        let sceneryNode = SCNNode(geometry: scenery)
+        sceneryNode.name = "room-outdoor-panorama"
+        sceneryNode.position.z = 0.012
+        root.addChildNode(sceneryNode)
+
+        let glass = SCNPlane(width: 3.28, height: 2.00)
+        let glassMaterial = materialWith(color: palette.glass, roughness: 0.08, transparency: 0.18)
+        glassMaterial.blendMode = .alpha
+        glassMaterial.writesToDepthBuffer = false
+        glassMaterial.metalness.contents = 0.08
+        glassMaterial.specular.contents = UIColor.white
+        glass.materials = [glassMaterial]
+        let glassNode = SCNNode(geometry: glass)
+        glassNode.name = "room-window-glass"
+        glassNode.position.z = 0.052
+        root.addChildNode(glassNode)
+
+        let frameMaterial = materialWith(color: palette.windowFrame, roughness: 0.50)
+        for x: Float in [-1.70, 0, 1.70] {
+            let bar = box(width: x == 0 ? 0.055 : 0.085, height: 2.20, length: 0.105, material: frameMaterial, corner: 0.018)
+            bar.position = SCNVector3(x, 0, 0.11)
             root.addChildNode(bar)
         }
-        for y: Float in [-0.72, 0, 0.72] {
-            let bar = box(width: 1.82, height: 0.055, length: 0.045, material: frameMaterial)
-            bar.position = SCNVector3(0, y, 0.035)
+        for y: Float in [-1.08, 0, 1.08] {
+            let bar = box(width: 3.48, height: y == 0 ? 0.05 : 0.085, length: 0.105, material: frameMaterial, corner: 0.018)
+            bar.position = SCNVector3(0, y, 0.11)
             root.addChildNode(bar)
         }
 
-        let curtainMaterial = materialWith(color: palette.curtain, roughness: 0.88)
-        let left = box(width: 0.34, height: 1.65, length: 0.07, material: curtainMaterial, corner: 0.08)
-        left.position = SCNVector3(-1.06, 0, 0.09)
-        let right = left.clone()
-        right.position.x = 1.06
-        root.addChildNode(left)
-        root.addChildNode(right)
+        let sill = box(width: 3.56, height: 0.105, length: 0.34, material: frameMaterial, corner: 0.028)
+        sill.position = SCNVector3(0, -1.12, 0.18)
+        root.addChildNode(sill)
 
-        let sway = SCNAction.sequence([
-            .rotateBy(x: 0, y: 0.022, z: 0.008, duration: 3.4),
-            .rotateBy(x: 0, y: -0.044, z: -0.016, duration: 6.8),
-            .rotateBy(x: 0, y: 0.022, z: 0.008, duration: 3.4)
-        ])
-        left.runAction(.repeatForever(sway))
-        right.runAction(.repeatForever(sway.reversed()))
+        let balconyMaterial = materialWith(color: palette.metal, roughness: 0.58)
+        let topRail = box(width: 3.16, height: 0.055, length: 0.055, material: balconyMaterial, corner: 0.016)
+        topRail.position = SCNVector3(0, -0.60, -0.015)
+        root.addChildNode(topRail)
+        for x: Float in stride(from: -1.48, through: 1.48, by: 0.30) {
+            let rail = box(width: 0.022, height: 0.62, length: 0.035, material: balconyMaterial, corner: 0.008)
+            rail.position = SCNVector3(x, -0.87, -0.012)
+            root.addChildNode(rail)
+        }
+
+        let sheer = SCNPlane(width: 0.42, height: 2.10)
+        let sheerMaterial = materialWith(color: UIColor.white, roughness: 0.94, transparency: 0.30)
+        sheerMaterial.blendMode = .alpha
+        sheerMaterial.writesToDepthBuffer = false
+        sheer.materials = [sheerMaterial]
+        let sheerNode = SCNNode(geometry: sheer)
+        sheerNode.name = "room-sheer-curtain"
+        sheerNode.position = SCNVector3(-1.49, 0, 0.18)
+        root.addChildNode(sheerNode)
+        return root
+    }
+
+    private func makeWindowSeat(palette: HomeScenePalette) -> SCNNode {
+        let root = SCNNode()
+        root.name = "room-window-seat"
+        root.position = SCNVector3(1.45, 0, -2.13)
+        let wood = materialWith(color: palette.lightWood, roughness: 0.76)
+        let fabric = materialWith(color: palette.seatFabric, roughness: 0.96)
+        fabric.diffuse.contents = fabricTexture(base: palette.seatFabric)
+        fabric.diffuse.wrapS = .repeat
+        fabric.diffuse.wrapT = .repeat
+
+        let cabinet = box(width: 1.78, height: 0.42, length: 0.52, material: wood, corner: 0.055)
+        cabinet.position.y = 0.21
+        root.addChildNode(cabinet)
+        let cushion = box(width: 1.68, height: 0.16, length: 0.50, material: fabric, corner: 0.11)
+        cushion.position = SCNVector3(0, 0.49, 0.02)
+        root.addChildNode(cushion)
+
+        for x: Float in [-0.58, 0, 0.58] {
+            let seam = box(width: 0.018, height: 0.29, length: 0.012, material: materialWith(color: palette.woodShadow, roughness: 0.80), corner: 0.005)
+            seam.position = SCNVector3(x, 0.22, 0.268)
+            root.addChildNode(seam)
+            let handle = SCNTorus(ringRadius: 0.055, pipeRadius: 0.009)
+            handle.ringSegmentCount = 18
+            handle.pipeSegmentCount = 8
+            handle.materials = [materialWith(color: palette.metal, roughness: 0.40)]
+            let handleNode = SCNNode(geometry: handle)
+            handleNode.position = SCNVector3(x, 0.24, 0.282)
+            root.addChildNode(handleNode)
+        }
+        let cherryArrangement = makeCherryBranchArrangement()
+        cherryArrangement.position = SCNVector3(0.63, 0.56, -0.02)
+        cherryArrangement.scale = SCNVector3(0.72, 0.72, 0.72)
+        root.addChildNode(cherryArrangement)
+        return root
+    }
+
+    private func makeCherryBranchArrangement() -> SCNNode {
+        let root = SCNNode()
+        root.name = "room-cherry-branch"
+        let ceramic = materialWith(color: UIColor(red: 0.88, green: 0.92, blue: 0.93, alpha: 1), roughness: 0.40)
+        let vase = SCNCone(topRadius: 0.075, bottomRadius: 0.12, height: 0.30)
+        vase.radialSegmentCount = 32
+        vase.materials = [ceramic]
+        let vaseNode = SCNNode(geometry: vase)
+        vaseNode.position.y = 0.15
+        root.addChildNode(vaseNode)
+
+        let branchMaterial = materialWith(color: UIColor(red: 0.30, green: 0.19, blue: 0.16, alpha: 1), roughness: 0.84)
+        let segments: [(SCNVector3, Float, Float)] = [
+            (SCNVector3(0.00, 0.52, 0), 0.52, -0.20),
+            (SCNVector3(-0.12, 0.69, 0), 0.34, 0.78),
+            (SCNVector3(0.14, 0.76, 0), 0.40, -0.70)
+        ]
+        for (position, height, angle) in segments {
+            let branch = SCNCylinder(radius: 0.012, height: CGFloat(height))
+            branch.radialSegmentCount = 10
+            branch.materials = [branchMaterial]
+            let branchNode = SCNNode(geometry: branch)
+            branchNode.position = position
+            branchNode.eulerAngles.z = angle
+            root.addChildNode(branchNode)
+        }
+
+        let blossomColors = [
+            UIColor(red: 1.00, green: 0.82, blue: 0.86, alpha: 1),
+            UIColor(red: 1.00, green: 0.90, blue: 0.92, alpha: 1),
+            UIColor(red: 0.96, green: 0.72, blue: 0.79, alpha: 1)
+        ]
+        let blossomPositions: [SCNVector3] = [
+            SCNVector3(-0.30, 0.84, 0), SCNVector3(-0.18, 0.96, 0.01),
+            SCNVector3(-0.03, 1.00, 0), SCNVector3(0.15, 0.88, 0.01),
+            SCNVector3(0.31, 0.98, 0), SCNVector3(0.38, 1.10, 0.01),
+            SCNVector3(0.05, 0.76, 0.02), SCNVector3(-0.36, 0.72, 0)
+        ]
+        for (index, position) in blossomPositions.enumerated() {
+            let blossom = SCNSphere(radius: 0.040)
+            blossom.segmentCount = 12
+            blossom.materials = [materialWith(color: blossomColors[index % blossomColors.count], roughness: 0.92)]
+            let blossomNode = SCNNode(geometry: blossom)
+            blossomNode.scale = SCNVector3(1.0, 0.48, 1.0)
+            blossomNode.position = position
+            root.addChildNode(blossomNode)
+        }
+        return root
+    }
+
+    private func makeWallReadingNook(palette: HomeScenePalette) -> SCNNode {
+        let root = SCNNode()
+        root.name = "room-wall-reading-nook"
+        root.position = SCNVector3(-2.91, 1.76, 0.38)
+        root.eulerAngles.y = .pi / 2
+        let wood = materialWith(color: palette.lightWood, roughness: 0.78)
+        let backing = box(width: 1.58, height: 1.54, length: 0.035, material: materialWith(color: palette.panel, roughness: 0.94), corner: 0.018)
+        backing.position = SCNVector3(0, 0, 0.02)
+        root.addChildNode(backing)
+        let shelf = box(width: 1.68, height: 0.085, length: 0.34, material: wood, corner: 0.025)
+        shelf.position = SCNVector3(0, -0.72, 0.19)
+        root.addChildNode(shelf)
+        let frame = box(width: 0.57, height: 0.88, length: 0.045, material: materialWith(color: palette.woodShadow, roughness: 0.74), corner: 0.018)
+        frame.position = SCNVector3(-0.37, 0.14, 0.045)
+        root.addChildNode(frame)
+        let print = SCNPlane(width: 0.50, height: 0.81)
+        let printMaterial = materialWith(color: palette.wallArt, roughness: 0.88)
+        printMaterial.diffuse.contents = cherryPrintTexture()
+        printMaterial.emission.contents = UIColor.white.withAlphaComponent(0.035)
+        print.materials = [printMaterial]
+        let printNode = SCNNode(geometry: print)
+        printNode.position = SCNVector3(-0.37, 0.14, 0.072)
+        root.addChildNode(printNode)
+        for index in 0..<5 {
+            let book = box(
+                width: 0.105,
+                height: 0.26 + CGFloat(index % 2) * 0.06,
+                length: 0.20,
+                material: materialWith(color: palette.decorativeBookColors[index], roughness: 0.82),
+                corner: 0.012
+            )
+            book.position = SCNVector3(0.03 + Float(index) * 0.12, -0.55, 0.15)
+            root.addChildNode(book)
+        }
+        let smallPlant = makePlant()
+        smallPlant.scale = SCNVector3(0.32, 0.32, 0.32)
+        smallPlant.position = SCNVector3(0.57, -0.58, 0.12)
+        root.addChildNode(smallPlant)
+        return root
+    }
+
+    private func makePendantLight(palette: HomeScenePalette) -> SCNNode {
+        let root = SCNNode()
+        root.name = "room-pendant-light"
+        root.position = SCNVector3(-0.45, 3.22, 0.25)
+        let metal = materialWith(color: palette.metal, roughness: 0.38)
+        let cord = SCNCylinder(radius: 0.014, height: 0.62)
+        cord.radialSegmentCount = 16
+        cord.materials = [metal]
+        let cordNode = SCNNode(geometry: cord)
+        cordNode.position.y = -0.30
+        root.addChildNode(cordNode)
+        let paper = materialWith(color: palette.lampShade, roughness: 0.96, transparency: 0.90)
+        paper.emission.contents = palette.bulb.withAlphaComponent(0.11)
+        let shade = SCNSphere(radius: 0.35)
+        shade.segmentCount = 48
+        shade.materials = [paper]
+        let shadeNode = SCNNode(geometry: shade)
+        shadeNode.name = "room-washi-pendant"
+        shadeNode.scale = SCNVector3(1, 1.16, 1)
+        shadeNode.position.y = -0.78
+        root.addChildNode(shadeNode)
+        let ribMaterial = materialWith(color: palette.woodShadow.withAlphaComponent(0.60), roughness: 0.82, transparency: 0.72)
+        for y: Float in [-0.24, -0.12, 0, 0.12, 0.24] {
+            let radius = CGFloat(0.33 * sqrt(max(0.18, 1 - pow(y / 0.34, 2))))
+            let rib = SCNTorus(ringRadius: radius, pipeRadius: 0.006)
+            rib.ringSegmentCount = 36
+            rib.pipeSegmentCount = 6
+            rib.materials = [ribMaterial]
+            let ribNode = SCNNode(geometry: rib)
+            ribNode.position = SCNVector3(0, -0.78 + y, 0)
+            root.addChildNode(ribNode)
+        }
+        let light = SCNLight()
+        light.type = .omni
+        light.color = palette.bulb
+        light.intensity = palette.theme == .moonlight ? 150 : 115
+        light.attenuationStartDistance = 0.4
+        light.attenuationEndDistance = 3.8
+        let lightNode = SCNNode()
+        lightNode.light = light
+        lightNode.position.y = -0.84
+        root.addChildNode(lightNode)
         return root
     }
 
@@ -343,9 +713,9 @@ final class HomeSceneFactory {
 
     private func makeBookshelf() -> SCNNode {
         let root = SCNNode()
-        let wood = materialWith(color: UIColor(red: 0.66, green: 0.43, blue: 0.28, alpha: 1), roughness: 0.82)
-        let darkWood = materialWith(color: UIColor(red: 0.43, green: 0.25, blue: 0.17, alpha: 1), roughness: 0.86)
-        let back = box(width: 1.52, height: 2.12, length: 0.08, material: darkWood, corner: 0.025)
+        let wood = materialWith(color: UIColor(red: 0.78, green: 0.67, blue: 0.53, alpha: 1), roughness: 0.86)
+        let darkWood = materialWith(color: UIColor(red: 0.56, green: 0.45, blue: 0.34, alpha: 1), roughness: 0.90)
+        let back = box(width: 1.52, height: 2.12, length: 0.055, material: darkWood, corner: 0.018)
         back.position = SCNVector3(0, 1.06, -0.18)
         root.addChildNode(back)
         for x: Float in [-0.75, 0.75] {
@@ -358,51 +728,101 @@ final class HomeSceneFactory {
             shelf.position = SCNVector3(0, y, 0)
             root.addChildNode(shelf)
         }
+        let bookColors = [
+            UIColor(red: 0.82, green: 0.46, blue: 0.43, alpha: 1),
+            UIColor(red: 0.34, green: 0.53, blue: 0.64, alpha: 1),
+            UIColor(red: 0.76, green: 0.67, blue: 0.50, alpha: 1),
+            UIColor(red: 0.49, green: 0.62, blue: 0.52, alpha: 1),
+            UIColor(red: 0.72, green: 0.58, blue: 0.72, alpha: 1)
+        ]
+        for shelfIndex in 0..<4 {
+            let baseY = Float(0.13 + Double(shelfIndex) * 0.54)
+            for index in 0..<8 {
+                let height = CGFloat(0.31 + Double((index + shelfIndex) % 3) * 0.035)
+                let book = box(width: 0.115, height: height, length: 0.28, material: materialWith(color: bookColors[(index + shelfIndex) % bookColors.count], roughness: 0.88), corner: 0.008)
+                book.position = SCNVector3(-0.57 + Float(index) * 0.15, baseY + Float(height / 2), 0.035)
+                root.addChildNode(book)
+            }
+        }
+        let crown = box(width: 1.68, height: 0.09, length: 0.48, material: wood, corner: 0.025)
+        crown.position = SCNVector3(0, 2.22, 0)
+        root.addChildNode(crown)
         return root
     }
 
     private func makeSofa() -> SCNNode {
         let root = SCNNode()
-        let fabric = materialWith(color: UIColor(red: 0.79, green: 0.84, blue: 0.96, alpha: 1), roughness: 0.96)
-        let highlight = materialWith(color: UIColor(red: 0.89, green: 0.91, blue: 0.99, alpha: 1), roughness: 0.98)
-        let seat = box(width: 1.7, height: 0.34, length: 0.75, material: fabric, corner: 0.15)
-        seat.position = SCNVector3(0, 0.40, 0)
+        let fabricColor = UIColor(red: 0.76, green: 0.81, blue: 0.78, alpha: 1)
+        let highlightColor = UIColor(red: 0.90, green: 0.87, blue: 0.79, alpha: 1)
+        let fabric = materialWith(color: fabricColor, roughness: 0.98)
+        fabric.diffuse.contents = fabricTexture(base: fabricColor)
+        let highlight = materialWith(color: highlightColor, roughness: 0.98)
+        highlight.diffuse.contents = fabricTexture(base: highlightColor)
+        let wood = materialWith(color: UIColor(red: 0.43, green: 0.32, blue: 0.25, alpha: 1), roughness: 0.88)
+        let seat = box(width: 1.78, height: 0.30, length: 0.76, material: fabric, corner: 0.13)
+        seat.position = SCNVector3(0, 0.38, 0)
         root.addChildNode(seat)
-        let back = box(width: 1.7, height: 0.82, length: 0.27, material: fabric, corner: 0.16)
-        back.position = SCNVector3(0, 0.78, -0.30)
+        let back = box(width: 1.78, height: 0.72, length: 0.23, material: fabric, corner: 0.14)
+        back.position = SCNVector3(0, 0.76, -0.31)
         back.eulerAngles.x = -0.09
         root.addChildNode(back)
-        for x: Float in [-0.88, 0.88] {
-            let arm = box(width: 0.22, height: 0.58, length: 0.78, material: highlight, corner: 0.11)
-            arm.position = SCNVector3(x, 0.46, 0)
+        for x: Float in [-0.90, 0.90] {
+            let arm = box(width: 0.18, height: 0.48, length: 0.78, material: fabric, corner: 0.09)
+            arm.position = SCNVector3(x, 0.43, 0)
             root.addChildNode(arm)
         }
         for x: Float in [-0.39, 0.39] {
-            let cushion = box(width: 0.70, height: 0.17, length: 0.64, material: highlight, corner: 0.10)
-            cushion.position = SCNVector3(x, 0.62, 0.02)
+            let cushion = box(width: 0.72, height: 0.14, length: 0.62, material: highlight, corner: 0.09)
+            cushion.position = SCNVector3(x, 0.58, 0.02)
             root.addChildNode(cushion)
         }
+        for x: Float in [-0.68, 0.68] {
+            for z: Float in [-0.27, 0.27] {
+                let leg = box(width: 0.07, height: 0.20, length: 0.07, material: wood, corner: 0.016)
+                leg.position = SCNVector3(x, 0.10, z)
+                root.addChildNode(leg)
+            }
+        }
+        let throwPillow = box(width: 0.42, height: 0.40, length: 0.16, material: materialWith(color: UIColor(red: 0.80, green: 0.56, blue: 0.54, alpha: 1), roughness: 0.98), corner: 0.12)
+        throwPillow.position = SCNVector3(-0.56, 0.80, -0.08)
+        throwPillow.eulerAngles.z = -0.12
+        root.addChildNode(throwPillow)
         return root
     }
 
     private func makeLowTable() -> SCNNode {
         let root = SCNNode()
-        let wood = materialWith(color: UIColor(red: 0.73, green: 0.52, blue: 0.36, alpha: 1), roughness: 0.78)
-        let top = box(width: 1.18, height: 0.12, length: 0.76, material: wood, corner: 0.07)
-        top.position = SCNVector3(0, 0.46, 0)
+        let wood = materialWith(color: UIColor(red: 0.72, green: 0.57, blue: 0.41, alpha: 1), roughness: 0.82)
+        let ceramic = materialWith(color: UIColor(red: 0.79, green: 0.87, blue: 0.85, alpha: 1), roughness: 0.44)
+        let top = box(width: 1.26, height: 0.105, length: 0.78, material: wood, corner: 0.10)
+        top.position = SCNVector3(0, 0.40, 0)
         root.addChildNode(top)
         for x: Float in [-0.48, 0.48] {
             for z: Float in [-0.27, 0.27] {
-                let leg = box(width: 0.09, height: 0.42, length: 0.09, material: wood, corner: 0.025)
-                leg.position = SCNVector3(x, 0.21, z)
+                let leg = box(width: 0.075, height: 0.35, length: 0.075, material: wood, corner: 0.020)
+                leg.position = SCNVector3(x, 0.18, z)
                 root.addChildNode(leg)
             }
         }
+        let lowerShelf = box(width: 0.92, height: 0.045, length: 0.50, material: wood, corner: 0.035)
+        lowerShelf.position.y = 0.17
+        root.addChildNode(lowerShelf)
+        let cup = SCNCylinder(radius: 0.075, height: 0.10)
+        cup.radialSegmentCount = 28
+        cup.materials = [ceramic]
+        let cupNode = SCNNode(geometry: cup)
+        cupNode.position = SCNVector3(0.32, 0.51, -0.08)
+        root.addChildNode(cupNode)
+        let book = box(width: 0.34, height: 0.025, length: 0.28, material: materialWith(color: UIColor(red: 0.88, green: 0.70, blue: 0.70, alpha: 1), roughness: 0.88), corner: 0.012)
+        book.position = SCNVector3(-0.22, 0.47, 0.03)
+        book.eulerAngles.y = 0.12
+        root.addChildNode(book)
         return root
     }
 
     private func makeRug() -> SCNNode {
-        let material = materialWith(color: UIColor(red: 0.98, green: 0.68, blue: 0.64, alpha: 1), roughness: 1)
+        let material = materialWith(color: UIColor(red: 0.40, green: 0.50, blue: 0.56, alpha: 1), roughness: 1)
+        material.diffuse.contents = rugTexture()
         let node = box(width: 2.18, height: 0.025, length: 1.48, material: material, corner: 0.18)
         node.position.y = 0.014
         return node
@@ -410,32 +830,31 @@ final class HomeSceneFactory {
 
     private func makeFloorLamp() -> SCNNode {
         let root = SCNNode()
-        let metal = materialWith(color: UIColor(red: 0.38, green: 0.28, blue: 0.24, alpha: 1), roughness: 0.58)
-        let shade = materialWith(color: UIColor(red: 1, green: 0.86, blue: 0.64, alpha: 1), roughness: 0.92)
-        let base = SCNCylinder(radius: 0.24, height: 0.06)
-        base.materials = [metal]
-        let baseNode = SCNNode(geometry: base)
-        baseNode.position.y = 0.03
-        root.addChildNode(baseNode)
-        let stem = SCNCylinder(radius: 0.025, height: 1.36)
-        stem.materials = [metal]
-        let stemNode = SCNNode(geometry: stem)
-        stemNode.position.y = 0.72
-        root.addChildNode(stemNode)
-        let shadeGeometry = SCNCone(topRadius: 0.18, bottomRadius: 0.38, height: 0.46)
-        shadeGeometry.materials = [shade]
-        let shadeNode = SCNNode(geometry: shadeGeometry)
-        shadeNode.position.y = 1.52
+        let wood = materialWith(color: UIColor(red: 0.34, green: 0.25, blue: 0.20, alpha: 1), roughness: 0.84)
+        let paper = materialWith(color: UIColor(red: 1, green: 0.91, blue: 0.73, alpha: 1), roughness: 0.98, transparency: 0.88)
+        paper.emission.contents = UIColor(red: 1, green: 0.72, blue: 0.42, alpha: 0.10)
+        for x: Float in [-0.22, 0.22] {
+            let post = box(width: 0.035, height: 1.30, length: 0.035, material: wood, corner: 0.008)
+            post.position = SCNVector3(x, 0.67, 0)
+            root.addChildNode(post)
+        }
+        for y: Float in [0.04, 0.44, 0.84, 1.32] {
+            let rail = box(width: 0.50, height: 0.035, length: 0.28, material: wood, corner: 0.008)
+            rail.position = SCNVector3(0, y, 0)
+            root.addChildNode(rail)
+        }
+        let shadeNode = box(width: 0.42, height: 1.20, length: 0.22, material: paper, corner: 0.055)
+        shadeNode.position = SCNVector3(0, 0.68, 0)
         root.addChildNode(shadeNode)
         let light = SCNLight()
         light.type = .omni
         light.color = UIColor(red: 1, green: 0.72, blue: 0.44, alpha: 1)
-        light.intensity = 285
+        light.intensity = 145
         light.attenuationStartDistance = 0.4
         light.attenuationEndDistance = 3.2
         let lightNode = SCNNode()
         lightNode.light = light
-        lightNode.position.y = 1.40
+        lightNode.position.y = 0.78
         root.addChildNode(lightNode)
         return root
     }
@@ -714,6 +1133,280 @@ final class HomeSceneFactory {
         }
     }
 
+    private func panoramaImage(theme: HomeRoomTheme) -> UIImage {
+        let cacheKey = "panorama-\(theme.rawValue)"
+        if let cached = generatedTextureCache[cacheKey] { return cached }
+        let source = UIImage(named: "WindowPanoramaTokyoSpring")
+            ?? backgroundImage(theme: theme, size: CGSize(width: 2_048, height: 1_024))
+        let base = croppedImage(source, toAspectRatio: 3.34 / 2.06)
+        guard theme != .sunset else {
+            generatedTextureCache[cacheKey] = base
+            return base
+        }
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        format.opaque = true
+        let rendered = UIGraphicsImageRenderer(size: base.size, format: format).image { context in
+            base.draw(in: CGRect(origin: .zero, size: base.size))
+            let overlay = theme == .rain
+                ? UIColor(red: 0.20, green: 0.35, blue: 0.48, alpha: 0.34)
+                : UIColor(red: 0.035, green: 0.055, blue: 0.18, alpha: 0.68)
+            overlay.setFill()
+            context.fill(CGRect(origin: .zero, size: base.size))
+            if theme == .rain {
+                UIColor.white.withAlphaComponent(0.16).setStroke()
+                context.cgContext.setLineWidth(1.4)
+                for index in 0..<92 {
+                    let x = CGFloat((index * 83) % 2_048) / 2_048 * base.size.width
+                    let y = CGFloat((index * 131) % 1_024) / 1_024 * base.size.height
+                    context.cgContext.move(to: CGPoint(x: x, y: y))
+                    context.cgContext.addLine(to: CGPoint(x: x - 8, y: y + 28))
+                }
+                context.cgContext.strokePath()
+            } else {
+                UIColor(red: 0.80, green: 0.86, blue: 1, alpha: 0.72).setFill()
+                for index in 0..<48 {
+                    let x = CGFloat((index * 149 + 41) % 2_048) / 2_048 * base.size.width
+                    let y = CGFloat((index * 71 + 23) % 520) / 1_024 * base.size.height
+                    let radius = CGFloat(1 + index % 3)
+                    context.cgContext.fillEllipse(in: CGRect(x: x, y: y, width: radius, height: radius))
+                }
+            }
+        }
+        generatedTextureCache[cacheKey] = rendered
+        return rendered
+    }
+
+    private func croppedImage(_ image: UIImage, toAspectRatio targetAspectRatio: CGFloat) -> UIImage {
+        guard let cgImage = image.cgImage else { return image }
+        let width = CGFloat(cgImage.width)
+        let height = CGFloat(cgImage.height)
+        let sourceAspectRatio = width / max(height, 1)
+        let cropRect: CGRect
+        if sourceAspectRatio > targetAspectRatio {
+            let cropWidth = height * targetAspectRatio
+            cropRect = CGRect(x: (width - cropWidth) / 2, y: 0, width: cropWidth, height: height)
+        } else {
+            let cropHeight = width / targetAspectRatio
+            cropRect = CGRect(x: 0, y: (height - cropHeight) / 2, width: width, height: cropHeight)
+        }
+        guard let cropped = cgImage.cropping(to: cropRect.integral) else { return image }
+        return UIImage(cgImage: cropped, scale: image.scale, orientation: image.imageOrientation)
+    }
+
+    private func woodTexture(palette: HomeScenePalette) -> UIImage {
+        let cacheKey = "wood-\(palette.theme.rawValue)"
+        if let cached = generatedTextureCache[cacheKey] { return cached }
+        let size = CGSize(width: 512, height: 512)
+        let rendered = textureRenderer(size: size).image { context in
+            palette.floor.setFill()
+            context.fill(CGRect(origin: .zero, size: size))
+            let boardHeight: CGFloat = 64
+            for row in 0..<8 {
+                let y = CGFloat(row) * boardHeight
+                let tint = row.isMultiple(of: 2) ? UIColor.white.withAlphaComponent(0.035) : UIColor.black.withAlphaComponent(0.028)
+                tint.setFill()
+                context.fill(CGRect(x: 0, y: y, width: size.width, height: boardHeight))
+                palette.floorBorder.withAlphaComponent(0.34).setStroke()
+                context.cgContext.setLineWidth(1.25)
+                context.cgContext.move(to: CGPoint(x: 0, y: y))
+                context.cgContext.addLine(to: CGPoint(x: size.width, y: y))
+                context.cgContext.strokePath()
+                let offset: CGFloat = row.isMultiple(of: 2) ? 82 : 214
+                for joint in stride(from: offset, through: size.width, by: 256) {
+                    context.cgContext.move(to: CGPoint(x: joint, y: y))
+                    context.cgContext.addLine(to: CGPoint(x: joint, y: y + boardHeight))
+                }
+                context.cgContext.strokePath()
+            }
+            for index in 0..<118 {
+                let y = CGFloat((index * 37 + 19) % 512)
+                let x = CGFloat((index * 97 + 31) % 512)
+                let length = CGFloat(34 + (index * 29) % 120)
+                UIColor.black.withAlphaComponent(index.isMultiple(of: 3) ? 0.030 : 0.018).setStroke()
+                context.cgContext.setLineWidth(0.75)
+                context.cgContext.move(to: CGPoint(x: x, y: y))
+                context.cgContext.addCurve(
+                    to: CGPoint(x: min(size.width, x + length), y: y + 1.5),
+                    control1: CGPoint(x: x + length * 0.3, y: y - 2.2),
+                    control2: CGPoint(x: x + length * 0.7, y: y + 3.0)
+                )
+                context.cgContext.strokePath()
+            }
+        }
+        generatedTextureCache[cacheKey] = rendered
+        return rendered
+    }
+
+    private func wallpaperTexture(palette: HomeScenePalette, side: Bool = false) -> UIImage {
+        let cacheKey = "wallpaper-\(palette.theme.rawValue)-\(side)"
+        if let cached = generatedTextureCache[cacheKey] { return cached }
+        let size = CGSize(width: 384, height: 384)
+        let base = side ? palette.sideWall : palette.wall
+        let rendered = textureRenderer(size: size).image { context in
+            base.setFill()
+            context.fill(CGRect(origin: .zero, size: size))
+            for index in 0..<620 {
+                let x = CGFloat((index * 73 + 19) % 384)
+                let y = CGFloat((index * 131 + 7) % 384)
+                let alpha = index.isMultiple(of: 3) ? 0.040 : 0.020
+                (index.isMultiple(of: 2) ? UIColor.white : palette.wallMotif).withAlphaComponent(alpha).setFill()
+                context.cgContext.fillEllipse(in: CGRect(x: x, y: y, width: 1.1, height: 1.1))
+            }
+            UIColor.black.withAlphaComponent(0.018).setStroke()
+            context.cgContext.setLineWidth(0.5)
+            for x in stride(from: CGFloat(0), through: size.width, by: 12) {
+                context.cgContext.move(to: CGPoint(x: x, y: 0))
+                context.cgContext.addLine(to: CGPoint(x: x + 2, y: size.height))
+            }
+            context.cgContext.strokePath()
+        }
+        generatedTextureCache[cacheKey] = rendered
+        return rendered
+    }
+
+    private func fabricTexture(base: UIColor) -> UIImage {
+        var red: CGFloat = 0
+        var green: CGFloat = 0
+        var blue: CGFloat = 0
+        base.getRed(&red, green: &green, blue: &blue, alpha: nil)
+        let cacheKey = String(format: "fabric-%.2f-%.2f-%.2f", red, green, blue)
+        if let cached = generatedTextureCache[cacheKey] { return cached }
+        let size = CGSize(width: 128, height: 128)
+        let rendered = textureRenderer(size: size).image { context in
+            base.setFill()
+            context.fill(CGRect(origin: .zero, size: size))
+            context.cgContext.setLineWidth(0.55)
+            UIColor.white.withAlphaComponent(0.075).setStroke()
+            for value in stride(from: CGFloat(0), through: size.width, by: 4) {
+                context.cgContext.move(to: CGPoint(x: value, y: 0))
+                context.cgContext.addLine(to: CGPoint(x: value, y: size.height))
+            }
+            context.cgContext.strokePath()
+            UIColor.black.withAlphaComponent(0.045).setStroke()
+            for value in stride(from: CGFloat(2), through: size.height, by: 4) {
+                context.cgContext.move(to: CGPoint(x: 0, y: value))
+                context.cgContext.addLine(to: CGPoint(x: size.width, y: value))
+            }
+            context.cgContext.strokePath()
+        }
+        generatedTextureCache[cacheKey] = rendered
+        return rendered
+    }
+
+    private func rugTexture() -> UIImage {
+        let cacheKey = "rug-japanese-wave"
+        if let cached = generatedTextureCache[cacheKey] { return cached }
+        let size = CGSize(width: 640, height: 420)
+        let rendered = textureRenderer(size: size).image { context in
+            UIColor(red: 0.35, green: 0.47, blue: 0.53, alpha: 1).setFill()
+            context.fill(CGRect(origin: .zero, size: size))
+            UIColor(red: 0.87, green: 0.82, blue: 0.70, alpha: 0.42).setStroke()
+            context.cgContext.setLineWidth(2.2)
+            let radius: CGFloat = 52
+            for row in 0..<6 {
+                for column in 0..<8 {
+                    let x = CGFloat(column) * radius * 1.55 + (row.isMultiple(of: 2) ? 0 : radius * 0.78)
+                    let y = CGFloat(row) * radius * 1.28
+                    context.cgContext.addArc(center: CGPoint(x: x, y: y + radius), radius: radius, startAngle: .pi, endAngle: 0, clockwise: false)
+                    context.cgContext.addArc(center: CGPoint(x: x, y: y + radius), radius: radius * 0.66, startAngle: .pi, endAngle: 0, clockwise: false)
+                    context.cgContext.addArc(center: CGPoint(x: x, y: y + radius), radius: radius * 0.33, startAngle: .pi, endAngle: 0, clockwise: false)
+                }
+            }
+            context.cgContext.strokePath()
+            UIColor.white.withAlphaComponent(0.13).setStroke()
+            context.cgContext.setLineWidth(0.7)
+            for y in stride(from: CGFloat(0), through: size.height, by: 5) {
+                context.cgContext.move(to: CGPoint(x: 0, y: y))
+                context.cgContext.addLine(to: CGPoint(x: size.width, y: y))
+            }
+            context.cgContext.strokePath()
+        }
+        generatedTextureCache[cacheKey] = rendered
+        return rendered
+    }
+
+    private func shojiPaperTexture() -> UIImage {
+        let cacheKey = "shoji-washi"
+        if let cached = generatedTextureCache[cacheKey] { return cached }
+        let size = CGSize(width: 256, height: 256)
+        let rendered = textureRenderer(size: size).image { context in
+            UIColor(red: 0.98, green: 0.96, blue: 0.88, alpha: 1).setFill()
+            context.fill(CGRect(origin: .zero, size: size))
+            for index in 0..<360 {
+                let x = CGFloat((index * 61 + 5) % 256)
+                let y = CGFloat((index * 109 + 17) % 256)
+                UIColor(red: 0.55, green: 0.49, blue: 0.39, alpha: index.isMultiple(of: 2) ? 0.045 : 0.025).setStroke()
+                context.cgContext.setLineWidth(0.6)
+                context.cgContext.move(to: CGPoint(x: x, y: y))
+                context.cgContext.addLine(to: CGPoint(x: min(CGFloat(256), x + CGFloat(4 + index % 13)), y: y + CGFloat(index % 3) - 1))
+                context.cgContext.strokePath()
+            }
+        }
+        generatedTextureCache[cacheKey] = rendered
+        return rendered
+    }
+
+    private func tatamiTexture(base: UIColor) -> UIImage {
+        let cacheKey = "tatami-weave"
+        if let cached = generatedTextureCache[cacheKey] { return cached }
+        let size = CGSize(width: 256, height: 256)
+        let rendered = textureRenderer(size: size).image { context in
+            base.setFill()
+            context.fill(CGRect(origin: .zero, size: size))
+            UIColor.white.withAlphaComponent(0.105).setStroke()
+            context.cgContext.setLineWidth(0.65)
+            for y in stride(from: CGFloat(0), through: size.height, by: 3) {
+                context.cgContext.move(to: CGPoint(x: 0, y: y))
+                context.cgContext.addLine(to: CGPoint(x: size.width, y: y + 1))
+            }
+            context.cgContext.strokePath()
+            UIColor.black.withAlphaComponent(0.055).setStroke()
+            for x in stride(from: CGFloat(1), through: size.width, by: 6) {
+                context.cgContext.move(to: CGPoint(x: x, y: 0))
+                context.cgContext.addLine(to: CGPoint(x: x, y: size.height))
+            }
+            context.cgContext.strokePath()
+        }
+        generatedTextureCache[cacheKey] = rendered
+        return rendered
+    }
+
+    private func cherryPrintTexture() -> UIImage {
+        let cacheKey = "tokyo-cherry-print"
+        if let cached = generatedTextureCache[cacheKey] { return cached }
+        let size = CGSize(width: 500, height: 810)
+        let rendered = textureRenderer(size: size).image { context in
+            UIColor(red: 0.96, green: 0.94, blue: 0.88, alpha: 1).setFill()
+            context.fill(CGRect(origin: .zero, size: size))
+            UIColor(red: 0.76, green: 0.32, blue: 0.27, alpha: 0.80).setFill()
+            context.cgContext.fillEllipse(in: CGRect(x: 300, y: 120, width: 105, height: 105))
+            UIColor(red: 0.23, green: 0.19, blue: 0.17, alpha: 0.88).setStroke()
+            context.cgContext.setLineWidth(9)
+            context.cgContext.move(to: CGPoint(x: 40, y: 700))
+            context.cgContext.addCurve(to: CGPoint(x: 360, y: 245), control1: CGPoint(x: 190, y: 620), control2: CGPoint(x: 185, y: 335))
+            context.cgContext.move(to: CGPoint(x: 185, y: 475))
+            context.cgContext.addCurve(to: CGPoint(x: 430, y: 385), control1: CGPoint(x: 275, y: 455), control2: CGPoint(x: 330, y: 360))
+            context.cgContext.strokePath()
+            let colors = [UIColor(red: 0.93, green: 0.56, blue: 0.62, alpha: 0.78), UIColor(red: 1, green: 0.78, blue: 0.80, alpha: 0.88)]
+            for index in 0..<24 {
+                let x = CGFloat((index * 79 + 73) % 390) + 45
+                let y = CGFloat((index * 47 + 211) % 410) + 150
+                colors[index % colors.count].setFill()
+                context.cgContext.fillEllipse(in: CGRect(x: x, y: y, width: 20, height: 12))
+            }
+        }
+        generatedTextureCache[cacheKey] = rendered
+        return rendered
+    }
+
+    private func textureRenderer(size: CGSize) -> UIGraphicsImageRenderer {
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        format.opaque = true
+        return UIGraphicsImageRenderer(size: size, format: format)
+    }
+
     private func materialWith(
         color: UIColor,
         roughness: CGFloat,
@@ -759,15 +1452,15 @@ private struct HomeScenePalette {
 
     var floor: UIColor {
         switch theme {
-        case .sunset: UIColor(red: 0.73, green: 0.53, blue: 0.38, alpha: 1)
-        case .rain: UIColor(red: 0.55, green: 0.50, blue: 0.47, alpha: 1)
-        case .moonlight: UIColor(red: 0.26, green: 0.23, blue: 0.34, alpha: 1)
+        case .sunset: UIColor(red: 0.78, green: 0.67, blue: 0.52, alpha: 1)
+        case .rain: UIColor(red: 0.64, green: 0.61, blue: 0.55, alpha: 1)
+        case .moonlight: UIColor(red: 0.34, green: 0.31, blue: 0.38, alpha: 1)
         }
     }
 
     var wall: UIColor {
         switch theme {
-        case .sunset: UIColor(red: 1, green: 0.92, blue: 0.80, alpha: 1)
+        case .sunset: UIColor(red: 0.95, green: 0.94, blue: 0.90, alpha: 1)
         case .rain: UIColor(red: 0.80, green: 0.90, blue: 0.89, alpha: 1)
         case .moonlight: UIColor(red: 0.25, green: 0.25, blue: 0.40, alpha: 1)
         }
@@ -775,10 +1468,80 @@ private struct HomeScenePalette {
 
     var sideWall: UIColor {
         switch theme {
-        case .sunset: UIColor(red: 0.95, green: 0.82, blue: 0.72, alpha: 1)
+        case .sunset: UIColor(red: 0.91, green: 0.91, blue: 0.87, alpha: 1)
         case .rain: UIColor(red: 0.70, green: 0.81, blue: 0.83, alpha: 1)
         case .moonlight: UIColor(red: 0.18, green: 0.19, blue: 0.33, alpha: 1)
         }
+    }
+
+    var panel: UIColor {
+        switch theme {
+        case .sunset: UIColor(red: 0.90, green: 0.88, blue: 0.81, alpha: 1)
+        case .rain: UIColor(red: 0.67, green: 0.76, blue: 0.76, alpha: 1)
+        case .moonlight: UIColor(red: 0.20, green: 0.20, blue: 0.31, alpha: 1)
+        }
+    }
+
+    var trim: UIColor {
+        switch theme {
+        case .sunset: UIColor(red: 0.98, green: 0.90, blue: 0.80, alpha: 1)
+        case .rain: UIColor(red: 0.84, green: 0.90, blue: 0.87, alpha: 1)
+        case .moonlight: UIColor(red: 0.39, green: 0.37, blue: 0.52, alpha: 1)
+        }
+    }
+
+    var floorBorder: UIColor {
+        switch theme {
+        case .sunset: UIColor(red: 0.48, green: 0.38, blue: 0.28, alpha: 1)
+        case .rain: UIColor(red: 0.34, green: 0.29, blue: 0.27, alpha: 1)
+        case .moonlight: UIColor(red: 0.13, green: 0.11, blue: 0.19, alpha: 1)
+        }
+    }
+
+    var lightWood: UIColor {
+        switch theme {
+        case .sunset: UIColor(red: 0.79, green: 0.68, blue: 0.54, alpha: 1)
+        case .rain: UIColor(red: 0.63, green: 0.53, blue: 0.44, alpha: 1)
+        case .moonlight: UIColor(red: 0.38, green: 0.31, blue: 0.38, alpha: 1)
+        }
+    }
+
+    var woodShadow: UIColor {
+        switch theme {
+        case .sunset: UIColor(red: 0.39, green: 0.24, blue: 0.17, alpha: 1)
+        case .rain: UIColor(red: 0.31, green: 0.28, blue: 0.26, alpha: 1)
+        case .moonlight: UIColor(red: 0.16, green: 0.14, blue: 0.22, alpha: 1)
+        }
+    }
+
+    var seatFabric: UIColor {
+        switch theme {
+        case .sunset: UIColor(red: 0.94, green: 0.78, blue: 0.70, alpha: 1)
+        case .rain: UIColor(red: 0.69, green: 0.84, blue: 0.82, alpha: 1)
+        case .moonlight: UIColor(red: 0.47, green: 0.45, blue: 0.68, alpha: 1)
+        }
+    }
+
+    var windowFrame: UIColor { theme == .moonlight ? UIColor(red: 0.18, green: 0.20, blue: 0.28, alpha: 1) : UIColor(red: 0.20, green: 0.22, blue: 0.22, alpha: 1) }
+    var metal: UIColor { theme == .moonlight ? UIColor(red: 0.48, green: 0.49, blue: 0.60, alpha: 1) : UIColor(red: 0.27, green: 0.28, blue: 0.27, alpha: 1) }
+    var tatami: UIColor { theme == .moonlight ? UIColor(red: 0.48, green: 0.49, blue: 0.39, alpha: 1) : UIColor(red: 0.70, green: 0.70, blue: 0.53, alpha: 1) }
+    var tatamiBorder: UIColor { theme == .moonlight ? UIColor(red: 0.15, green: 0.17, blue: 0.21, alpha: 1) : UIColor(red: 0.20, green: 0.25, blue: 0.24, alpha: 1) }
+    var curtainTie: UIColor { theme == .moonlight ? UIColor(red: 0.72, green: 0.67, blue: 0.94, alpha: 1) : UIColor(red: 0.91, green: 0.70, blue: 0.35, alpha: 1) }
+    var lampShade: UIColor { theme == .moonlight ? UIColor(red: 0.42, green: 0.42, blue: 0.62, alpha: 1) : UIColor(red: 0.96, green: 0.82, blue: 0.64, alpha: 1) }
+    var bulb: UIColor { theme == .moonlight ? UIColor(red: 0.73, green: 0.79, blue: 1, alpha: 1) : UIColor(red: 1, green: 0.75, blue: 0.43, alpha: 1) }
+    var glass: UIColor { theme == .moonlight ? UIColor(red: 0.40, green: 0.55, blue: 0.94, alpha: 1) : UIColor(red: 0.78, green: 0.92, blue: 1, alpha: 1) }
+    var wallMotif: UIColor { theme == .moonlight ? UIColor(red: 0.68, green: 0.65, blue: 0.94, alpha: 1) : UIColor(red: 0.58, green: 0.42, blue: 0.38, alpha: 1) }
+    var wallArt: UIColor { theme == .rain ? UIColor(red: 0.55, green: 0.78, blue: 0.74, alpha: 1) : UIColor(red: 0.84, green: 0.59, blue: 0.69, alpha: 1) }
+    var fill: UIColor { theme == .moonlight ? UIColor(red: 0.45, green: 0.55, blue: 0.90, alpha: 1) : UIColor(red: 0.72, green: 0.84, blue: 1, alpha: 1) }
+
+    var decorativeBookColors: [UIColor] {
+        [
+            UIColor(red: 0.88, green: 0.48, blue: 0.48, alpha: 1),
+            UIColor(red: 0.42, green: 0.67, blue: 0.82, alpha: 1),
+            UIColor(red: 0.78, green: 0.63, blue: 0.89, alpha: 1),
+            UIColor(red: 0.91, green: 0.72, blue: 0.42, alpha: 1),
+            UIColor(red: 0.48, green: 0.72, blue: 0.61, alpha: 1)
+        ]
     }
 
     var curtain: UIColor {

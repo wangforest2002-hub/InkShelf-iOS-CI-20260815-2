@@ -58,6 +58,11 @@ struct HomeSceneView: UIViewRepresentable {
         private var cameraYaw: Float = 0.68
         private var cameraPitch: Float = 0.56
         private var cameraDistance: Float = 7.2
+        private var usesFirstPersonCamera = true
+        private var lastEditingState: Bool?
+        private var firstPersonPosition = SCNVector3(0, 1.52, 1.72)
+        private var firstPersonYaw: Float = 2.88
+        private var firstPersonPitch: Float = 0.035
         private var hasAppliedResponsiveFraming = false
         private var dragStartTransform: HomeTransform?
         private var rotationStart: Float?
@@ -103,6 +108,7 @@ struct HomeSceneView: UIViewRepresentable {
             let rotation = UIRotationGestureRecognizer(target: self, action: #selector(rotated(_:)))
             tap.delegate = self
             pan.delegate = self
+            pan.maximumNumberOfTouches = 1
             pinch.delegate = self
             rotation.delegate = self
             view.addGestureRecognizer(tap)
@@ -111,7 +117,7 @@ struct HomeSceneView: UIViewRepresentable {
             view.addGestureRecognizer(rotation)
             view.accessibilityIdentifier = "home-3d-scene"
             view.accessibilityLabel = "可自由布置的三维小家"
-            view.accessibilityHint = "拖动调整视角，双指缩放；布置模式下可移动物品"
+            view.accessibilityHint = "单指拖动环顾，双指捏合前后移动，轻点空地走过去；布置模式下可移动物品"
             Task { @MainActor [weak self] in
                 self?.applyResponsiveFramingIfNeeded()
             }
@@ -120,6 +126,7 @@ struct HomeSceneView: UIViewRepresentable {
         func sync(with value: HomeSceneView) {
             guard let sceneView else { return }
             applyResponsiveFramingIfNeeded()
+            updateCameraModeIfNeeded(isEditing: value.isEditing)
             if currentTheme != value.state.theme {
                 roomNode?.removeFromParentNode()
                 let room = factory.makeRoom(theme: value.state.theme)
@@ -127,6 +134,7 @@ struct HomeSceneView: UIViewRepresentable {
                 roomNode = room
                 scene.background.contents = factory.backgroundImage(theme: value.state.theme)
                 currentTheme = value.state.theme
+                updateRoomShellVisibility(isEditing: value.isEditing)
             }
 
             placements = Dictionary(uniqueKeysWithValues: value.state.placements.map { ($0.id, $0) })
@@ -162,25 +170,8 @@ struct HomeSceneView: UIViewRepresentable {
                 }
             }
 
-            if kokoNode == nil {
-                let koko = factory.makeKokoNode()
-                contentRoot.addChildNode(koko)
-                kokoNode = koko
-                kokoController.install(
-                    root: koko,
-                    zone: value.state.koko.activityZone,
-                    roamingEnabled: value.state.koko.roamingEnabled,
-                    reduceMotion: value.reduceMotion,
-                    placements: value.state.placements
-                )
-            } else {
-                kokoController.update(
-                    zone: value.state.koko.activityZone,
-                    roamingEnabled: value.state.koko.roamingEnabled,
-                    reduceMotion: value.reduceMotion,
-                    placements: value.state.placements
-                )
-            }
+            kokoNode?.removeFromParentNode()
+            kokoNode = nil
 
             if value.showsKokoZone {
                 zoneNode?.removeFromParentNode()
@@ -202,13 +193,7 @@ struct HomeSceneView: UIViewRepresentable {
                 }
             }
 
-            if lastKokoDecisionRevision != value.kokoDecisionRevision {
-                lastKokoDecisionRevision = value.kokoDecisionRevision
-                let target = value.kokoDecision.targetBookID.flatMap { targetBookID in
-                    value.state.placements.first(where: { $0.bookID == targetBookID }).flatMap { placementNodes[$0.id] }
-                }
-                kokoController.perform(value.kokoDecision, target: target)
-            }
+            lastKokoDecisionRevision = value.kokoDecisionRevision
             sceneView.preferredFramesPerSecond = value.reduceMotion ? 30 : 60
         }
 
@@ -234,6 +219,10 @@ struct HomeSceneView: UIViewRepresentable {
             ])
             guard let hit = results.first else {
                 if parent.isEditing { parent.onSelectPlacement(nil) }
+                return
+            }
+            if !parent.isEditing, isRoomFloor(hit.node) {
+                moveFirstPerson(to: hit.worldCoordinates)
                 return
             }
             var node: SCNNode? = hit.node
@@ -296,8 +285,13 @@ struct HomeSceneView: UIViewRepresentable {
             } else {
                 switch recognizer.state {
                 case .changed:
-                    cameraYaw -= Float(translation.x) * 0.0052
-                    cameraPitch = min(max(cameraPitch + Float(translation.y) * 0.0035, 0.25), 0.94)
+                    if usesFirstPersonCamera {
+                        firstPersonYaw -= Float(translation.x) * 0.0046
+                        firstPersonPitch = min(max(firstPersonPitch - Float(translation.y) * 0.0032, -0.48), 0.48)
+                    } else {
+                        cameraYaw -= Float(translation.x) * 0.0052
+                        cameraPitch = min(max(cameraPitch + Float(translation.y) * 0.0035, 0.25), 0.94)
+                    }
                     recognizer.setTranslation(.zero, in: view)
                     updateCamera(animated: false)
                 default:
@@ -308,7 +302,14 @@ struct HomeSceneView: UIViewRepresentable {
 
         @objc private func pinched(_ recognizer: UIPinchGestureRecognizer) {
             guard recognizer.state == .changed else { return }
-            cameraDistance = min(max(cameraDistance / Float(recognizer.scale), 4.1), 13.5)
+            if usesFirstPersonCamera {
+                let amount = Float(log(Double(recognizer.scale))) * 0.92
+                let forward = SCNVector3(sin(firstPersonYaw), 0, cos(firstPersonYaw))
+                firstPersonPosition.x = min(max(firstPersonPosition.x + forward.x * amount, -2.56), 2.56)
+                firstPersonPosition.z = min(max(firstPersonPosition.z + forward.z * amount, -2.10), 2.10)
+            } else {
+                cameraDistance = min(max(cameraDistance / Float(recognizer.scale), 4.1), 13.5)
+            }
             recognizer.scale = 1
             updateCamera(animated: false)
         }
@@ -338,21 +339,76 @@ struct HomeSceneView: UIViewRepresentable {
         }
 
         private func updateCamera(animated: Bool) {
-            let horizontal = cameraDistance * cos(cameraPitch)
-            let position = SCNVector3(
-                sin(cameraYaw) * horizontal,
-                max(1.7, cameraDistance * sin(cameraPitch)),
-                cos(cameraYaw) * horizontal
-            )
+            let position: SCNVector3
+            let target: SCNVector3
+            if usesFirstPersonCamera {
+                let horizontal = cos(firstPersonPitch)
+                let direction = SCNVector3(
+                    sin(firstPersonYaw) * horizontal,
+                    sin(firstPersonPitch),
+                    cos(firstPersonYaw) * horizontal
+                )
+                position = firstPersonPosition
+                target = SCNVector3(
+                    position.x + direction.x * 4,
+                    position.y + direction.y * 4,
+                    position.z + direction.z * 4
+                )
+            } else {
+                let horizontal = cameraDistance * cos(cameraPitch)
+                position = SCNVector3(
+                    sin(cameraYaw) * horizontal,
+                    max(1.7, cameraDistance * sin(cameraPitch)),
+                    cos(cameraYaw) * horizontal
+                )
+                target = cameraTarget.position
+            }
             if animated {
                 SCNTransaction.begin()
                 SCNTransaction.animationDuration = 0.45
                 SCNTransaction.animationTimingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
                 cameraNode.position = position
+                cameraTarget.position = target
                 SCNTransaction.commit()
             } else {
                 cameraNode.position = position
+                cameraTarget.position = target
             }
+        }
+
+        private func updateCameraModeIfNeeded(isEditing: Bool) {
+            guard lastEditingState != isEditing else { return }
+            lastEditingState = isEditing
+            usesFirstPersonCamera = !isEditing
+            cameraNode.camera?.fieldOfView = usesFirstPersonCamera ? 67 : 50
+            if !usesFirstPersonCamera {
+                cameraTarget.position = SCNVector3(0, 0.86, -0.10)
+            }
+            updateRoomShellVisibility(isEditing: isEditing)
+            updateCamera(animated: true)
+        }
+
+        private func updateRoomShellVisibility(isEditing: Bool) {
+            ["room-right-wall", "room-front-wall", "room-ceiling", "room-entryway"].forEach { name in
+                roomNode?.childNode(withName: name, recursively: true)?.isHidden = isEditing
+            }
+        }
+
+        private func isRoomFloor(_ node: SCNNode) -> Bool {
+            var current: SCNNode? = node
+            while let candidate = current {
+                if candidate.name == "room-floor" { return true }
+                current = candidate.parent
+            }
+            return false
+        }
+
+        private func moveFirstPerson(to location: SCNVector3) {
+            guard usesFirstPersonCamera else { return }
+            firstPersonPosition.x = min(max(location.x, -2.56), 2.56)
+            firstPersonPosition.z = min(max(location.z, -2.10), 2.10)
+            firstPersonPosition.y = 1.52
+            updateCamera(animated: true)
         }
 
         private func applyResponsiveFramingIfNeeded() {
@@ -364,11 +420,16 @@ struct HomeSceneView: UIViewRepresentable {
             let isPortrait = sceneView.bounds.height > sceneView.bounds.width
             cameraYaw = isPortrait ? 0.50 : 0.62
             cameraPitch = isPortrait ? 0.44 : 0.52
-            cameraDistance = isPortrait ? 10.35 : 8.2
+            cameraDistance = isPortrait ? 9.35 : 8.2
             cameraTarget.position = isPortrait
-                ? SCNVector3(0, 0.56, -0.18)
+                ? SCNVector3(0, 0.78, -0.18)
                 : SCNVector3(0, 0.88, -0.08)
-            cameraNode.camera?.fieldOfView = isPortrait ? 50 : 52
+            firstPersonPosition = isPortrait
+                ? SCNVector3(-0.18, 1.52, 1.72)
+                : SCNVector3(-0.28, 1.55, 1.56)
+            firstPersonYaw = isPortrait ? 2.88 : 2.84
+            firstPersonPitch = isPortrait ? 0.035 : 0.02
+            cameraNode.camera?.fieldOfView = usesFirstPersonCamera ? (isPortrait ? 66 : 72) : (isPortrait ? 50 : 52)
             hasAppliedResponsiveFraming = true
             updateCamera(animated: false)
         }

@@ -569,6 +569,42 @@ final class BookModelTests: XCTestCase {
     }
 
     @MainActor
+    func testTokyoApartmentRoomBuildsCompleteImmersiveShell() throws {
+        let room = HomeSceneFactory().makeRoom(theme: .sunset)
+        let expectedNodes = [
+            "room-floor",
+            "room-back-wall",
+            "room-right-wall",
+            "room-front-wall",
+            "room-ceiling",
+            "room-entryway",
+            "room-balcony-window",
+            "room-outdoor-panorama",
+            "room-shoji-partition",
+            "room-tatami-corner",
+            "room-cherry-branch",
+            "room-washi-pendant"
+        ]
+        for name in expectedNodes {
+            XCTAssertNotNil(room.childNode(withName: name, recursively: true), "Missing Tokyo apartment detail: \(name)")
+        }
+
+        let panorama = try XCTUnwrap(room.childNode(withName: "room-outdoor-panorama", recursively: true))
+        XCTAssertTrue(panorama.geometry?.firstMaterial?.diffuse.contents is UIImage)
+        var geometryCount = 0
+        room.enumerateChildNodes { node, _ in
+            if node.geometry != nil { geometryCount += 1 }
+        }
+        XCTAssertGreaterThan(geometryCount, 80, "The apartment shell lost too many architectural details")
+
+        let panoramaURL = try XCTUnwrap(
+            Bundle.main.url(forResource: "WindowPanoramaTokyoSpring", withExtension: "png")
+        )
+        let byteCount = try panoramaURL.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+        XCTAssertGreaterThan(byteCount, 1_000_000, "Tokyo exterior panorama was not bundled at useful quality")
+    }
+
+    @MainActor
     func testHomeWorldPersistsLayoutArtworkAndKokoZone() throws {
         let fileManager = FileManager.default
         let root = fileManager.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
