@@ -84,7 +84,7 @@ final class HomeSceneFactory {
         let ambient = SCNLight()
         ambient.type = .ambient
         ambient.color = palette.ambient
-        ambient.intensity = theme == .moonlight ? 280 : 420
+        ambient.intensity = theme == .moonlight ? 170 : 235
         let ambientNode = SCNNode()
         ambientNode.light = ambient
         room.addChildNode(ambientNode)
@@ -92,7 +92,7 @@ final class HomeSceneFactory {
         let windowLight = SCNLight()
         windowLight.type = .directional
         windowLight.color = palette.sun
-        windowLight.intensity = theme == .moonlight ? 220 : 340
+        windowLight.intensity = theme == .moonlight ? 280 : 430
         windowLight.castsShadow = true
         windowLight.shadowMode = .deferred
         windowLight.shadowRadius = 7
@@ -109,7 +109,7 @@ final class HomeSceneFactory {
         let softFill = SCNLight()
         softFill.type = .omni
         softFill.color = palette.fill
-        softFill.intensity = theme == .moonlight ? 145 : 185
+        softFill.intensity = theme == .moonlight ? 105 : 145
         softFill.attenuationStartDistance = 1.0
         softFill.attenuationEndDistance = 6.5
         let softFillNode = SCNNode()
@@ -437,13 +437,10 @@ final class HomeSceneFactory {
         root.name = "room-balcony-window"
         root.position = SCNVector3(1.08, 1.74, -2.455)
 
-        let scenery = SCNPlane(width: 3.34, height: 2.06)
+        let scenery = SCNPlane(width: 3.34, height: 1.67)
         let sceneryMaterial = SCNMaterial()
         sceneryMaterial.lightingModel = .constant
-        let panorama = panoramaImage(theme: palette.theme)
-        sceneryMaterial.diffuse.contents = panorama
-        sceneryMaterial.emission.contents = panorama
-        sceneryMaterial.emission.intensity = 0.72
+        sceneryMaterial.diffuse.contents = panoramaContents(theme: palette.theme)
         sceneryMaterial.diffuse.wrapS = .clamp
         sceneryMaterial.diffuse.wrapT = .clamp
         scenery.materials = [sceneryMaterial]
@@ -453,8 +450,8 @@ final class HomeSceneFactory {
         sceneryNode.castsShadow = false
         root.addChildNode(sceneryNode)
 
-        let glass = SCNPlane(width: 3.28, height: 2.00)
-        let glassMaterial = materialWith(color: palette.glass, roughness: 0.08, transparency: 0.055)
+        let glass = SCNPlane(width: 3.28, height: 1.62)
+        let glassMaterial = materialWith(color: palette.glass, roughness: 0.08, transparency: 0.025)
         glassMaterial.blendMode = .alpha
         glassMaterial.writesToDepthBuffer = false
         glassMaterial.metalness.contents = 0.08
@@ -467,18 +464,18 @@ final class HomeSceneFactory {
 
         let frameMaterial = materialWith(color: palette.windowFrame, roughness: 0.50)
         for x: Float in [-1.70, 0, 1.70] {
-            let bar = box(width: x == 0 ? 0.055 : 0.085, height: 2.20, length: 0.105, material: frameMaterial, corner: 0.018)
+            let bar = box(width: x == 0 ? 0.055 : 0.085, height: 1.84, length: 0.105, material: frameMaterial, corner: 0.018)
             bar.position = SCNVector3(x, 0, 0.11)
             root.addChildNode(bar)
         }
-        for y: Float in [-1.08, 0, 1.08] {
+        for y: Float in [-0.90, 0, 0.90] {
             let bar = box(width: 3.48, height: y == 0 ? 0.05 : 0.085, length: 0.105, material: frameMaterial, corner: 0.018)
             bar.position = SCNVector3(0, y, 0.11)
             root.addChildNode(bar)
         }
 
         let sill = box(width: 3.56, height: 0.105, length: 0.34, material: frameMaterial, corner: 0.028)
-        sill.position = SCNVector3(0, -1.12, 0.18)
+        sill.position = SCNVector3(0, -0.94, 0.18)
         root.addChildNode(sill)
 
         let balconyMaterial = materialWith(color: palette.metal, roughness: 0.58)
@@ -491,7 +488,7 @@ final class HomeSceneFactory {
             root.addChildNode(rail)
         }
 
-        let sheer = SCNPlane(width: 0.42, height: 2.10)
+        let sheer = SCNPlane(width: 0.42, height: 1.76)
         let sheerMaterial = materialWith(color: UIColor.white, roughness: 0.94, transparency: 0.30)
         sheerMaterial.blendMode = .alpha
         sheerMaterial.writesToDepthBuffer = false
@@ -1140,7 +1137,7 @@ final class HomeSceneFactory {
     private func panoramaImage(theme: HomeRoomTheme) -> UIImage {
         let cacheKey = "panorama-\(theme.rawValue)"
         if let cached = generatedTextureCache[cacheKey] { return cached }
-        let source = UIImage(named: "WindowPanoramaTokyoSpring")
+        let source = panoramaResourceURL().flatMap { UIImage(contentsOfFile: $0.path) }
             ?? backgroundImage(theme: theme, size: CGSize(width: 2_048, height: 1_024))
         let base = croppedImage(source, toAspectRatio: 3.34 / 2.06)
         guard theme != .sunset else {
@@ -1179,6 +1176,17 @@ final class HomeSceneFactory {
         }
         generatedTextureCache[cacheKey] = rendered
         return rendered
+    }
+
+    private func panoramaContents(theme: HomeRoomTheme) -> Any {
+        if theme == .sunset, let resourceURL = panoramaResourceURL() {
+            return resourceURL as NSURL
+        }
+        return panoramaImage(theme: theme)
+    }
+
+    private func panoramaResourceURL() -> URL? {
+        Bundle.main.url(forResource: "WindowPanoramaTokyoSpring", withExtension: "png")
     }
 
     private func croppedImage(_ image: UIImage, toAspectRatio targetAspectRatio: CGFloat) -> UIImage {

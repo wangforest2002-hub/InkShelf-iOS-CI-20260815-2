@@ -590,7 +590,8 @@ final class BookModelTests: XCTestCase {
         }
 
         let panorama = try XCTUnwrap(room.childNode(withName: "room-outdoor-panorama", recursively: true))
-        XCTAssertTrue(panorama.geometry?.firstMaterial?.diffuse.contents is UIImage)
+        let panoramaContents = panorama.geometry?.firstMaterial?.diffuse.contents
+        XCTAssertTrue(panoramaContents is NSURL || panoramaContents is UIImage)
         var geometryCount = 0
         room.enumerateChildNodes { node, _ in
             if node.geometry != nil { geometryCount += 1 }
