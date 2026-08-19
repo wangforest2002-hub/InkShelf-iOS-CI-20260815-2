@@ -83,7 +83,7 @@ struct HomeSceneView: UIViewRepresentable {
             camera.zFar = 80
             camera.wantsHDR = true
             camera.wantsExposureAdaptation = true
-            camera.exposureOffset = -0.35
+            camera.exposureOffset = -0.58
             cameraNode.camera = camera
             let constraint = SCNLookAtConstraint(target: cameraTarget)
             constraint.isGimbalLockEnabled = true

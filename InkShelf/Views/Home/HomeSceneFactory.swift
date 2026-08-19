@@ -83,7 +83,7 @@ final class HomeSceneFactory {
         let ambient = SCNLight()
         ambient.type = .ambient
         ambient.color = palette.ambient
-        ambient.intensity = theme == .moonlight ? 150 : 225
+        ambient.intensity = theme == .moonlight ? 120 : 185
         let ambientNode = SCNNode()
         ambientNode.light = ambient
         room.addChildNode(ambientNode)
@@ -91,7 +91,7 @@ final class HomeSceneFactory {
         let windowLight = SCNLight()
         windowLight.type = .directional
         windowLight.color = palette.sun
-        windowLight.intensity = theme == .moonlight ? 235 : 390
+        windowLight.intensity = theme == .moonlight ? 190 : 320
         windowLight.castsShadow = true
         windowLight.shadowMode = .deferred
         windowLight.shadowRadius = 7
@@ -108,7 +108,7 @@ final class HomeSceneFactory {
         let softFill = SCNLight()
         softFill.type = .omni
         softFill.color = palette.fill
-        softFill.intensity = theme == .moonlight ? 82 : 128
+        softFill.intensity = theme == .moonlight ? 66 : 102
         softFill.attenuationStartDistance = 1.0
         softFill.attenuationEndDistance = 6.5
         let softFillNode = SCNNode()
