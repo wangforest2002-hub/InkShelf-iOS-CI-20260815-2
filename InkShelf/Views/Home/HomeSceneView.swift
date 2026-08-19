@@ -81,9 +81,12 @@ struct HomeSceneView: UIViewRepresentable {
             camera.fieldOfView = 52
             camera.zNear = 0.05
             camera.zFar = 80
-            camera.wantsHDR = true
-            camera.wantsExposureAdaptation = true
-            camera.exposureOffset = -0.12
+            // The window panorama is authored in display-ready SDR. Automatic HDR
+            // exposure was lifting it several stops and clipping the Tokyo view to
+            // a flat cream rectangle on real iOS renderers.
+            camera.wantsHDR = false
+            camera.wantsExposureAdaptation = false
+            camera.exposureOffset = 0
             cameraNode.camera = camera
             let constraint = SCNLookAtConstraint(target: cameraTarget)
             constraint.isGimbalLockEnabled = true

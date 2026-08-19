@@ -440,9 +440,13 @@ final class HomeSceneFactory {
         let scenery = SCNBox(width: 3.34, height: 1.67, length: 0.018, chamferRadius: 0)
         let sceneryMaterial = SCNMaterial()
         sceneryMaterial.lightingModel = .constant
-        sceneryMaterial.diffuse.contents = panoramaContents(theme: palette.theme)
+        let panorama = panoramaContents(theme: palette.theme)
+        sceneryMaterial.diffuse.contents = panorama
+        sceneryMaterial.diffuse.intensity = palette.theme == .moonlight ? 0.62 : 0.78
         sceneryMaterial.diffuse.wrapS = .clamp
         sceneryMaterial.diffuse.wrapT = .clamp
+        sceneryMaterial.emission.contents = panorama
+        sceneryMaterial.emission.intensity = palette.theme == .moonlight ? 0.08 : 0.04
         sceneryMaterial.isDoubleSided = true
         sceneryMaterial.writesToDepthBuffer = true
         scenery.materials = [sceneryMaterial]
