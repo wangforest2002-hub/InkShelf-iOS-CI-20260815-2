@@ -443,6 +443,8 @@ final class HomeSceneFactory {
         sceneryMaterial.diffuse.contents = panoramaContents(theme: palette.theme)
         sceneryMaterial.diffuse.wrapS = .clamp
         sceneryMaterial.diffuse.wrapT = .clamp
+        sceneryMaterial.isDoubleSided = true
+        sceneryMaterial.writesToDepthBuffer = true
         scenery.materials = [sceneryMaterial]
         let sceneryNode = SCNNode(geometry: scenery)
         sceneryNode.name = "room-outdoor-panorama"
