@@ -42,7 +42,7 @@ struct BookCard: View {
                 }
 
                 if book.belongsToAfterDark {
-                    Label(book.mood?.shortTitle ?? "夜读", systemImage: book.mood?.systemImage ?? "moon.stars.fill")
+                    Label(book.mood?.shortTitle ?? "成年向", systemImage: book.mood?.systemImage ?? "18.circle.fill")
                         .font(.caption2.weight(.bold))
                         .foregroundStyle(Color(red: 0.28, green: 0.07, blue: 0.14))
                         .padding(.horizontal, 8)
@@ -50,7 +50,7 @@ struct BookCard: View {
                         .background(AppTheme.peach.opacity(0.94), in: Capsule())
                         .padding(7)
                         .frame(maxWidth: .infinity, alignment: .topLeading)
-                        .accessibilityLabel("已加入成年人夜读")
+                        .accessibilityLabel("已加入成年向档案")
                 }
 
                 Text(book.kind == .ebook ? "\(book.pageCount)章" : "\(book.pageCount)P")

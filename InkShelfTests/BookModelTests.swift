@@ -375,6 +375,8 @@ final class BookModelTests: XCTestCase {
         XCTAssertEqual(imported.first(where: { $0.kind == .archive })?.pageCount, 2)
         XCTAssertEqual(imported.first(where: { $0.kind == .pdf })?.pageCount, 1)
         XCTAssertEqual(imported.first(where: { $0.kind == .imageCollection })?.pageCount, 1)
+        XCTAssertEqual(store.imageCollectionBooks.count, 1)
+        XCTAssertTrue(store.favoritePageItems.isEmpty, "Imported images must not be mixed with pages favorited in the reader")
         let archiveBook = try XCTUnwrap(imported.first(where: { $0.kind == .archive }))
         let importedSource = try XCTUnwrap(store.sourceURL(for: archiveBook))
         XCTAssertEqual(try Data(contentsOf: importedSource), originalArchiveBytes)

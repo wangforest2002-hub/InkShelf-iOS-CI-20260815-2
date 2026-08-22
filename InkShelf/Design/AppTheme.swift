@@ -195,3 +195,33 @@ struct PressableCardStyle: ButtonStyle {
             .animation(reduceMotion ? nil : .snappy(duration: 0.22), value: configuration.isPressed)
     }
 }
+
+/// A single, predictable day/night switch shared by the main browsing screens.
+/// "Follow System" remains available in Settings, while tapping this button
+/// always chooses an explicit mode so the visual response is immediate.
+struct AppearanceModeButton: View {
+    @AppStorage("appearance") private var appearance = AppAppearance.light.rawValue
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var isNight: Bool { colorScheme == .dark }
+
+    var body: some View {
+        Button(action: toggle) {
+            Label(
+                isNight ? "切换到日间模式" : "切换到夜间模式",
+                systemImage: isNight ? "sun.max.fill" : "moon.stars.fill"
+            )
+            .symbolEffect(.bounce, value: appearance)
+        }
+        .accessibilityIdentifier("appearance-mode-toggle")
+        .accessibilityValue(isNight ? "夜间模式已开启" : "日间模式已开启")
+        .sensoryFeedback(.selection, trigger: appearance)
+    }
+
+    private func toggle() {
+        withAnimation(reduceMotion ? nil : .smooth(duration: 0.38)) {
+            appearance = isNight ? AppAppearance.light.rawValue : AppAppearance.dark.rawValue
+        }
+    }
+}

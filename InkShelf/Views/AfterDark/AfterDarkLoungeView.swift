@@ -703,10 +703,10 @@ struct BookProfileEditorView: View {
         NavigationStack {
             Form {
                 Section {
-                    Toggle("加入成年人夜读", isOn: $isAfterDark)
+                    Toggle("加入成年向特色", isOn: $isAfterDark)
                         .tint(AppTheme.coral)
                     Label {
-                        Text("夜读分类只用于明确为成年角色的作品，不收录或性化未成年、年龄不明角色。")
+                        Text("成年向特色只用于明确为成年角色的作品，不收录或性化未成年、年龄不明角色。")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     } icon: {

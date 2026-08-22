@@ -35,8 +35,8 @@ struct SettingsView: View {
                     .accessibilityElement(children: .combine)
                 }
 
-                Section("外观") {
-                    Picker("应用外观", selection: $appearance) {
+                Section("模式与外观") {
+                    Picker("显示模式", selection: $appearance) {
                         ForEach(AppAppearance.allCases) { item in
                             Text(item.title).tag(item.rawValue)
                         }
@@ -45,6 +45,15 @@ struct SettingsView: View {
                     LabeledContent("界面材质") {
                         Text(materialLabel)
                             .foregroundStyle(.secondary)
+                    }
+
+                    Label {
+                        Text("夜间模式只切换全局色彩与阅读氛围，不再建立另一套书架；全部书籍、搜索、分组和最近阅读都能照常使用，成年向档案也会保留。")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    } icon: {
+                        Image(systemName: "moon.stars.fill")
+                            .foregroundStyle(AppTheme.lilac)
                     }
                 }
 
@@ -183,7 +192,7 @@ struct SettingsView: View {
                 }
 
                 Section("关于") {
-                    LabeledContent("二次元小家", value: "2.2.2 · 足迹重启版")
+                    LabeledContent("二次元小家", value: "2.3.0 · 画廊夜灯版")
                     Button("重新查看欢迎页") {
                         hasSeenWelcome = false
                     }

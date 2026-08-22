@@ -6,6 +6,7 @@ struct LibraryView: View {
     @Environment(LibraryStore.self) private var library
     @Environment(AchievementStore.self) private var achievements
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.colorScheme) private var colorScheme
     let scope: LibraryScope
 
     @AppStorage("library.sortOrder") private var sortOrderRaw = LibrarySortOrder.lastOpened.rawValue
@@ -115,6 +116,18 @@ struct LibraryView: View {
                                         favoriteCount: library.books.filter(\.isFavorite).count
                                     )
 
+                                    if colorScheme == .dark {
+                                        NightModeShelfCard(
+                                            allBookCount: library.books.count,
+                                            adultBookCount: library.afterDarkBooks.count,
+                                            favoritePageCount: library.favoritePageItems.count,
+                                            featuredBook: library.afterDarkBooks.first
+                                                ?? library.continueReadingBook
+                                                ?? library.books.first,
+                                            openFeatured: open
+                                        )
+                                    }
+
                                     if let continueBook = library.continueReadingBook {
                                         Button { open(continueBook) } label: {
                                             ContinueReadingCard(
@@ -221,6 +234,10 @@ struct LibraryView: View {
             .navigationTitle(navigationTitle)
             .searchable(text: $query, prompt: "搜索标题、标签、文件名或笔记")
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    AppearanceModeButton()
+                }
+
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
                         Picker("排序方式", selection: $sortOrderRaw) {
@@ -315,7 +332,7 @@ struct LibraryView: View {
         .sheet(isPresented: $showSocialPostImporter) {
             SocialPostImportView(
                 shelfGroupID: importDestinationGroupID,
-                favoriteOnImport: true
+                favoriteOnImport: false
             )
         }
         .onAppear {
@@ -464,8 +481,8 @@ struct LibraryView: View {
             library.toggleAfterDark(book.id)
         } label: {
             Label(
-                book.belongsToAfterDark ? "移出成年人夜读" : "加入成年人夜读",
-                systemImage: book.belongsToAfterDark ? "moon.stars" : "moon.stars.fill"
+                book.belongsToAfterDark ? "移出成年向档案" : "加入成年向档案",
+                systemImage: book.belongsToAfterDark ? "18.circle" : "18.circle.fill"
             )
         }
 
@@ -744,6 +761,114 @@ private struct ContinueReadingCard: View {
         .shadow(color: AppTheme.wood.opacity(0.09), radius: 16, y: 8)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("继续阅读 \(book.title)，\(book.progressLabel)")
+    }
+}
+
+private struct NightModeShelfCard: View {
+    let allBookCount: Int
+    let adultBookCount: Int
+    let favoritePageCount: Int
+    let featuredBook: Book?
+    let openFeatured: (Book) -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var glowing = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 13) {
+                ZStack {
+                    Circle()
+                        .fill(AppTheme.peach.opacity(glowing ? 0.22 : 0.12))
+                        .shadow(color: AppTheme.honey.opacity(glowing ? 0.28 : 0.10), radius: glowing ? 16 : 6)
+                    Image(systemName: "moon.stars.fill")
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(AppTheme.peach)
+                }
+                .frame(width: 46, height: 46)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("夜间模式已点亮")
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                    Text("全部 \(allBookCount) 本读物照常可见，成年向标签、心动评分和私人笔记也都保留。")
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.64))
+                        .lineSpacing(2)
+                }
+                Spacer(minLength: 0)
+            }
+
+            HStack(spacing: 9) {
+                NightModeStatChip(symbol: "books.vertical.fill", value: allBookCount, title: "全部书籍")
+                NightModeStatChip(symbol: "18.circle.fill", value: adultBookCount, title: "成年档案")
+                NightModeStatChip(symbol: "heart.fill", value: favoritePageCount, title: "心动单页")
+            }
+
+            if let featuredBook {
+                Button {
+                    openFeatured(featuredBook)
+                } label: {
+                    HStack(spacing: 9) {
+                        Image(systemName: featuredBook.belongsToAfterDark ? "flame.fill" : "book.fill")
+                            .foregroundStyle(AppTheme.peach)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(featuredBook.belongsToAfterDark ? "今晚继续心动" : "今晚继续阅读")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(AppTheme.peach)
+                            Text(featuredBook.title)
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.white)
+                                .lineLimit(1)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.caption.bold())
+                            .foregroundStyle(.white.opacity(0.46))
+                    }
+                    .padding(12)
+                    .background(.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                }
+                .buttonStyle(PressableCardStyle())
+            }
+        }
+        .padding(17)
+        .background(
+            LinearGradient(
+                colors: [AppTheme.midnight.opacity(0.94), Color(red: 0.20, green: 0.10, blue: 0.22).opacity(0.92)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            ),
+            in: RoundedRectangle(cornerRadius: 26, style: .continuous)
+        )
+        .overlay { RoundedRectangle(cornerRadius: 26).stroke(.white.opacity(0.12), lineWidth: 1) }
+        .shadow(color: AppTheme.lilac.opacity(0.13), radius: 20, y: 10)
+        .onAppear {
+            guard !reduceMotion else { return }
+            withAnimation(.easeInOut(duration: 2.6).repeatForever(autoreverses: true)) {
+                glowing = true
+            }
+        }
+        .accessibilityIdentifier("night-mode-library-card")
+    }
+}
+
+private struct NightModeStatChip: View {
+    let symbol: String
+    let value: Int
+    let title: String
+
+    var body: some View {
+        VStack(spacing: 4) {
+            Label("\(value)", systemImage: symbol)
+                .font(.caption.weight(.bold).monospacedDigit())
+                .foregroundStyle(AppTheme.peach)
+            Text(title)
+                .font(.caption2)
+                .foregroundStyle(.white.opacity(0.52))
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 9)
+        .background(.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 }
 

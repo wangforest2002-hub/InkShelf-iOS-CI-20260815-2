@@ -92,16 +92,35 @@ final class ReaderNavigationUITests: XCTestCase {
         back.tap()
         XCTAssertTrue(book.waitForExistence(timeout: 4), "Returning from ReaderView did not restore the shelf")
         XCTAssertTrue(app.tabBars.buttons["最近"].exists)
-        XCTAssertTrue(app.tabBars.buttons["珍藏"].exists)
-        XCTAssertTrue(app.tabBars.buttons["夜读"].exists)
+        XCTAssertTrue(app.tabBars.buttons["画廊"].exists)
+        XCTAssertFalse(app.tabBars.buttons["珍藏"].exists)
+        XCTAssertFalse(app.tabBars.buttons["夜读"].exists)
         XCTAssertFalse(app.tabBars.buttons["云阁楼"].exists)
 
-        app.tabBars.buttons["夜读"].tap()
+        let appearanceToggle = app.buttons["appearance-mode-toggle"]
         XCTAssertTrue(
-            app.descendants(matching: .any)["after-dark-hero"].waitForExistence(timeout: 3),
-            "The adults-only night-reading lounge did not open"
+            appearanceToggle.waitForExistence(timeout: 3),
+            "The global day/night mode switch is missing from the shelf"
         )
-        XCTAssertTrue(app.descendants(matching: .any)["after-dark-draw"].exists)
+        if String(describing: appearanceToggle.value).contains("日间模式已开启") {
+            appearanceToggle.tap()
+        }
+        XCTAssertTrue(
+            app.descendants(matching: .any)["night-mode-library-card"].waitForExistence(timeout: 3),
+            "Night mode did not keep the full shelf and its adults-only profile summary visible"
+        )
+
+        app.tabBars.buttons["画廊"].tap()
+        XCTAssertTrue(app.navigationBars["我的画廊"].waitForExistence(timeout: 3))
+        XCTAssertTrue(
+            app.descendants(matching: .any)["gallery-section-picker"].exists,
+            "Imported images, favorite pages, and favorite books are not visibly separated"
+        )
+        XCTAssertTrue(app.buttons["gallery-import"].exists)
+        XCTAssertTrue(
+            app.descendants(matching: .any)["book-a11ce000-0000-4000-8000-000000000001"].exists,
+            "An independently imported image collection did not appear in My Images"
+        )
 
         app.tabBars.buttons["设置"].tap()
         let achievementSettings = app.buttons["settings-achievements"]

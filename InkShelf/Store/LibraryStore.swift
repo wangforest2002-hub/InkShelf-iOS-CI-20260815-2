@@ -113,6 +113,23 @@ final class LibraryStore {
         }
     }
 
+    /// Independently imported still images and image folders. These are kept
+    /// separate from pages favorited while reading, even when the source book
+    /// itself is also starred.
+    var imageCollectionBooks: [Book] {
+        books
+            .filter { $0.kind == .imageCollection }
+            .sorted { $0.importedAt > $1.importedAt }
+    }
+
+    var favoriteBooks: [Book] {
+        books
+            .filter(\.isFavorite)
+            .sorted {
+                ($0.lastOpenedAt ?? $0.importedAt) > ($1.lastOpenedAt ?? $1.importedAt)
+            }
+    }
+
     var afterDarkBooks: [Book] {
         books
             .filter(\.belongsToAfterDark)
@@ -361,7 +378,7 @@ final class LibraryStore {
         guard let index = books.firstIndex(where: { $0.id == id }) else { return }
         books[index].isAfterDark = !books[index].belongsToAfterDark
         saveImmediately()
-        importNotice = books[index].belongsToAfterDark ? "已加入成年人夜读" : "已移出成年人夜读"
+        importNotice = books[index].belongsToAfterDark ? "已加入成年向档案" : "已移出成年向档案"
         Task { [weak self] in
             try? await Task.sleep(for: .seconds(2.2))
             self?.importNotice = nil

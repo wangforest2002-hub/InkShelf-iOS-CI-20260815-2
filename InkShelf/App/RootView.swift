@@ -54,7 +54,7 @@ struct RootView: View {
             .sheet(item: socialImportBinding) { request in
                 SocialPostImportView(
                     shelfGroupID: nil,
-                    favoriteOnImport: true,
+                    favoriteOnImport: false,
                     initialURL: request.postURL
                 )
             }
@@ -97,9 +97,7 @@ private enum LaunchDestination: Identifiable, Equatable {
 }
 
 private struct MainTabView: View {
-    @State private var selectedTab: MainTab = ProcessInfo.processInfo.arguments.contains("INKSHELF_UI_TEST_NIGHT")
-        ? .afterDark
-        : .library
+    @State private var selectedTab: MainTab = .library
 
     var body: some View {
         Group {
@@ -123,12 +121,8 @@ private struct MainTabView: View {
                 LibraryView(scope: .recent)
             }
 
-            Tab("珍藏", systemImage: "star.fill", value: .favorites) {
-                LibraryView(scope: .favorites)
-            }
-
-            Tab("夜读", systemImage: "moon.stars.fill", value: .afterDark) {
-                AfterDarkLoungeView()
+            Tab("画廊", systemImage: "photo.stack.fill", value: .gallery) {
+                ImageGalleryHubView()
             }
 
             Tab("设置", systemImage: "gearshape.fill", value: .settings) {
@@ -141,7 +135,6 @@ private struct MainTabView: View {
 private enum MainTab: Hashable {
     case library
     case recent
-    case favorites
-    case afterDark
+    case gallery
     case settings
 }
