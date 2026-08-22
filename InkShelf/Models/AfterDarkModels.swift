@@ -71,6 +71,10 @@ struct NightReadingPrompt: Identifiable, Hashable, Sendable {
     static let collection: [NightReadingPrompt] = [
         .init(id: "first-look", title: "只凭第一眼", subtitle: "抽一本书，先看三页再决定要不要留下", systemImage: "eyes"),
         .init(id: "favorite-line", title: "寻找心动线条", subtitle: "收藏一页最喜欢的构图或姿态", systemImage: "heart.circle.fill"),
+        .init(id: "sister-night", title: "姐姐系夜晚", subtitle: "挑一本成熟、自信、气场很足的作品", systemImage: "crown.fill"),
+        .init(id: "silk-light", title: "丝袜与光影", subtitle: "留意衣料质感、腿部线条和光影层次", systemImage: "sparkles"),
+        .init(id: "charm-meter", title: "角色魅力雷达", subtitle: "在最有张力的一页给心动与涩气打分", systemImage: "flame.fill"),
+        .init(id: "close-distance", title: "距离感挑战", subtitle: "找一页最暧昧、最让人想靠近的画面", systemImage: "arrow.left.and.right.circle.fill"),
         .init(id: "aftertaste", title: "读完留一句", subtitle: "在作品档案里写下今晚的余韵", systemImage: "quote.bubble.fill"),
         .init(id: "no-rush", title: "慢速夜读", subtitle: "关掉弹幕十分钟，只看画面和细节", systemImage: "moon.zzz.fill")
     ]

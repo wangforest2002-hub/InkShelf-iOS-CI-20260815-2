@@ -8,6 +8,7 @@ struct AfterDarkLoungeView: View {
     @State private var drawnBook: Book?
     @State private var openedBook: Book?
     @State private var editingBook: Book?
+    @State private var aiWritingBook: Book?
     @State private var drawTrigger = 0
     @State private var ritualOffset = 0
 
@@ -41,7 +42,8 @@ struct AfterDarkLoungeView: View {
                             invitation: selectedMood?.invitation ?? "把选择交给今晚的直觉",
                             draw: drawBook,
                             open: { if let drawnBook { open(drawnBook) } },
-                            edit: { editingBook = drawnBook }
+                            edit: { editingBook = drawnBook },
+                            write: { aiWritingBook = drawnBook }
                         )
 
                         NightRitualCard(prompt: currentPrompt) {
@@ -100,6 +102,11 @@ struct AfterDarkLoungeView: View {
                 drawnBook = library.books.first(where: { $0.id == book.id })
             }
         }
+        .sheet(item: $aiWritingBook) { book in
+            NavigationStack {
+                AIWritingStudioView(book: book, initialPurpose: .afterDark)
+            }
+        }
         .alert(item: alertBinding) { alert in
             Alert(title: Text(alert.title), message: Text(alert.message), dismissButton: .default(Text("好")))
         }
@@ -151,6 +158,9 @@ struct AfterDarkLoungeView: View {
                         .contextMenu {
                             Button("编辑心动档案", systemImage: "heart.text.square") {
                                 editingBook = book
+                            }
+                            Button("AI 写夜读私语", systemImage: "text.badge.star") {
+                                aiWritingBook = book
                             }
                             Button("移出夜读", systemImage: "moon.stars") {
                                 library.toggleAfterDark(book.id)
@@ -354,6 +364,7 @@ private struct TonightDrawCard: View {
     let draw: () -> Void
     let open: () -> Void
     let edit: () -> Void
+    let write: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -390,6 +401,11 @@ private struct TonightDrawCard: View {
                                 .buttonStyle(NightPrimaryButtonStyle())
                             Button(action: edit) {
                                 Image(systemName: "heart.text.square")
+                                    .frame(width: 34, height: 34)
+                            }
+                            .buttonStyle(NightRoundButtonStyle())
+                            Button(action: write) {
+                                Image(systemName: "text.badge.star")
                                     .frame(width: 34, height: 34)
                             }
                             .buttonStyle(NightRoundButtonStyle())

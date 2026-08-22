@@ -2,10 +2,11 @@ import Foundation
 
 enum LocalCompanionFallback {
     static func pageReaction(insight: AIPageInsight, settings: DeepSeekPageSettings) -> AIPageReaction {
-        var messages: [AIDanmakuMessage] = [
+        var messages = personaOpening(settings.persona)
+        messages.append(contentsOf: [
             AIDanmakuMessage(text: "我还在这里陪你看", tone: .touched),
             AIDanmakuMessage(text: "这页值得慢慢停一下", tone: .normal)
-        ]
+        ])
         if insight.faceCount > 0 {
             messages.append(AIDanmakuMessage(text: "人物的表情很抓人", tone: .curious))
         }
@@ -25,7 +26,11 @@ enum LocalCompanionFallback {
         ])
 
         let summary: String
-        if !insight.recognizedText.isEmpty {
+        if settings.persona == .teasing {
+            summary = "云端暂时没有回应，姐姐先陪你看看这页把心动藏在了哪里。"
+        } else if settings.persona == .bold {
+            summary = "云端暂时没有回应，但这一页的视觉张力已经足够让人多停几秒。"
+        } else if !insight.recognizedText.isEmpty {
             summary = "云端暂时没有回应，我先陪你留意这一页的文字与情绪。"
         } else if insight.faceCount > 0 {
             summary = "云端暂时没有回应，我先陪你看看人物表情和画面氛围。"
@@ -35,11 +40,38 @@ enum LocalCompanionFallback {
         return AIPageReaction(
             page: insight.page,
             summary: summary,
-            mood: "本地轻陪伴",
+            mood: localMood(settings.persona),
             danmaku: Array(messages.prefix(settings.density.messageCount)),
             talkingPoints: ["稍后重新细读这一页", "你最喜欢这一页的哪里？"],
             source: .localFallback
         )
+    }
+
+    private static func personaOpening(_ persona: AICompanionPersona) -> [AIDanmakuMessage] {
+        switch persona {
+        case .teasing:
+            [
+                AIDanmakuMessage(text: "又被这一页勾住了？", tone: .amused),
+                AIDanmakuMessage(text: "别躲，心动都写脸上了", tone: .excited),
+                AIDanmakuMessage(text: "这构图很会拿捏视线", tone: .curious)
+            ]
+        case .bold:
+            [
+                AIDanmakuMessage(text: "这页的张力有点犯规", tone: .excited),
+                AIDanmakuMessage(text: "今晚的涩气值上来了", tone: .amused),
+                AIDanmakuMessage(text: "大胆构图就是很抓眼", tone: .excited)
+            ]
+        default:
+            []
+        }
+    }
+
+    private static func localMood(_ persona: AICompanionPersona) -> String {
+        switch persona {
+        case .teasing: "本地暧昧陪伴"
+        case .bold: "本地大胆陪伴"
+        default: "本地轻陪伴"
+        }
     }
 
     static func endDiscussion(bookTitle: String, pageCount: Int) -> AIEndDiscussion {

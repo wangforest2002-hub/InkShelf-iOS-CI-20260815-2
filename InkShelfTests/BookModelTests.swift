@@ -117,6 +117,58 @@ final class BookModelTests: XCTestCase {
         XCTAssertTrue(book.normalizedTags.isEmpty)
     }
 
+    @MainActor
+    func testAfterDarkProfilePersistsAcrossLibraryReload() throws {
+        let fileManager = FileManager.default
+        let root = fileManager.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let suiteName = "InkShelfAfterDarkTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer {
+            try? fileManager.removeItem(at: root)
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let id = UUID()
+        let library = root.appendingPathComponent("InkShelf Library", isDirectory: true)
+        let pages = library.appendingPathComponent(id.uuidString.lowercased()).appendingPathComponent("pages")
+        try fileManager.createDirectory(at: pages, withIntermediateDirectories: true)
+        try testPNG(color: .systemPink).write(to: pages.appendingPathComponent("001.png"))
+        let book = Book(
+            id: id,
+            title: "夜读持久化",
+            kind: .imageCollection,
+            sourceFileName: "夜读持久化",
+            contentRelativePath: "\(id.uuidString.lowercased())/pages",
+            pageCount: 1,
+            fileSize: 128
+        )
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        try encoder.encode([book]).write(to: library.appendingPathComponent("library.json"))
+
+        var store: LibraryStore? = LibraryStore(fileManager: fileManager, defaults: defaults, documentsURL: root)
+        store?.updateBookProfile(
+            bookID: id,
+            isAfterDark: true,
+            mood: .glamorous,
+            tags: ["御姐", "御姐", "  魅惑  "],
+            personalNote: "成熟角色的气场很漂亮",
+            heartRating: 5,
+            spiceRating: 4
+        )
+        XCTAssertEqual(store?.afterDarkBooks.map(\.id), [id])
+        XCTAssertEqual(store?.books.first?.normalizedTags, ["御姐", "魅惑"])
+        store = nil
+
+        let restored = LibraryStore(fileManager: fileManager, defaults: defaults, documentsURL: root)
+        let profile = try XCTUnwrap(restored.books.first)
+        XCTAssertTrue(profile.belongsToAfterDark)
+        XCTAssertEqual(profile.mood, .glamorous)
+        XCTAssertEqual(profile.normalizedHeartRating, 5)
+        XCTAssertEqual(profile.normalizedSpiceRating, 4)
+        XCTAssertEqual(profile.personalNote, "成熟角色的气场很漂亮")
+    }
+
     func testICloudBookIdentityIsStableAcrossScans() {
         let folderID = UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE")!
         let first = ICloudBook.stableID(folderID: folderID, relativePath: "anmi/画集 01.cbz")
@@ -233,6 +285,29 @@ final class BookModelTests: XCTestCase {
         XCTAssertEqual(reaction.page, 4)
         XCTAssertEqual(reaction.danmaku.count, AIDanmakuDensity.balanced.messageCount)
         XCTAssertFalse(reaction.summary.isEmpty)
+    }
+
+    func testLocalCompanionFallbackKeepsAfterDarkPersonaWhenCloudIsUnavailable() {
+        let insight = AIPageInsight(
+            page: 1,
+            pageCount: 12,
+            recognizedText: "",
+            visualLabels: ["illustration"],
+            faceCount: 1,
+            sourceKind: "画集"
+        )
+        let settings = DeepSeekPageSettings(
+            model: .pro,
+            persona: .bold,
+            density: .balanced,
+            strictSpoilers: true,
+            includeRecognizedText: true,
+            allowsCellularAccess: true
+        )
+        let reaction = LocalCompanionFallback.pageReaction(insight: insight, settings: settings)
+        XCTAssertTrue(reaction.isLocalFallback)
+        XCTAssertEqual(reaction.mood, "本地大胆陪伴")
+        XCTAssertTrue(reaction.danmaku.contains { $0.text.contains("张力") || $0.text.contains("涩气") })
     }
 
     func testCoordinatedCopyPreservesOriginalBytes() async throws {
@@ -545,6 +620,18 @@ final class BookModelTests: XCTestCase {
             XCTAssertFalse(purpose.title.isEmpty)
             XCTAssertFalse(purpose.promptDescription.isEmpty)
             XCTAssertFalse(purpose.systemImage.isEmpty)
+        }
+    }
+
+    func testEveryAICompanionPersonaHasUsableAndSafeCopy() {
+        XCTAssertEqual(AICompanionPersona.allCases.count, 6)
+        for persona in AICompanionPersona.allCases {
+            XCTAssertFalse(persona.title.isEmpty)
+            XCTAssertFalse(persona.promptDescription.isEmpty)
+            XCTAssertFalse(persona.systemImage.isEmpty)
+            if persona.isAfterDark {
+                XCTAssertTrue(persona.promptDescription.contains("成年"))
+            }
         }
     }
 

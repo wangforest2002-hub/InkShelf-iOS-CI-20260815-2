@@ -7,13 +7,14 @@ struct AIWritingStudioView: View {
     let book: Book?
 
     @State private var subject: String
-    @State private var purpose: AIWritingPurpose = .recommendation
+    @State private var purpose: AIWritingPurpose
     @State private var notes = ""
     @State private var copied = false
 
-    init(book: Book?) {
+    init(book: Book?, initialPurpose: AIWritingPurpose = .recommendation) {
         self.book = book
         _subject = State(initialValue: book?.title ?? "")
+        _purpose = State(initialValue: initialPurpose)
     }
 
     var body: some View {

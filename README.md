@@ -38,6 +38,18 @@
 - DeepSeek 密钥只保存在 iOS Keychain；App 不把 PDF 或整页原图直接上传给 AI。
 - AI 是可选功能，关闭后阅读器完全不发起 DeepSeek 请求。
 
+## 成年人夜读
+
+2.1.0 新增独立的“夜读”空间，面向已经成年的个人用户，并直接使用用户自行导入的漫画与画集：
+
+- 按甜欲、暧昧、姐姐气场、亲密、大胆与作画等氛围翻牌选书。
+- 给每本作品保存心动指数、涩气指数、标签与私人读后感，形成只属于自己的偏好画像。
+- 夜读小玩法、动态光效、横向收藏陈列和随机抽取让书架不再只是静态文件列表。
+- DeepSeek 增加“坏心眼姐姐”“大胆同好”陪读性格和“夜读私语”写作类型。
+- 夜读分类只用于明确为成年角色的作品，不收录或性化未成年及年龄不明角色。
+
+当前测试阶段不加入隐私锁或封面遮罩，所有夜读作品仍按普通书架方式直接显示和打开。
+
 ## iCloud Drive 书库
 
 “云书库”默认使用 iCloud。第一次在系统“文件”选择存放画集的 iCloud Drive 文件夹后，二次元小家会保存系统授予的文件夹访问权限：
@@ -91,7 +103,7 @@
 发布新的已签名 IPA：
 
 ```powershell
-.\scripts\Publish-OnlineUpdate.ps1 -SignedIpa "D:\path\二次元小家-signed.ipa" -Version "1.9.1" -Build 15 -Notes "阅读体验优化","问题修复"
+.\scripts\Publish-OnlineUpdate.ps1 -SignedIpa "D:\path\二次元小家-signed.ipa" -Version "2.1.0" -Build 17 -Notes "成年人夜读空间","心动档案与新 AI 性格"
 ```
 
 ## X 图片珍藏与 Sharp 清晰化
