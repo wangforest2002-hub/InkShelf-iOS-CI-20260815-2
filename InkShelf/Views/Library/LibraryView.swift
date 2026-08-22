@@ -8,6 +8,9 @@ struct LibraryView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     let scope: LibraryScope
 
+    @AppStorage("library.sortOrder") private var sortOrderRaw = LibrarySortOrder.lastOpened.rawValue
+    @AppStorage("library.readingStatus") private var readingStatusRaw = ReadingStatusFilter.all.rawValue
+    @AppStorage("library.gridDensity") private var gridDensityRaw = LibraryGridDensity.comfortable.rawValue
     @State private var query = ""
     @State private var importPicker: ImportPicker?
     @State private var showPhotoPicker = false
@@ -26,9 +29,26 @@ struct LibraryView: View {
     @State private var pendingGroupDeletion: ShelfGroup?
     @Namespace private var coverTransition
 
+    private var sortOrder: LibrarySortOrder {
+        LibrarySortOrder(rawValue: sortOrderRaw) ?? .lastOpened
+    }
+
+    private var readingStatus: ReadingStatusFilter {
+        ReadingStatusFilter(rawValue: readingStatusRaw) ?? .all
+    }
+
+    private var gridDensity: LibraryGridDensity {
+        LibraryGridDensity(rawValue: gridDensityRaw) ?? .comfortable
+    }
+
     private var books: [Book] {
-        let filtered = library.filteredBooks(scope: scope, query: query)
-        guard scope == .all, query.isEmpty else { return filtered }
+        let filtered = library.filteredBooks(
+            scope: scope,
+            query: query,
+            sortOrder: sortOrder,
+            status: readingStatus
+        )
+        guard scope == .all else { return filtered }
         switch shelfFilter {
         case .all:
             return filtered
@@ -44,7 +64,21 @@ struct LibraryView: View {
     }
 
     private var gridColumns: [GridItem] {
-        [GridItem(.adaptive(minimum: horizontalSizeClass == .compact ? 142 : 176, maximum: 230), spacing: 18)]
+        let sizes: (minimum: CGFloat, maximum: CGFloat)
+        switch (horizontalSizeClass, gridDensity) {
+        case (.compact, .comfortable):
+            sizes = (142, 230)
+        case (.compact, .compact):
+            sizes = (112, 176)
+        case (_, .comfortable):
+            sizes = (176, 230)
+        case (_, .compact):
+            sizes = (138, 190)
+        }
+        return [GridItem(
+            .adaptive(minimum: sizes.minimum, maximum: sizes.maximum),
+            spacing: gridDensity == .compact ? 14 : 18
+        )]
     }
 
     var body: some View {
@@ -122,11 +156,11 @@ struct LibraryView: View {
                             if !books.isEmpty {
                                 LibrarySectionHeading(
                                     title: sectionTitle,
-                                    subtitle: "\(books.count) 本读物",
+                                    subtitle: sectionSubtitle,
                                     symbol: sectionSymbol
                                 )
 
-                                LazyVGrid(columns: gridColumns, spacing: 24) {
+                                LazyVGrid(columns: gridColumns, spacing: gridDensity == .compact ? 18 : 24) {
                                     ForEach(books) { book in
                                         Button { open(book) } label: {
                                             BookCard(
@@ -175,8 +209,36 @@ struct LibraryView: View {
                 }
             }
             .navigationTitle(navigationTitle)
-            .searchable(text: $query, prompt: "搜索标题")
+            .searchable(text: $query, prompt: "搜索标题、标签、文件名或笔记")
             .toolbar {
+                ToolbarItem(placement: .secondaryAction) {
+                    Menu {
+                        Picker("排序方式", selection: $sortOrderRaw) {
+                            ForEach(LibrarySortOrder.allCases) { order in
+                                Label(order.title, systemImage: order.systemImage).tag(order.rawValue)
+                            }
+                        }
+
+                        Picker("阅读状态", selection: $readingStatusRaw) {
+                            ForEach(ReadingStatusFilter.allCases) { status in
+                                Label(status.title, systemImage: status.systemImage).tag(status.rawValue)
+                            }
+                        }
+
+                        Divider()
+
+                        Picker("封面密度", selection: $gridDensityRaw) {
+                            ForEach(LibraryGridDensity.allCases) { density in
+                                Label(density.title, systemImage: density.systemImage).tag(density.rawValue)
+                            }
+                        }
+                    } label: {
+                        Label("整理书架", systemImage: "arrow.up.arrow.down.circle")
+                    }
+                    .accessibilityIdentifier("library-organize")
+                    .accessibilityHint("调整排序、阅读状态和封面大小")
+                }
+
                 if scope == .all || scope == .favorites {
                     ToolbarItem(placement: .primaryAction) {
                         Menu {
@@ -508,6 +570,12 @@ struct LibraryView: View {
         case .recent: return "最近翻开"
         case .favorites: return "收藏的读物"
         }
+    }
+
+    private var sectionSubtitle: String {
+        var parts = ["\(books.count) 本读物", sortOrder.title]
+        if readingStatus != .all { parts.append(readingStatus.title) }
+        return parts.joined(separator: " · ")
     }
 
     private var sectionSymbol: String {

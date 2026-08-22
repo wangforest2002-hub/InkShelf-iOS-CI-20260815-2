@@ -17,19 +17,20 @@ struct ImagePagerView: UIViewRepresentable {
 
     func makeUIView(context: Context) -> PagerCollectionView {
         let flowLayout = UICollectionViewFlowLayout()
-        flowLayout.minimumLineSpacing = 0
+        flowLayout.minimumLineSpacing = flow == .continuous ? 8 : 0
         flowLayout.minimumInteritemSpacing = 0
         flowLayout.scrollDirection = flow == .horizontal ? .horizontal : .vertical
 
         let collectionView = PagerCollectionView(frame: .zero, collectionViewLayout: flowLayout)
+        collectionView.usesContinuousItemSizing = flow == .continuous
         collectionView.backgroundColor = backgroundColor
         collectionView.contentInsetAdjustmentBehavior = .never
-        collectionView.isPagingEnabled = true
-        collectionView.decelerationRate = .fast
+        collectionView.isPagingEnabled = flow != .continuous
+        collectionView.decelerationRate = flow == .continuous ? .normal : .fast
         collectionView.showsHorizontalScrollIndicator = false
         collectionView.showsVerticalScrollIndicator = false
         collectionView.alwaysBounceHorizontal = flow == .horizontal
-        collectionView.alwaysBounceVertical = flow == .vertical
+        collectionView.alwaysBounceVertical = flow != .horizontal
         collectionView.dataSource = context.coordinator
         collectionView.prefetchDataSource = context.coordinator
         collectionView.delegate = context.coordinator
@@ -43,13 +44,18 @@ struct ImagePagerView: UIViewRepresentable {
         context.coordinator.parent = self
         collectionView.backgroundColor = backgroundColor
         collectionView.semanticContentAttribute = order == .rightToLeft && flow == .horizontal ? .forceRightToLeft : .forceLeftToRight
+        collectionView.usesContinuousItemSizing = flow == .continuous
+        collectionView.isPagingEnabled = flow != .continuous
+        collectionView.decelerationRate = flow == .continuous ? .normal : .fast
 
         if let flowLayout = collectionView.collectionViewLayout as? UICollectionViewFlowLayout {
             let direction: UICollectionView.ScrollDirection = flow == .horizontal ? .horizontal : .vertical
-            if flowLayout.scrollDirection != direction {
+            let lineSpacing: CGFloat = flow == .continuous ? 8 : 0
+            if flowLayout.scrollDirection != direction || flowLayout.minimumLineSpacing != lineSpacing {
                 flowLayout.scrollDirection = direction
+                flowLayout.minimumLineSpacing = lineSpacing
                 collectionView.alwaysBounceHorizontal = flow == .horizontal
-                collectionView.alwaysBounceVertical = flow == .vertical
+                collectionView.alwaysBounceVertical = flow != .horizontal
                 flowLayout.invalidateLayout()
             }
         }
@@ -92,10 +98,11 @@ struct ImagePagerView: UIViewRepresentable {
         ].joined(separator: "|")
     }
 
-    final class Coordinator: NSObject, UICollectionViewDataSource, UICollectionViewDataSourcePrefetching, UICollectionViewDelegate, UIScrollViewDelegate {
+    final class Coordinator: NSObject, UICollectionViewDataSource, UICollectionViewDataSourcePrefetching, UICollectionViewDelegateFlowLayout, UIScrollViewDelegate {
         var parent: ImagePagerView
         fileprivate var groups: [ImagePageGroup] = []
         fileprivate var configurationKey = ""
+        private var continuousAspectRatio: CGFloat = 0.70
 
         init(parent: ImagePagerView) {
             self.parent = parent
@@ -106,12 +113,27 @@ struct ImagePagerView: UIViewRepresentable {
             groups = ImagePageGroup.make(
                 urls: parent.imageURLs,
                 layout: parent.layout,
+                flow: parent.flow,
                 coverSingle: parent.coverSingle
             )
+            if let firstURL = parent.imageURLs.first {
+                let size = ReaderImagePipeline.pixelSize(of: firstURL)
+                continuousAspectRatio = min(max(size.width / max(size.height, 1), 0.12), 3)
+            }
         }
 
         func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
             groups.count
+        }
+
+        func collectionView(
+            _ collectionView: UICollectionView,
+            layout collectionViewLayout: UICollectionViewLayout,
+            sizeForItemAt indexPath: IndexPath
+        ) -> CGSize {
+            guard parent.flow == .continuous else { return collectionView.bounds.size }
+            let width = max(collectionView.bounds.width, 1)
+            return CGSize(width: width, height: max(120, width / continuousAspectRatio))
         }
 
         func collectionView(
@@ -191,9 +213,14 @@ fileprivate struct ImagePageGroup {
     let indices: [Int]
     let urls: [URL]
 
-    static func make(urls: [URL], layout: ReaderLayout, coverSingle: Bool) -> [ImagePageGroup] {
+    static func make(
+        urls: [URL],
+        layout: ReaderLayout,
+        flow: ReaderFlow,
+        coverSingle: Bool
+    ) -> [ImagePageGroup] {
         guard !urls.isEmpty else { return [] }
-        if layout == .single {
+        if layout == .single || flow == .continuous {
             return urls.indices.map { ImagePageGroup(indices: [$0], urls: [urls[$0]]) }
         }
 
@@ -214,13 +241,23 @@ fileprivate struct ImagePageGroup {
 }
 
 final class PagerCollectionView: UICollectionView {
+    var usesContinuousItemSizing = false
+    private var previousBoundsSize: CGSize = .zero
+
     override func layoutSubviews() {
         super.layoutSubviews()
         guard let layout = collectionViewLayout as? UICollectionViewFlowLayout,
               bounds.width > 0,
-              bounds.height > 0,
-              layout.itemSize != bounds.size
+              bounds.height > 0
         else { return }
+        if usesContinuousItemSizing {
+            if previousBoundsSize != bounds.size {
+                previousBoundsSize = bounds.size
+                layout.invalidateLayout()
+            }
+            return
+        }
+        guard layout.itemSize != bounds.size else { return }
         layout.itemSize = bounds.size
         layout.invalidateLayout()
     }

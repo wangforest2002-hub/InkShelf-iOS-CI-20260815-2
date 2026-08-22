@@ -23,8 +23,10 @@ final class LibraryStore {
     @ObservationIgnored private let fileManager: FileManager
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let metadataURL: URL
+    @ObservationIgnored private let metadataRepository: LibraryMetadataRepository
     @ObservationIgnored private let groupsURL: URL
     @ObservationIgnored private var saveTask: Task<Void, Never>?
+    @ObservationIgnored private var pageURLCache: [UUID: [URL]] = [:]
     let libraryURL: URL
 
     init(
@@ -35,9 +37,12 @@ final class LibraryStore {
         self.fileManager = fileManager
         self.defaults = defaults
         let documents = documentsURL ?? fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        libraryURL = documents.appendingPathComponent("InkShelf Library", isDirectory: true)
-        metadataURL = libraryURL.appendingPathComponent("library.json")
-        groupsURL = libraryURL.appendingPathComponent("shelf-groups.json")
+        let root = documents.appendingPathComponent("InkShelf Library", isDirectory: true)
+        let metadata = root.appendingPathComponent("library.json")
+        libraryURL = root
+        metadataURL = metadata
+        metadataRepository = LibraryMetadataRepository(primaryURL: metadata)
+        groupsURL = root.appendingPathComponent("shelf-groups.json")
 #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("INKSHELF_UI_TEST_PICKER") {
             // Each picker test must begin on a truly empty shelf. UI test
@@ -126,21 +131,18 @@ final class LibraryStore {
         return book
     }
 
-    func filteredBooks(scope: LibraryScope, query: String) -> [Book] {
-        books
-            .filter {
-                switch scope {
-                case .all: true
-                case .recent: $0.lastOpenedAt != nil
-                case .favorites: $0.isFavorite
-                }
-            }
-            .filter { query.isEmpty || $0.title.localizedCaseInsensitiveContains(query) }
-            .sorted {
-                let left = $0.lastOpenedAt ?? $0.importedAt
-                let right = $1.lastOpenedAt ?? $1.importedAt
-                return left > right
-            }
+    func filteredBooks(
+        scope: LibraryScope,
+        query: String,
+        sortOrder: LibrarySortOrder = .lastOpened,
+        status: ReadingStatusFilter = .all
+    ) -> [Book] {
+        LibraryQuery(
+            scope: scope,
+            searchText: query,
+            sortOrder: sortOrder,
+            status: status
+        ).apply(to: books)
     }
 
     func cachedBook(remoteID: String, modifiedAt: String? = nil) -> Book? {
@@ -295,6 +297,7 @@ final class LibraryStore {
             book.personalNote = old.personalNote
             book.heartRating = old.heartRating
             book.spiceRating = old.spiceRating
+            book.readerProfile = old.readerProfile
             let oldFolder = libraryURL.appendingPathComponent(old.folderName, isDirectory: true)
             books.removeAll { $0.id == old.id }
             try? fileManager.removeItem(at: oldFolder)
@@ -394,6 +397,14 @@ final class LibraryStore {
             try? await Task.sleep(for: .seconds(2.2))
             self?.importNotice = nil
         }
+    }
+
+    func updateReaderProfile(bookID: UUID, profile: BookReaderProfile) {
+        guard let index = books.firstIndex(where: { $0.id == bookID }),
+              books[index].readerProfile != profile
+        else { return }
+        books[index].readerProfile = profile
+        scheduleSave()
     }
 
     func isPageFavorite(bookID: UUID, page: Int) -> Bool {
@@ -533,6 +544,7 @@ final class LibraryStore {
                 return
             }
             books[index] = updated
+            pageURLCache.removeValue(forKey: updated.id)
             measuredStorageSizes[updated.id] = updated.fileSize
             saveImmediately()
             importNotice = mode == .previewOnly
@@ -566,6 +578,7 @@ final class LibraryStore {
                 try fileManager.removeItem(at: folder)
             }
             books.removeAll { $0.id == book.id }
+            pageURLCache.removeValue(forKey: book.id)
             measuredStorageSizes.removeValue(forKey: book.id)
             endReading(book.id)
             saveImmediately()
@@ -602,16 +615,19 @@ final class LibraryStore {
 
     func pageURLs(for book: Book) -> [URL] {
         guard book.kind == .archive || book.kind == .imageCollection else { return [] }
+        if let cached = pageURLCache[book.id] { return cached }
         let folder = contentURL(for: book)
         let urls = (try? fileManager.contentsOfDirectory(
             at: folder,
             includingPropertiesForKeys: [.isRegularFileKey],
             options: [.skipsHiddenFiles]
         )) ?? []
-        return NaturalSort.urls(urls.filter { url in
+        let sorted = NaturalSort.urls(urls.filter { url in
             let isFile = (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) ?? false
             return isFile
         })
+        pageURLCache[book.id] = sorted
+        return sorted
     }
 
     func flushProgress() {
@@ -620,14 +636,15 @@ final class LibraryStore {
     }
 
     private func load() {
-        guard let data = try? Data(contentsOf: metadataURL) else { return }
         do {
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
-            books = try decoder.decode([Book].self, from: data)
+            let result = try metadataRepository.load()
+            books = result.books
                 .filter {
                     $0.storageState == .coverOnly || fileManager.fileExists(atPath: contentURL(for: $0).path)
                 }
+            if result.recoveredFromBackup {
+                alert = LibraryAlert(title: "书架已自动恢复", message: "主索引出现异常，已从最近一份完整快照恢复，画册文件没有受到影响。")
+            }
             if let value = defaults.string(forKey: Self.activeReaderKey),
                let id = UUID(uuidString: value),
                !books.contains(where: { $0.id == id }) {
@@ -683,11 +700,7 @@ final class LibraryStore {
 
     private func saveImmediately() {
         do {
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-            encoder.dateEncodingStrategy = .iso8601
-            let data = try encoder.encode(books)
-            try data.write(to: metadataURL, options: .atomic)
+            try metadataRepository.save(books)
         } catch {
             alert = LibraryAlert(title: "无法保存书架", message: error.localizedDescription)
         }
@@ -758,12 +771,6 @@ final class LibraryStore {
         }
     }
 #endif
-}
-
-enum LibraryScope: Equatable {
-    case all
-    case recent
-    case favorites
 }
 
 struct FavoritePageItem: Identifiable, Hashable {

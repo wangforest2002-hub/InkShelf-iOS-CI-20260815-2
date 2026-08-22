@@ -12,10 +12,23 @@ enum ReaderLayout: String, CaseIterable, Identifiable {
 enum ReaderFlow: String, CaseIterable, Identifiable {
     case horizontal
     case vertical
+    case continuous
 
     var id: String { rawValue }
-    var title: String { self == .horizontal ? "横向翻页" : "纵向翻页" }
-    var systemImage: String { self == .horizontal ? "arrow.left.and.right" : "arrow.up.and.down" }
+    var title: String {
+        switch self {
+        case .horizontal: "横向翻页"
+        case .vertical: "纵向分页"
+        case .continuous: "纵向连续"
+        }
+    }
+    var systemImage: String {
+        switch self {
+        case .horizontal: "arrow.left.and.right"
+        case .vertical: "arrow.up.and.down"
+        case .continuous: "scroll.fill"
+        }
+    }
 }
 
 enum ReadingOrder: String, CaseIterable, Identifiable {
@@ -141,5 +154,27 @@ enum EBookFont: String, CaseIterable, Identifiable {
         case .serif: "New York, Songti SC, STSong, serif"
         case .rounded: "ui-rounded, PingFang SC, sans-serif"
         }
+    }
+}
+
+struct BookReaderProfile: Codable, Hashable, Sendable {
+    var layoutRaw: String
+    var flowRaw: String
+    var orderRaw: String
+    var backdropRaw: String
+    var coverSingle: Bool
+
+    init(
+        layoutRaw: String,
+        flowRaw: String,
+        orderRaw: String,
+        backdropRaw: String,
+        coverSingle: Bool
+    ) {
+        self.layoutRaw = ReaderLayout(rawValue: layoutRaw)?.rawValue ?? ReaderLayout.single.rawValue
+        self.flowRaw = ReaderFlow(rawValue: flowRaw)?.rawValue ?? ReaderFlow.horizontal.rawValue
+        self.orderRaw = ReadingOrder(rawValue: orderRaw)?.rawValue ?? ReadingOrder.leftToRight.rawValue
+        self.backdropRaw = ReaderBackdrop(rawValue: backdropRaw)?.rawValue ?? ReaderBackdrop.black.rawValue
+        self.coverSingle = coverSingle
     }
 }

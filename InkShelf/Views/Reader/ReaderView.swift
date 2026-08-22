@@ -32,12 +32,17 @@ struct ReaderView: View {
     @State private var isSavingPage = false
     @State private var isEnhancingPage = false
     @State private var activeReadingStartedAt: Date?
+    @State private var layoutRaw: String
+    @State private var flowRaw: String
+    @State private var orderRaw: String
+    @State private var backdropRaw: String
+    @State private var coverSingle: Bool
 
-    @AppStorage("reader.layout") private var layoutRaw = ReaderLayout.single.rawValue
-    @AppStorage("reader.flow") private var flowRaw = ReaderFlow.horizontal.rawValue
-    @AppStorage("reader.order") private var orderRaw = ReadingOrder.leftToRight.rawValue
-    @AppStorage("reader.backdrop") private var backdropRaw = ReaderBackdrop.black.rawValue
-    @AppStorage("reader.coverSingle") private var coverSingle = true
+    @AppStorage("reader.layout") private var defaultLayoutRaw = ReaderLayout.single.rawValue
+    @AppStorage("reader.flow") private var defaultFlowRaw = ReaderFlow.horizontal.rawValue
+    @AppStorage("reader.order") private var defaultOrderRaw = ReadingOrder.leftToRight.rawValue
+    @AppStorage("reader.backdrop") private var defaultBackdropRaw = ReaderBackdrop.black.rawValue
+    @AppStorage("reader.coverSingle") private var defaultCoverSingle = true
     @AppStorage("reader.keepAwake") private var keepAwake = true
     @AppStorage("ai.enabled") private var aiEnabled = false
     @AppStorage("ai.autoDanmaku") private var autoDanmaku = true
@@ -53,9 +58,26 @@ struct ReaderView: View {
     init(book: Book, onClose: (() -> Void)? = nil) {
         self.book = book
         self.onClose = onClose
+        let defaults = UserDefaults.standard
+        let profile = book.readerProfile
         _currentPage = State(initialValue: min(max(0, book.currentPage), max(0, book.pageCount - 1)))
         _pageCount = State(initialValue: max(1, book.pageCount))
         _ebookProgress = State(initialValue: book.ebookChapterProgress ?? 0)
+        _layoutRaw = State(initialValue: profile?.layoutRaw
+            ?? defaults.string(forKey: "reader.layout")
+            ?? ReaderLayout.single.rawValue)
+        _flowRaw = State(initialValue: profile?.flowRaw
+            ?? defaults.string(forKey: "reader.flow")
+            ?? ReaderFlow.horizontal.rawValue)
+        _orderRaw = State(initialValue: profile?.orderRaw
+            ?? defaults.string(forKey: "reader.order")
+            ?? ReadingOrder.leftToRight.rawValue)
+        _backdropRaw = State(initialValue: profile?.backdropRaw
+            ?? defaults.string(forKey: "reader.backdrop")
+            ?? ReaderBackdrop.black.rawValue)
+        _coverSingle = State(initialValue: profile?.coverSingle
+            ?? (defaults.object(forKey: "reader.coverSingle") as? Bool)
+            ?? true)
     }
 
     private var layout: ReaderLayout { ReaderLayout(rawValue: layoutRaw) ?? .single }
@@ -65,6 +87,15 @@ struct ReaderView: View {
     private var ebookFlow: EBookFlow { EBookFlow(rawValue: ebookFlowRaw) ?? .paged }
     private var ebookTheme: EBookTheme { EBookTheme(rawValue: ebookThemeRaw) ?? .paper }
     private var ebookFont: EBookFont { EBookFont(rawValue: ebookFontRaw) ?? .serif }
+    private var bookReaderProfile: BookReaderProfile {
+        BookReaderProfile(
+            layoutRaw: layoutRaw,
+            flowRaw: flowRaw,
+            orderRaw: orderRaw,
+            backdropRaw: backdropRaw,
+            coverSingle: coverSingle
+        )
+    }
 
     var body: some View {
         ZStack {
@@ -220,6 +251,10 @@ struct ReaderView: View {
         .onChange(of: keepAwake) { _, newValue in
             UIApplication.shared.isIdleTimerDisabled = newValue
         }
+        .onChange(of: bookReaderProfile) { _, profile in
+            guard book.kind != .ebook else { return }
+            library.updateReaderProfile(bookID: book.id, profile: profile)
+        }
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .active {
                 activeReadingStartedAt = .now
@@ -253,7 +288,8 @@ struct ReaderView: View {
                 ebookFontRaw: $ebookFontRaw,
                 ebookFontSize: $ebookFontSize,
                 ebookLineHeight: $ebookLineHeight,
-                ebookMargin: $ebookMargin
+                ebookMargin: $ebookMargin,
+                saveComicDefaults: saveComicDefaults
             )
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
@@ -515,6 +551,15 @@ struct ReaderView: View {
             layoutRaw = layout == .single ? ReaderLayout.spread.rawValue : ReaderLayout.single.rawValue
         }
         showControlsTemporarily()
+    }
+
+    private func saveComicDefaults() {
+        defaultLayoutRaw = layoutRaw
+        defaultFlowRaw = flowRaw
+        defaultOrderRaw = orderRaw
+        defaultBackdropRaw = backdropRaw
+        defaultCoverSingle = coverSingle
+        showNotice("已设为新读物的默认阅读方式")
     }
 
     private func toggleControls() {

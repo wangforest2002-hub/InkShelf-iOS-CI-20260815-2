@@ -762,6 +762,156 @@ final class BookModelTests: XCTestCase {
         XCTAssertEqual(ReaderImagePipeline.pixelBucket(for: 4_096), 3_072)
     }
 
+    func testLibraryQuerySearchesMetadataAndFiltersReadingState() {
+        let now = Date(timeIntervalSince1970: 10_000)
+        let unread = Book(
+            title: "晨光画集",
+            kind: .imageCollection,
+            sourceFileName: "artist-special.zip",
+            contentRelativePath: "unread/pages",
+            pageCount: 20,
+            importedAt: now.addingTimeInterval(-200),
+            fileSize: 300,
+            tags: ["御姐", "光影"]
+        )
+        let reading = Book(
+            title: "夜色漫画",
+            kind: .archive,
+            sourceFileName: "night.cbz",
+            contentRelativePath: "reading/pages",
+            pageCount: 10,
+            currentPage: 4,
+            importedAt: now.addingTimeInterval(-100),
+            lastOpenedAt: now,
+            fileSize: 900,
+            personalNote: "喜欢这一册的构图"
+        )
+        let finished = Book(
+            title: "终章",
+            kind: .pdf,
+            sourceFileName: "final.pdf",
+            contentRelativePath: "finished/source.pdf",
+            pageCount: 5,
+            currentPage: 4,
+            importedAt: now,
+            lastOpenedAt: now.addingTimeInterval(-50),
+            fileSize: 500,
+            isFavorite: true
+        )
+
+        let metadataSearch = LibraryQuery(
+            scope: .all,
+            searchText: "御姐 光影",
+            sortOrder: .lastOpened,
+            status: .all
+        ).apply(to: [reading, finished, unread])
+        XCTAssertEqual(metadataSearch.map(\.id), [unread.id])
+
+        let inProgress = LibraryQuery(
+            scope: .all,
+            searchText: "构图",
+            sortOrder: .progress,
+            status: .reading
+        ).apply(to: [unread, reading, finished])
+        XCTAssertEqual(inProgress.map(\.id), [reading.id])
+
+        let favorites = LibraryQuery(
+            scope: .favorites,
+            searchText: "pdf",
+            sortOrder: .fileSize,
+            status: .finished
+        ).apply(to: [unread, reading, finished])
+        XCTAssertEqual(favorites.map(\.id), [finished.id])
+    }
+
+    func testReaderProfileNormalizesInvalidPersistedValuesAndOffersContinuousFlow() {
+        let profile = BookReaderProfile(
+            layoutRaw: "unknown-layout",
+            flowRaw: ReaderFlow.continuous.rawValue,
+            orderRaw: "unknown-order",
+            backdropRaw: "unknown-backdrop",
+            coverSingle: false
+        )
+        XCTAssertEqual(profile.layoutRaw, ReaderLayout.single.rawValue)
+        XCTAssertEqual(profile.flowRaw, ReaderFlow.continuous.rawValue)
+        XCTAssertEqual(profile.orderRaw, ReadingOrder.leftToRight.rawValue)
+        XCTAssertEqual(profile.backdropRaw, ReaderBackdrop.black.rawValue)
+        XCTAssertFalse(profile.coverSingle)
+        XCTAssertTrue(ReaderFlow.allCases.contains(.continuous))
+    }
+
+    @MainActor
+    func testPerBookReaderProfilePersistsAcrossLibraryReload() throws {
+        let fileManager = FileManager.default
+        let root = fileManager.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let suiteName = "InkShelfReaderProfileTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer {
+            try? fileManager.removeItem(at: root)
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let id = UUID()
+        let libraryURL = root.appendingPathComponent("InkShelf Library", isDirectory: true)
+        let pagesURL = libraryURL.appendingPathComponent(id.uuidString.lowercased()).appendingPathComponent("pages")
+        try fileManager.createDirectory(at: pagesURL, withIntermediateDirectories: true)
+        try testPNG(color: .systemTeal).write(to: pagesURL.appendingPathComponent("001.png"))
+        let book = Book(
+            id: id,
+            title: "独立阅读预设",
+            kind: .imageCollection,
+            sourceFileName: "profile",
+            contentRelativePath: "\(id.uuidString.lowercased())/pages",
+            pageCount: 1,
+            fileSize: 100
+        )
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        try encoder.encode([book]).write(to: libraryURL.appendingPathComponent("library.json"))
+
+        var store: LibraryStore? = LibraryStore(fileManager: fileManager, defaults: defaults, documentsURL: root)
+        let profile = BookReaderProfile(
+            layoutRaw: ReaderLayout.spread.rawValue,
+            flowRaw: ReaderFlow.continuous.rawValue,
+            orderRaw: ReadingOrder.rightToLeft.rawValue,
+            backdropRaw: ReaderBackdrop.graphite.rawValue,
+            coverSingle: false
+        )
+        store?.updateReaderProfile(bookID: id, profile: profile)
+        store?.flushProgress()
+        store = nil
+
+        let restored = LibraryStore(fileManager: fileManager, defaults: defaults, documentsURL: root)
+        XCTAssertEqual(restored.books.first?.readerProfile, profile)
+    }
+
+    func testLibraryMetadataRepositoryRecoversCorruptedPrimaryIndex() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("InkShelfMetadataRecovery-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let primary = root.appendingPathComponent("library.json")
+        let repository = LibraryMetadataRepository(primaryURL: primary)
+        let book = Book(
+            title: "可恢复书架",
+            kind: .pdf,
+            sourceFileName: "recovery.pdf",
+            contentRelativePath: "recovery/source.pdf",
+            pageCount: 12,
+            fileSize: 1_024
+        )
+
+        try repository.save([book])
+        try Data("{broken-json".utf8).write(to: primary, options: .atomic)
+        let recovered = try repository.load()
+
+        XCTAssertTrue(recovered.recoveredFromBackup)
+        XCTAssertEqual(recovered.books.map(\.id), [book.id])
+        let repaired = try repository.load()
+        XCTAssertFalse(repaired.recoveredFromBackup)
+        XCTAssertEqual(repaired.books.map(\.id), [book.id])
+    }
+
     @MainActor
     func testReaderImagePipelineShowsPreviewBeforeFullDecode() async throws {
         let root = FileManager.default.temporaryDirectory

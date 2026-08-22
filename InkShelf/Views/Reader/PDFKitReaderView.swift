@@ -132,14 +132,22 @@ struct PDFKitReaderView: UIViewRepresentable {
             pdfView.displaysRTL = parent.order == .rightToLeft
             pdfView.displaysAsBook = parent.coverSingle
 
-            if parent.flow == .horizontal {
+            switch parent.flow {
+            case .horizontal:
                 pdfView.displayDirection = .horizontal
                 pdfView.displayMode = parent.layout == .single ? .singlePage : .twoUp
                 pdfView.usePageViewController(
                     true,
                     withViewOptions: [UIPageViewController.OptionsKey.interPageSpacing: 12]
                 )
-            } else {
+            case .vertical:
+                pdfView.displayDirection = .vertical
+                pdfView.displayMode = parent.layout == .single ? .singlePage : .twoUp
+                pdfView.usePageViewController(
+                    true,
+                    withViewOptions: [UIPageViewController.OptionsKey.interPageSpacing: 12]
+                )
+            case .continuous:
                 pdfView.usePageViewController(false, withViewOptions: nil)
                 pdfView.displayDirection = .vertical
                 pdfView.displayMode = parent.layout == .single ? .singlePageContinuous : .twoUpContinuous

@@ -15,10 +15,12 @@ struct ReaderSettingsView: View {
     @Binding var ebookFontSize: Double
     @Binding var ebookLineHeight: Double
     @Binding var ebookMargin: Double
+    let saveComicDefaults: () -> Void
     @AppStorage("ai.enabled") private var aiEnabled = false
     @AppStorage("ai.autoDanmaku") private var autoDanmaku = true
     @AppStorage("ai.density") private var aiDensity = AIDanmakuDensity.balanced.rawValue
     @AppStorage("ai.endComments") private var aiEndComments = true
+    @State private var didSaveComicDefaults = false
 
     var body: some View {
         NavigationStack {
@@ -81,6 +83,7 @@ struct ReaderSettingsView: View {
                                 Label(item.title, systemImage: item.systemImage).tag(item.rawValue)
                             }
                         }
+                        .accessibilityIdentifier("reader-flow")
 
                         Picker("顺序", selection: $orderRaw) {
                             ForEach(ReadingOrder.allCases) { item in
@@ -98,6 +101,27 @@ struct ReaderSettingsView: View {
                         .pickerStyle(.segmented)
 
                         Toggle("保持屏幕常亮", isOn: $keepAwake)
+                    }
+
+                    Section("阅读预设") {
+                        LabeledContent("当前设置", value: "自动记住到本书")
+                        Button {
+                            saveComicDefaults()
+                            withAnimation(.snappy) { didSaveComicDefaults = true }
+                            Task {
+                                try? await Task.sleep(for: .seconds(2))
+                                withAnimation(.easeOut) { didSaveComicDefaults = false }
+                            }
+                        } label: {
+                            Label(
+                                didSaveComicDefaults ? "已设为新读物默认" : "设为新读物默认",
+                                systemImage: didSaveComicDefaults ? "checkmark.circle.fill" : "square.and.arrow.down"
+                            )
+                        }
+                        .accessibilityIdentifier("reader-save-defaults")
+                        Text("每本漫画和画集会分别记住布局、方向、顺序与背景，切换作品时不再互相影响。")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
                     }
                 }
 

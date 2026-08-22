@@ -19,6 +19,10 @@ final class ReaderNavigationUITests: XCTestCase {
             app.buttons["shelf-new-group"].waitForExistence(timeout: 4),
             "The custom shelf-group entry point is missing"
         )
+        XCTAssertTrue(
+            app.buttons["library-organize"].exists,
+            "The shelf sort, status, and density menu is missing"
+        )
 
         let book = app.descendants(matching: .any)["book-a11ce000-0000-4000-8000-000000000001"]
         XCTAssertTrue(book.waitForExistence(timeout: 8), "The seeded local book never appeared on the shelf")
@@ -57,6 +61,10 @@ final class ReaderNavigationUITests: XCTestCase {
         XCTAssertTrue(settings.waitForExistence(timeout: 2), "The reader settings button is not hittable")
         settings.tap()
         XCTAssertTrue(app.navigationBars["阅读设置"].waitForExistence(timeout: 2), "Reader settings did not open")
+        XCTAssertTrue(
+            app.descendants(matching: .any)["reader-flow"].exists,
+            "The horizontal, vertical, and continuous reading selector is missing"
+        )
         app.buttons["完成"].tap()
 
         let thumbnails = app.buttons["reader-thumbnails"]
