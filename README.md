@@ -50,6 +50,10 @@
 
 当前测试阶段不加入隐私锁或封面遮罩，所有夜读作品仍按普通书架方式直接显示和打开。
 
+## 流畅阅读
+
+2.1.1 对超大画集页面采用渐进式显示：先快速呈现清晰预览，再在后台无感替换为阅读画质。当前页面拥有最高解码优先级，并与邻页高清预取使用独立队列，快速翻页时不会再被后台任务长时间挡住。带 EXIF 旋转信息的图片会在预览完成后校正比例并重新居中。
+
 ## iCloud Drive 书库
 
 “云书库”默认使用 iCloud。第一次在系统“文件”选择存放画集的 iCloud Drive 文件夹后，二次元小家会保存系统授予的文件夹访问权限：
@@ -103,7 +107,7 @@
 发布新的已签名 IPA：
 
 ```powershell
-.\scripts\Publish-OnlineUpdate.ps1 -SignedIpa "D:\path\二次元小家-signed.ipa" -Version "2.1.0" -Build 17 -Notes "成年人夜读空间","心动档案与新 AI 性格"
+.\scripts\Publish-OnlineUpdate.ps1 -SignedIpa "D:\path\二次元小家-signed.ipa" -Version "2.1.1" -Build 18 -Notes "大图渐进加载","当前页优先与邻页预取优化"
 ```
 
 ## X 图片珍藏与 Sharp 清晰化

@@ -269,7 +269,7 @@ private final class ZoomingSpreadScrollView: UIScrollView, UIScrollViewDelegate 
     private var lastBoundsSize: CGSize = .zero
     private var loadGeneration = 0
     private var requestedPixelSize = 0
-    private var loadedImageCount = 0
+    private var readyImageSlots: Set<Int> = []
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -306,7 +306,7 @@ private final class ZoomingSpreadScrollView: UIScrollView, UIScrollViewDelegate 
         loadGeneration += 1
         representedPaths = paths
         requestedPixelSize = 0
-        loadedImageCount = 0
+        readyImageSlots = []
         imageViews.forEach { $0.removeFromSuperview() }
         naturalSizes = urls.map { ReaderImagePipeline.pixelSize(of: $0) }
         imageViews = urls.map { _ in
@@ -326,7 +326,7 @@ private final class ZoomingSpreadScrollView: UIScrollView, UIScrollViewDelegate 
         representedPaths = []
         tapAction = nil
         requestedPixelSize = 0
-        loadedImageCount = 0
+        readyImageSlots = []
         imageViews.forEach { $0.removeFromSuperview() }
         imageViews = []
         naturalSizes = []
@@ -407,15 +407,31 @@ private final class ZoomingSpreadScrollView: UIScrollView, UIScrollViewDelegate 
         let paths = representedPaths
 
         for (index, path) in paths.enumerated() {
-            ReaderImagePipeline.shared.load(URL(fileURLWithPath: path), maxPixelSize: target) { [weak self] image in
+            ReaderImagePipeline.shared.loadProgressively(
+                URL(fileURLWithPath: path),
+                maxPixelSize: target
+            ) { [weak self] image, isFinal in
                 guard let self,
                       self.loadGeneration == generation,
                       self.representedPaths == paths,
                       self.imageViews.indices.contains(index)
                 else { return }
-                self.imageViews[index].image = image
-                self.loadedImageCount += 1
-                if self.loadedImageCount >= self.imageViews.count {
+
+                if let image {
+                    self.imageViews[index].image = image
+                    let oldSize = self.naturalSizes[index]
+                    let oldRatio = oldSize.width / max(oldSize.height, 1)
+                    let newRatio = image.size.width / max(image.size.height, 1)
+                    if abs(oldRatio - newRatio) > 0.01 {
+                        self.naturalSizes[index] = image.size
+                        self.needsFit = true
+                        self.setNeedsLayout()
+                    }
+                }
+                if image != nil || isFinal {
+                    self.readyImageSlots.insert(index)
+                }
+                if self.readyImageSlots.count >= self.imageViews.count {
                     self.spinner.stopAnimating()
                 }
             }

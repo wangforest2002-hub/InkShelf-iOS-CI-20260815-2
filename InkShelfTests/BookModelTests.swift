@@ -754,6 +754,49 @@ final class BookModelTests: XCTestCase {
         XCTAssertTrue(release.preservesAppData)
     }
 
+    func testReaderImagePipelineUsesStablePreviewAndReadingBuckets() {
+        XCTAssertEqual(ReaderImagePipeline.pixelBucket(for: 360), 512)
+        XCTAssertEqual(ReaderImagePipeline.pixelBucket(for: 640), 1_024)
+        XCTAssertEqual(ReaderImagePipeline.pixelBucket(for: 1_024), 1_024)
+        XCTAssertEqual(ReaderImagePipeline.pixelBucket(for: 1_800), 3_072)
+        XCTAssertEqual(ReaderImagePipeline.pixelBucket(for: 4_096), 3_072)
+    }
+
+    @MainActor
+    func testReaderImagePipelineShowsPreviewBeforeFullDecode() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("InkShelfProgressiveDecode-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let url = root.appendingPathComponent("large-page.jpg")
+        let source = UIGraphicsImageRenderer(size: CGSize(width: 1_200, height: 1_800)).image { context in
+            UIColor.systemPink.setFill()
+            context.cgContext.fill(CGRect(x: 0, y: 0, width: 1_200, height: 1_800))
+            UIColor.white.setFill()
+            context.cgContext.fill(CGRect(x: 120, y: 180, width: 960, height: 1_440))
+        }
+        try XCTUnwrap(source.jpegData(compressionQuality: 0.92)).write(to: url)
+
+        let previewReady = expectation(description: "fast preview")
+        let fullReady = expectation(description: "reading quality")
+        var previewSize = CGSize.zero
+        var fullSize = CGSize.zero
+        ReaderImagePipeline.shared.loadProgressively(url, maxPixelSize: 3_072) { image, isFinal in
+            guard let image else { return }
+            if isFinal {
+                fullSize = image.size
+                fullReady.fulfill()
+            } else if previewSize == .zero {
+                previewSize = image.size
+                previewReady.fulfill()
+            }
+        }
+
+        await fulfillment(of: [previewReady, fullReady], timeout: 8, enforceOrder: true)
+        XCTAssertLessThanOrEqual(max(previewSize.width, previewSize.height), 1_024)
+        XCTAssertGreaterThan(max(fullSize.width, fullSize.height), max(previewSize.width, previewSize.height))
+    }
+
     func testBundledSharpModelUsesConfirmedPipeline() async throws {
         let status = try await OnDeviceSharpProcessor.shared.status()
         XCTAssertEqual(status.model, "realesrgan-x4plus-anime")
