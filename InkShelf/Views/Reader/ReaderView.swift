@@ -145,6 +145,7 @@ struct ReaderView: View {
                 ReaderControls(
                     title: book.title,
                     kind: book.kind,
+                    nightMood: book.belongsToAfterDark ? (book.mood?.title ?? "成年人夜读") : nil,
                     currentPage: $currentPage,
                     pageCount: pageCount,
                     layout: layout,
@@ -653,6 +654,7 @@ private struct AICompactTranslationCard: View {
 private struct ReaderControls: View {
     let title: String
     let kind: BookKind
+    let nightMood: String?
     @Binding var currentPage: Int
     let pageCount: Int
     let layout: ReaderLayout
@@ -692,9 +694,9 @@ private struct ReaderControls: View {
                         Text(title)
                             .font(.subheadline.weight(.semibold))
                             .lineLimit(1)
-                        Text(kind.label)
+                        Text(nightMood.map { "18+ · \($0)" } ?? kind.label)
                             .font(.caption2.weight(.medium))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(nightMood == nil ? Color.secondary : AppTheme.peach)
                     }
                     .padding(.horizontal, 14)
                     .frame(height: 44)
@@ -761,7 +763,7 @@ private struct ReaderControls: View {
                         step: 1
                     )
                     .disabled(pageCount <= 1)
-                    .tint(AppTheme.accent)
+                    .tint(nightMood == nil ? AppTheme.accent : AppTheme.coral)
                     .accessibilityIdentifier("reader-progress")
                     .accessibilityLabel("阅读进度")
                     .accessibilityValue("第 \(min(currentPage + 1, pageCount)) 页，共 \(pageCount) 页")

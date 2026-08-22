@@ -125,7 +125,7 @@ jobs:
           xcrun simctl terminate "$DEVICE_ID" com.inkshelf.reader 2>/dev/null || true
           xcrun simctl uninstall "$DEVICE_ID" com.inkshelf.reader 2>/dev/null || true
           xcrun simctl install "$DEVICE_ID" "$APP_PATH"
-          xcrun simctl launch "$DEVICE_ID" com.inkshelf.reader | grep -q 'com.inkshelf.reader:'
+          xcrun simctl launch "$DEVICE_ID" com.inkshelf.reader --args INKSHELF_UI_TEST_NIGHT | grep -q 'com.inkshelf.reader:'
           sleep 6
           xcrun simctl io "$DEVICE_ID" screenshot ui-smoke.png
           test -s ui-smoke.png

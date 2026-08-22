@@ -50,7 +50,8 @@ final class LibraryStore {
         load()
         loadShelfGroups()
 #if DEBUG
-        if ProcessInfo.processInfo.arguments.contains("INKSHELF_UI_TEST_SEED") {
+        if ProcessInfo.processInfo.arguments.contains("INKSHELF_UI_TEST_SEED")
+            || ProcessInfo.processInfo.arguments.contains("INKSHELF_UI_TEST_NIGHT") {
             installReaderNavigationSmokeBook()
         }
         if ProcessInfo.processInfo.arguments.contains("INKSHELF_UI_TEST_PICKER") {
@@ -728,8 +729,15 @@ final class LibraryStore {
                 kind: .imageCollection,
                 sourceFileName: "UI 冒烟读物",
                 contentRelativePath: "\(id.uuidString.lowercased())/pages",
+                coverRelativePath: "\(id.uuidString.lowercased())/pages/000001.png",
                 pageCount: 1,
-                fileSize: Int64(png.count)
+                fileSize: Int64(png.count),
+                isAfterDark: true,
+                mood: .teasing,
+                tags: ["御姐", "暧昧"],
+                personalNote: "测试今晚的心动档案",
+                heartRating: 5,
+                spiceRating: 4
             ))
             saveImmediately()
         } catch {

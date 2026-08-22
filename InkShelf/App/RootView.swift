@@ -11,6 +11,10 @@ struct RootView: View {
     var body: some View {
         MainTabView()
             .task {
+                if ProcessInfo.processInfo.arguments.contains("INKSHELF_UI_TEST_NIGHT") {
+                    hasSeenWelcome = true
+                    return
+                }
                 if !hasSeenWelcome {
                     launchDestination = .welcome
                 } else if let book = library.interruptedReadingBook {
@@ -66,7 +70,8 @@ struct RootView: View {
     @MainActor
     private func offerUpdateIfAvailable() async {
         guard !ProcessInfo.processInfo.arguments.contains("INKSHELF_UI_TEST_SEED"),
-              !ProcessInfo.processInfo.arguments.contains("INKSHELF_UI_TEST_PICKER")
+              !ProcessInfo.processInfo.arguments.contains("INKSHELF_UI_TEST_PICKER"),
+              !ProcessInfo.processInfo.arguments.contains("INKSHELF_UI_TEST_NIGHT")
         else { return }
         if !updates.didCheckThisLaunch {
             await updates.checkForUpdates(silent: true)
@@ -92,6 +97,10 @@ private enum LaunchDestination: Identifiable, Equatable {
 }
 
 private struct MainTabView: View {
+    @State private var selectedTab: MainTab = ProcessInfo.processInfo.arguments.contains("INKSHELF_UI_TEST_NIGHT")
+        ? .afterDark
+        : .library
+
     var body: some View {
         Group {
             if #available(iOS 26.0, *) {
@@ -105,26 +114,34 @@ private struct MainTabView: View {
     }
 
     private var tabs: some View {
-        TabView {
-            Tab("书架", systemImage: "books.vertical.fill") {
+        TabView(selection: $selectedTab) {
+            Tab("书架", systemImage: "books.vertical.fill", value: .library) {
                 LibraryView(scope: .all)
             }
 
-            Tab("最近", systemImage: "clock.fill") {
+            Tab("最近", systemImage: "clock.fill", value: .recent) {
                 LibraryView(scope: .recent)
             }
 
-            Tab("珍藏", systemImage: "star.fill") {
+            Tab("珍藏", systemImage: "star.fill", value: .favorites) {
                 LibraryView(scope: .favorites)
             }
 
-            Tab("夜读", systemImage: "moon.stars.fill") {
+            Tab("夜读", systemImage: "moon.stars.fill", value: .afterDark) {
                 AfterDarkLoungeView()
             }
 
-            Tab("设置", systemImage: "gearshape.fill") {
+            Tab("设置", systemImage: "gearshape.fill", value: .settings) {
                 SettingsView()
             }
         }
     }
+}
+
+private enum MainTab: Hashable {
+    case library
+    case recent
+    case favorites
+    case afterDark
+    case settings
 }
