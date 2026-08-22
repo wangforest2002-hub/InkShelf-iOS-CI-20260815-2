@@ -540,7 +540,7 @@ final class BookModelTests: XCTestCase {
     }
 
     func testEveryAIWritingPurposeHasUsableCopy() {
-        XCTAssertEqual(AIWritingPurpose.allCases.count, 6)
+        XCTAssertEqual(AIWritingPurpose.allCases.count, 7)
         for purpose in AIWritingPurpose.allCases {
             XCTAssertFalse(purpose.title.isEmpty)
             XCTAssertFalse(purpose.promptDescription.isEmpty)
