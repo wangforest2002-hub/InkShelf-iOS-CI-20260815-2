@@ -20,7 +20,7 @@ final class ReaderNavigationUITests: XCTestCase {
             "The custom shelf-group entry point is missing"
         )
         XCTAssertTrue(
-            app.buttons["library-organize"].exists,
+            app.buttons["library-organize"].waitForExistence(timeout: 3),
             "The shelf sort, status, and density menu is missing"
         )
 

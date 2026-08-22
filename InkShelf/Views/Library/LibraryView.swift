@@ -211,7 +211,7 @@ struct LibraryView: View {
             .navigationTitle(navigationTitle)
             .searchable(text: $query, prompt: "搜索标题、标签、文件名或笔记")
             .toolbar {
-                ToolbarItem(placement: .secondaryAction) {
+                ToolbarItem(placement: .topBarTrailing) {
                     Menu {
                         Picker("排序方式", selection: $sortOrderRaw) {
                             ForEach(LibrarySortOrder.allCases) { order in
