@@ -77,6 +77,46 @@ final class BookModelTests: XCTestCase {
         XCTAssertEqual(decoded.remoteModifiedAt, book.remoteModifiedAt)
     }
 
+    func testAfterDarkProfileRoundTripsAndClampsRatings() throws {
+        var book = makeBook(pageCount: 12, currentPage: 2)
+        book.isAfterDark = true
+        book.mood = .teasing
+        book.tags = ["御姐", "暧昧"]
+        book.personalNote = "今晚最喜欢这一本"
+        book.heartRating = 9
+        book.spiceRating = -2
+
+        let decoded = try JSONDecoder().decode(Book.self, from: JSONEncoder().encode(book))
+        XCTAssertTrue(decoded.belongsToAfterDark)
+        XCTAssertEqual(decoded.mood, .teasing)
+        XCTAssertEqual(decoded.normalizedTags, ["御姐", "暧昧"])
+        XCTAssertEqual(decoded.normalizedHeartRating, 5)
+        XCTAssertEqual(decoded.normalizedSpiceRating, 0)
+    }
+
+    func testLegacyBookWithoutAfterDarkFieldsStillDecodes() throws {
+        let json = """
+        {
+          "id": "A11CE000-0000-4000-8000-000000000099",
+          "title": "旧版画集",
+          "kind": "imageCollection",
+          "sourceFileName": "旧版画集",
+          "contentRelativePath": "legacy/pages",
+          "pageCount": 8,
+          "currentPage": 1,
+          "importedAt": "2026-08-01T00:00:00Z",
+          "fileSize": 128,
+          "isFavorite": false
+        }
+        """
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let book = try decoder.decode(Book.self, from: Data(json.utf8))
+        XCTAssertFalse(book.belongsToAfterDark)
+        XCTAssertNil(book.mood)
+        XCTAssertTrue(book.normalizedTags.isEmpty)
+    }
+
     func testICloudBookIdentityIsStableAcrossScans() {
         let folderID = UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE")!
         let first = ICloudBook.stableID(folderID: folderID, relativePath: "anmi/画集 01.cbz")

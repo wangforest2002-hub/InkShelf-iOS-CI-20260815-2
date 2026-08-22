@@ -41,6 +41,18 @@ struct BookCard: View {
                         .accessibilityLabel("已收藏")
                 }
 
+                if book.belongsToAfterDark {
+                    Label(book.mood?.shortTitle ?? "夜读", systemImage: book.mood?.systemImage ?? "moon.stars.fill")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(Color(red: 0.28, green: 0.07, blue: 0.14))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 6)
+                        .background(AppTheme.peach.opacity(0.94), in: Capsule())
+                        .padding(7)
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
+                        .accessibilityLabel("已加入成年人夜读")
+                }
+
                 Text(book.kind == .ebook ? "\(book.pageCount)章" : "\(book.pageCount)P")
                     .font(.caption2.monospacedDigit().weight(.bold))
                     .foregroundStyle(.white)
@@ -73,6 +85,20 @@ struct BookCard: View {
                 ProgressView(value: book.progress)
                     .tint(book.progress > 0 ? AppTheme.coral : AppTheme.accent)
                     .scaleEffect(x: 1, y: 0.72, anchor: .center)
+
+                if book.normalizedHeartRating > 0 || book.normalizedSpiceRating > 0 {
+                    HStack(spacing: 8) {
+                        if book.normalizedHeartRating > 0 {
+                            Label("\(book.normalizedHeartRating)", systemImage: "heart.fill")
+                                .foregroundStyle(AppTheme.coral)
+                        }
+                        if book.normalizedSpiceRating > 0 {
+                            Label("\(book.normalizedSpiceRating)", systemImage: "flame.fill")
+                                .foregroundStyle(.orange)
+                        }
+                    }
+                    .font(.caption2.bold())
+                }
             }
         }
         .padding(9)

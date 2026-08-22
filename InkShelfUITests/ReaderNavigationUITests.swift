@@ -75,7 +75,15 @@ final class ReaderNavigationUITests: XCTestCase {
         XCTAssertTrue(book.waitForExistence(timeout: 4), "Returning from ReaderView did not restore the shelf")
         XCTAssertTrue(app.tabBars.buttons["最近"].exists)
         XCTAssertTrue(app.tabBars.buttons["珍藏"].exists)
+        XCTAssertTrue(app.tabBars.buttons["夜读"].exists)
         XCTAssertFalse(app.tabBars.buttons["云阁楼"].exists)
+
+        app.tabBars.buttons["夜读"].tap()
+        XCTAssertTrue(
+            app.descendants(matching: .any)["after-dark-hero"].waitForExistence(timeout: 3),
+            "The adults-only night-reading lounge did not open"
+        )
+        XCTAssertTrue(app.descendants(matching: .any)["after-dark-draw"].exists)
 
         app.tabBars.buttons["设置"].tap()
         let onlineUpdate = app.buttons["settings-online-update"]

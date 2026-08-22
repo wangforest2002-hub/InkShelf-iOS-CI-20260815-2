@@ -61,6 +61,12 @@ struct Book: Identifiable, Codable, Hashable, Sendable {
     var ebookChapterProgress: Double?
     var remoteSourceID: String?
     var remoteModifiedAt: String?
+    var isAfterDark: Bool?
+    var mood: BookMood?
+    var tags: [String]?
+    var personalNote: String?
+    var heartRating: Int?
+    var spiceRating: Int?
 
     init(
         id: UUID = UUID(),
@@ -82,7 +88,13 @@ struct Book: Identifiable, Codable, Hashable, Sendable {
         shelfGroupID: UUID? = nil,
         ebookChapterProgress: Double? = nil,
         remoteSourceID: String? = nil,
-        remoteModifiedAt: String? = nil
+        remoteModifiedAt: String? = nil,
+        isAfterDark: Bool? = nil,
+        mood: BookMood? = nil,
+        tags: [String]? = nil,
+        personalNote: String? = nil,
+        heartRating: Int? = nil,
+        spiceRating: Int? = nil
     ) {
         self.id = id
         self.title = title
@@ -104,6 +116,12 @@ struct Book: Identifiable, Codable, Hashable, Sendable {
         self.ebookChapterProgress = ebookChapterProgress
         self.remoteSourceID = remoteSourceID
         self.remoteModifiedAt = remoteModifiedAt
+        self.isAfterDark = isAfterDark
+        self.mood = mood
+        self.tags = tags
+        self.personalNote = personalNote
+        self.heartRating = heartRating.map { min(max($0, 0), 5) }
+        self.spiceRating = spiceRating.map { min(max($0, 0), 5) }
     }
 
     var progress: Double {
@@ -131,6 +149,17 @@ struct Book: Identifiable, Codable, Hashable, Sendable {
 
     var folderName: String { id.uuidString.lowercased() }
     var storageState: BookStorageState { localStorageState ?? .full }
+    var belongsToAfterDark: Bool { isAfterDark ?? false }
+    var normalizedTags: [String] {
+        var seen = Set<String>()
+        return (tags ?? []).compactMap { value in
+            let cleaned = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !cleaned.isEmpty, seen.insert(cleaned.lowercased()).inserted else { return nil }
+            return cleaned
+        }
+    }
+    var normalizedHeartRating: Int { min(max(heartRating ?? 0, 0), 5) }
+    var normalizedSpiceRating: Int { min(max(spiceRating ?? 0, 0), 5) }
 }
 
 extension UTType {

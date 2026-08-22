@@ -118,6 +118,10 @@ private struct MainTabView: View {
                 LibraryView(scope: .favorites)
             }
 
+            Tab("夜读", systemImage: "moon.stars.fill") {
+                AfterDarkLoungeView()
+            }
+
             Tab("设置", systemImage: "gearshape.fill") {
                 SettingsView()
             }

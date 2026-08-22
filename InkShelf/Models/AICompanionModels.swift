@@ -17,6 +17,7 @@ enum AIWritingPurpose: String, CaseIterable, Identifiable, Codable, Sendable {
     case reflection
     case titleIdeas
     case keepsake
+    case afterDark
 
     var id: String { rawValue }
 
@@ -28,6 +29,7 @@ enum AIWritingPurpose: String, CaseIterable, Identifiable, Codable, Sendable {
         case .reflection: "阅读感想"
         case .titleIdeas: "标题灵感"
         case .keepsake: "珍藏寄语"
+        case .afterDark: "夜读私语"
         }
     }
 
@@ -39,6 +41,7 @@ enum AIWritingPurpose: String, CaseIterable, Identifiable, Codable, Sendable {
         case .reflection: "quote.bubble.fill"
         case .titleIdeas: "lightbulb.fill"
         case .keepsake: "heart.text.square.fill"
+        case .afterDark: "moon.stars.fill"
         }
     }
 
@@ -50,6 +53,7 @@ enum AIWritingPurpose: String, CaseIterable, Identifiable, Codable, Sendable {
         case .reflection: "写一段有个人温度、像真实读者写下的阅读感想"
         case .titleIdeas: "给出 8 个风格各异、简短好记的标题，并各附一句说明"
         case .keepsake: "写一段温暖克制、适合留在私人收藏中的珍藏寄语"
+        case .afterDark: "为成年人写一段暧昧、大胆但不低俗的夜读私语，欣赏成熟角色魅力、姿态张力与画面氛围"
         }
     }
 }
@@ -59,6 +63,8 @@ enum AICompanionPersona: String, CaseIterable, Identifiable, Codable, Sendable {
     case otaku
     case analyst
     case gentle
+    case teasing
+    case bold
 
     var id: String { rawValue }
 
@@ -68,6 +74,8 @@ enum AICompanionPersona: String, CaseIterable, Identifiable, Codable, Sendable {
         case .otaku: "资深二次元"
         case .analyst: "细节观察员"
         case .gentle: "安静陪伴"
+        case .teasing: "坏心眼姐姐"
+        case .bold: "大胆同好"
         }
     }
 
@@ -77,6 +85,8 @@ enum AICompanionPersona: String, CaseIterable, Identifiable, Codable, Sendable {
         case .otaku: "sparkles"
         case .analyst: "eye.fill"
         case .gentle: "moon.stars.fill"
+        case .teasing: "heart.circle.fill"
+        case .bold: "flame.fill"
         }
     }
 
@@ -86,8 +96,12 @@ enum AICompanionPersona: String, CaseIterable, Identifiable, Codable, Sendable {
         case .otaku: "像资深动漫爱好者，懂常见叙事套路和二次元表达，但不卖弄术语"
         case .analyst: "关注构图、台词、伏笔和人物情绪，表达简洁清楚"
         case .gentle: "温柔克制，少量弹幕，不打断沉浸感，更多给予情绪陪伴"
+        case .teasing: "面向成年用户，像成熟又会逗人的姐姐，语气俏皮暧昧，欣赏成年角色的魅力、穿搭与姿态张力，但不写露骨色情细节"
+        case .bold: "面向成年用户，反应直球而热烈，可以自然说性感、心动和涩气，重点点评成年角色的自信气场、身体线条与大胆构图，但不性化未成年或年龄不明角色"
         }
     }
+
+    var isAfterDark: Bool { self == .teasing || self == .bold }
 }
 
 enum AIDanmakuDensity: String, CaseIterable, Identifiable, Codable, Sendable {

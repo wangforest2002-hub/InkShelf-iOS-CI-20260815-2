@@ -17,6 +17,7 @@ struct LibraryView: View {
     @State private var renamingBook: Book?
     @State private var previewingBook: Book?
     @State private var aiWritingBook: Book?
+    @State private var profileEditingBook: Book?
     @State private var openedBook: Book?
     @State private var didAutoPresentPickerForUITest = false
     @State private var showAchievements = false
@@ -328,6 +329,19 @@ struct LibraryView: View {
                 AIWritingStudioView(book: book)
             }
         }
+        .sheet(item: $profileEditingBook) { book in
+            BookProfileEditorView(book: book) { profile in
+                library.updateBookProfile(
+                    bookID: book.id,
+                    isAfterDark: profile.isAfterDark,
+                    mood: profile.mood,
+                    tags: profile.tags,
+                    personalNote: profile.personalNote,
+                    heartRating: profile.heartRating,
+                    spiceRating: profile.spiceRating
+                )
+            }
+        }
         .sheet(isPresented: $showAchievements) {
             NavigationStack {
                 AchievementsView()
@@ -366,6 +380,21 @@ struct LibraryView: View {
             aiWritingBook = book
         } label: {
             Label("AI 写文案", systemImage: "text.badge.star")
+        }
+
+        Button {
+            profileEditingBook = book
+        } label: {
+            Label("编辑心动档案", systemImage: "heart.text.square")
+        }
+
+        Button {
+            library.toggleAfterDark(book.id)
+        } label: {
+            Label(
+                book.belongsToAfterDark ? "移出成年人夜读" : "加入成年人夜读",
+                systemImage: book.belongsToAfterDark ? "moon.stars" : "moon.stars.fill"
+            )
         }
 
         Menu {

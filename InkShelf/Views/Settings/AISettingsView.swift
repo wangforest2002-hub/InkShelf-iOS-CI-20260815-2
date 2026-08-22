@@ -99,6 +99,12 @@ struct AISettingsView: View {
                     }
                 }
 
+                if (AICompanionPersona(rawValue: personaRaw) ?? .friend).isAfterDark {
+                    Label("成年人夜读性格会更暧昧、更直球，但只讨论明确成年角色。", systemImage: "18.circle.fill")
+                        .font(.footnote)
+                        .foregroundStyle(AppTheme.coral)
+                }
+
                 Picker("弹幕密度", selection: $densityRaw) {
                     ForEach(AIDanmakuDensity.allCases) { density in
                         Text(density.title).tag(density.rawValue)

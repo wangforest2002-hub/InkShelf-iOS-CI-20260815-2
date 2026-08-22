@@ -107,6 +107,16 @@ final class LibraryStore {
         }
     }
 
+    var afterDarkBooks: [Book] {
+        books
+            .filter(\.belongsToAfterDark)
+            .sorted {
+                let left = $0.lastOpenedAt ?? $0.importedAt
+                let right = $1.lastOpenedAt ?? $1.importedAt
+                return left > right
+            }
+    }
+
     var interruptedReadingBook: Book? {
         guard let value = defaults.string(forKey: Self.activeReaderKey),
               let id = UUID(uuidString: value),
@@ -278,6 +288,12 @@ final class LibraryStore {
         if let old = books.first(where: { $0.remoteSourceID == remoteID }) {
             book.isFavorite = old.isFavorite
             book.shelfGroupID = old.shelfGroupID
+            book.isAfterDark = old.isAfterDark
+            book.mood = old.mood
+            book.tags = old.tags
+            book.personalNote = old.personalNote
+            book.heartRating = old.heartRating
+            book.spiceRating = old.spiceRating
             let oldFolder = libraryURL.appendingPathComponent(old.folderName, isDirectory: true)
             books.removeAll { $0.id == old.id }
             try? fileManager.removeItem(at: oldFolder)
@@ -335,6 +351,48 @@ final class LibraryStore {
         guard let index = books.firstIndex(where: { $0.id == id }) else { return }
         books[index].isFavorite.toggle()
         saveImmediately()
+    }
+
+    func toggleAfterDark(_ id: UUID) {
+        guard let index = books.firstIndex(where: { $0.id == id }) else { return }
+        books[index].isAfterDark = !books[index].belongsToAfterDark
+        saveImmediately()
+        importNotice = books[index].belongsToAfterDark ? "已加入成年人夜读" : "已移出成年人夜读"
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(2.2))
+            self?.importNotice = nil
+        }
+    }
+
+    func updateBookProfile(
+        bookID: UUID,
+        isAfterDark: Bool,
+        mood: BookMood?,
+        tags: [String],
+        personalNote: String,
+        heartRating: Int,
+        spiceRating: Int
+    ) {
+        guard let index = books.firstIndex(where: { $0.id == bookID }) else { return }
+        var seen = Set<String>()
+        let normalizedTags = tags.compactMap { value -> String? in
+            let cleaned = String(value.trimmingCharacters(in: .whitespacesAndNewlines).prefix(16))
+            guard !cleaned.isEmpty, seen.insert(cleaned.lowercased()).inserted else { return nil }
+            return cleaned
+        }
+        let note = String(personalNote.trimmingCharacters(in: .whitespacesAndNewlines).prefix(600))
+        books[index].isAfterDark = isAfterDark
+        books[index].mood = mood
+        books[index].tags = Array(normalizedTags.prefix(12))
+        books[index].personalNote = note.isEmpty ? nil : note
+        books[index].heartRating = min(max(heartRating, 0), 5)
+        books[index].spiceRating = min(max(spiceRating, 0), 5)
+        saveImmediately()
+        importNotice = "“\(books[index].title)”的心动档案已保存"
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(2.2))
+            self?.importNotice = nil
+        }
     }
 
     func isPageFavorite(bookID: UUID, page: Int) -> Bool {
