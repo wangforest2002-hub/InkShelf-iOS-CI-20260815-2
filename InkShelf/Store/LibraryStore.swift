@@ -731,11 +731,15 @@ final class LibraryStore {
         guard !books.contains(where: { $0.id == id }) else { return }
         let folder = libraryURL.appendingPathComponent(id.uuidString.lowercased(), isDirectory: true)
         let pages = folder.appendingPathComponent("pages", isDirectory: true)
-        let page = pages.appendingPathComponent("000001.png")
         let png = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLxVQAAAABJRU5ErkJggg==")!
         do {
             try fileManager.createDirectory(at: pages, withIntermediateDirectories: true)
-            try png.write(to: page, options: .atomic)
+            for page in 1...3 {
+                try png.write(
+                    to: pages.appendingPathComponent(String(format: "%06d.png", page)),
+                    options: .atomic
+                )
+            }
             books.append(Book(
                 id: id,
                 title: "UI 冒烟读物",
@@ -743,8 +747,8 @@ final class LibraryStore {
                 sourceFileName: "UI 冒烟读物",
                 contentRelativePath: "\(id.uuidString.lowercased())/pages",
                 coverRelativePath: "\(id.uuidString.lowercased())/pages/000001.png",
-                pageCount: 1,
-                fileSize: Int64(png.count),
+                pageCount: 3,
+                fileSize: Int64(png.count * 3),
                 isAfterDark: true,
                 mood: .teasing,
                 tags: ["御姐", "暧昧"],

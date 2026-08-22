@@ -131,7 +131,12 @@ struct LibraryView: View {
                                                 unlocked: achievements.unlockedCount,
                                                 total: achievements.achievements.count,
                                                 pages: achievements.footprint.pagesTurned,
-                                                minutes: achievements.readingMinutes
+                                                minutes: achievements.readingMinutes,
+                                                level: achievements.homeLevel,
+                                                levelTitle: achievements.homeLevelTitle,
+                                                levelProgress: achievements.homeLevelProgress,
+                                                streak: achievements.currentStreak,
+                                                dailyCompleted: achievements.dailyQuests().filter(\.isCompleted).count
                                             )
                                         }
                                         .buttonStyle(PressableCardStyle())
@@ -171,6 +176,11 @@ struct LibraryView: View {
                                                 .matchedTransitionSource(id: book.id, in: coverTransition)
                                         }
                                         .buttonStyle(PressableCardStyle())
+                                        .scrollTransition(.animated.threshold(.visible(0.22))) { content, phase in
+                                            content
+                                                .opacity(phase.isIdentity ? 1 : 0.72)
+                                                .scaleEffect(phase.isIdentity ? 1 : 0.975)
+                                        }
                                         .contextMenu {
                                             bookContextMenu(book)
                                         } preview: {
@@ -848,33 +858,57 @@ private struct HomeStatChip: View {
 }
 
 private struct FootprintHomeCard: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var appeared = false
     let unlocked: Int
     let total: Int
     let pages: Int
     let minutes: Int
+    let level: Int
+    let levelTitle: String
+    let levelProgress: Double
+    let streak: Int
+    let dailyCompleted: Int
 
     var body: some View {
         HStack(spacing: 14) {
-            Image(systemName: "medal.star.fill")
-                .font(.title2)
-                .symbolRenderingMode(.palette)
-                .foregroundStyle(AppTheme.honey, AppTheme.coral)
-                .frame(width: 48, height: 48)
-                .background(AppTheme.honey.opacity(0.12), in: Circle())
+            ZStack {
+                Circle().stroke(AppTheme.honey.opacity(0.18), lineWidth: 5)
+                Circle()
+                    .trim(from: 0, to: appeared ? levelProgress : 0)
+                    .stroke(AppTheme.accentGradient, style: StrokeStyle(lineWidth: 5, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                Text("\(level)").font(.headline.bold().monospacedDigit())
+            }
+            .frame(width: 52, height: 52)
             VStack(alignment: .leading, spacing: 4) {
-                Text("回家足迹").font(.headline)
+                HStack(spacing: 6) {
+                    Text("Lv.\(level) \(levelTitle)").font(.headline)
+                    if streak > 0 {
+                        Label("\(streak)天", systemImage: "flame.fill")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(AppTheme.coral)
+                    }
+                }
                 Text("\(pages) 页 · \(minutes) 分钟 · \(unlocked)/\(total) 枚徽章")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .contentTransition(.numericText())
+                Label("今日约定 \(dailyCompleted)/3", systemImage: dailyCompleted == 3 ? "checkmark.seal.fill" : "sun.max.fill")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(dailyCompleted == 3 ? AppTheme.mint : AppTheme.wood)
             }
             Spacer()
             Image(systemName: "chevron.right")
                 .font(.caption.weight(.bold))
                 .foregroundStyle(.tertiary)
         }
-        .padding(14)
+        .padding(16)
         .inkGlass(cornerRadius: 22, interactive: true)
+        .overlay { WarmLightSweep().clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous)) }
+        .onAppear {
+            withAnimation(reduceMotion ? nil : .smooth(duration: 0.65)) { appeared = true }
+        }
         .accessibilityElement(children: .combine)
     }
 }

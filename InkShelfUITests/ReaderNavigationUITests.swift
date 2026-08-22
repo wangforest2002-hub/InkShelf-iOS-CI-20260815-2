@@ -40,7 +40,12 @@ final class ReaderNavigationUITests: XCTestCase {
             back = app.buttons["reader-close"]
         }
         XCTAssertTrue(back.waitForExistence(timeout: 2), "Tapping a valid local book did not enter ReaderView")
-        XCTAssertTrue(app.sliders["reader-progress"].exists, "Reader controls did not finish loading")
+        let progress = app.sliders["reader-progress"]
+        XCTAssertTrue(progress.exists, "Reader controls did not finish loading")
+        XCTAssertTrue(
+            String(describing: progress.value).contains("第 1 页，共 3 页"),
+            "The initial page number and progress accessibility value disagree"
+        )
         let aiToggle = app.buttons["reader-ai-toggle"]
         XCTAssertTrue(aiToggle.exists, "The AI control is not a simple on/off button")
         aiToggle.tap()
@@ -78,6 +83,11 @@ final class ReaderNavigationUITests: XCTestCase {
         let originalLayoutLabel = layout.label
         layout.tap()
         XCTAssertNotEqual(layout.label, originalLayoutLabel, "The layout button did not change reader layout")
+        progress.adjust(toNormalizedSliderPosition: 1)
+        XCTAssertTrue(
+            String(describing: progress.value).contains("第 2–3 页，共 3 页"),
+            "The spread page label and progress scrubber are out of sync"
+        )
 
         back.tap()
         XCTAssertTrue(book.waitForExistence(timeout: 4), "Returning from ReaderView did not restore the shelf")

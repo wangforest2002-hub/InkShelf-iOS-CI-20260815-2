@@ -43,6 +43,7 @@ struct EBookReaderView: UIViewRepresentable {
         context.coordinator.parent = self
         context.coordinator.loadChapter(in: webView, force: false)
         context.coordinator.applyStyleIfNeeded(in: webView)
+        context.coordinator.applyExternalProgressIfNeeded(in: webView)
     }
 
     static func dismantleUIView(_ webView: WKWebView, coordinator: Coordinator) {
@@ -126,6 +127,29 @@ struct EBookReaderView: UIViewRepresentable {
                 guard let self, self.parent.chapterProgress != progress else { return }
                 self.parent.chapterProgress = progress
             }
+        }
+
+        func applyExternalProgressIfNeeded(in webView: WKWebView) {
+            guard !isLoading,
+                  !webView.scrollView.isDragging,
+                  !webView.scrollView.isDecelerating
+            else { return }
+            let requested = min(max(parent.chapterProgress, 0), 1)
+            guard abs(requested - lastReportedProgress) >= 0.012 else { return }
+
+            let scrollView = webView.scrollView
+            let maximum: CGFloat
+            let target: CGPoint
+            if parent.flow == .paged {
+                maximum = max(0, scrollView.contentSize.width - scrollView.bounds.width)
+                target = CGPoint(x: maximum * requested, y: 0)
+            } else {
+                maximum = max(0, scrollView.contentSize.height - scrollView.bounds.height)
+                target = CGPoint(x: 0, y: maximum * requested)
+            }
+            guard maximum > 1 else { return }
+            lastReportedProgress = requested
+            scrollView.setContentOffset(target, animated: false)
         }
 
         func scrollViewWillEndDragging(

@@ -730,6 +730,103 @@ final class BookModelTests: XCTestCase {
         XCTAssertEqual(restored.unlockedCount, 3)
     }
 
+    func testReaderPagePositionKeepsSpreadLabelAndSliderInSync() {
+        let spread = ReaderPagePosition(
+            currentPage: 2,
+            pageCount: 10,
+            layout: .spread,
+            flow: .horizontal,
+            coverSingle: true,
+            isEBook: false
+        )
+        XCTAssertEqual(spread.visibleRange, 1...2)
+        XCTAssertEqual(spread.anchorPage, 1)
+        XCTAssertEqual(spread.displayLabel, "第 2–3 页 · 共 10 页")
+        XCTAssertEqual(spread.sliderValue(ebookProgress: 0), 2)
+        XCTAssertEqual(spread.comicPage(forSliderValue: 2), 1)
+        XCTAssertEqual(spread.comicPage(forSliderValue: 4), 3)
+        XCTAssertEqual(spread.progressPercentage(ebookProgress: 0), 30)
+
+        let firstCover = ReaderPagePosition(
+            currentPage: 0,
+            pageCount: 10,
+            layout: .spread,
+            flow: .vertical,
+            coverSingle: true,
+            isEBook: false
+        )
+        XCTAssertEqual(firstCover.visibleRange, 0...0)
+
+        let continuous = ReaderPagePosition(
+            currentPage: 2,
+            pageCount: 10,
+            layout: .spread,
+            flow: .continuous,
+            coverSingle: true,
+            isEBook: false
+        )
+        XCTAssertEqual(continuous.visibleRange, 2...2)
+    }
+
+    func testEBookProgressScrubberIncludesChapterProgress() {
+        let position = ReaderPagePosition(
+            currentPage: 1,
+            pageCount: 4,
+            layout: .single,
+            flow: .horizontal,
+            coverSingle: true,
+            isEBook: true
+        )
+        XCTAssertEqual(position.sliderValue(ebookProgress: 0.5), 1.5, accuracy: 0.0001)
+        XCTAssertEqual(position.progressPercentage(ebookProgress: 0.5), 38)
+        let target = position.ebookTarget(forSliderValue: 3.75)
+        XCTAssertEqual(target.chapter, 3)
+        XCTAssertEqual(target.progress, 0.75, accuracy: 0.0001)
+        let ending = position.ebookTarget(forSliderValue: 4)
+        XCTAssertEqual(ending.chapter, 3)
+        XCTAssertEqual(ending.progress, 1, accuracy: 0.0001)
+    }
+
+    @MainActor
+    func testAchievementStoreMigratesOldFootprintAndBuildsDailyQuests() throws {
+        let oldJSON = """
+        {
+          "openedBookIDs": [],
+          "completedBookIDs": [],
+          "pagesTurned": 12,
+          "readingSeconds": 90,
+          "pagesSaved": 1,
+          "pagesFavorited": 2,
+          "unlockedAt": {}
+        }
+        """
+        let migrated = try JSONDecoder().decode(ReadingFootprint.self, from: Data(oldJSON.utf8))
+        XCTAssertEqual(migrated.pagesTurned, 12)
+        XCTAssertEqual(migrated.homeVisits, 0)
+        XCTAssertTrue(migrated.readingDayKeys.isEmpty)
+
+        let suiteName = "InkShelfDailyQuestTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = AchievementStore(defaults: defaults)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let first = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 8, day: 20, hour: 12)))
+        let second = try XCTUnwrap(calendar.date(byAdding: .day, value: 1, to: first))
+        let third = try XCTUnwrap(calendar.date(byAdding: .day, value: 2, to: first))
+        let bookID = UUID()
+        store.recordOpened(bookID: bookID, at: first)
+        store.recordOpened(bookID: bookID, at: second)
+        store.recordOpened(bookID: bookID, at: third)
+        for _ in 0..<10 { store.recordPageTurn(bookID: bookID, reachedLastPage: false, at: third) }
+        store.recordReadingDuration(15 * 60, at: third)
+
+        XCTAssertEqual(store.footprint.homeVisits, 3)
+        XCTAssertEqual(store.footprint.longestReadingStreak, 3)
+        XCTAssertEqual(store.dailyQuests(on: third).filter(\.isCompleted).count, 3)
+        XCTAssertTrue(store.footprint.unlockedAt.keys.contains("three-day-lamp"))
+    }
+
     func testUpdateVersionComparisonUsesVersionThenBuild() {
         let release = AppUpdateRelease(
             schema: 1,

@@ -1,6 +1,6 @@
 import SwiftUI
 
-enum ReaderLayout: String, CaseIterable, Identifiable {
+enum ReaderLayout: String, CaseIterable, Identifiable, Sendable {
     case single
     case spread
 
@@ -9,7 +9,7 @@ enum ReaderLayout: String, CaseIterable, Identifiable {
     var systemImage: String { self == .single ? "rectangle.portrait" : "rectangle.split.2x1" }
 }
 
-enum ReaderFlow: String, CaseIterable, Identifiable {
+enum ReaderFlow: String, CaseIterable, Identifiable, Sendable {
     case horizontal
     case vertical
     case continuous

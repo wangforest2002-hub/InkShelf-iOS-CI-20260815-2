@@ -87,6 +87,9 @@ struct ReaderView: View {
     private var ebookFlow: EBookFlow { EBookFlow(rawValue: ebookFlowRaw) ?? .paged }
     private var ebookTheme: EBookTheme { EBookTheme(rawValue: ebookThemeRaw) ?? .paper }
     private var ebookFont: EBookFont { EBookFont(rawValue: ebookFontRaw) ?? .serif }
+    private var comicPageConfigurationKey: String {
+        "\(layoutRaw)|\(flowRaw)|\(coverSingle)|\(pageCount)"
+    }
     private var bookReaderProfile: BookReaderProfile {
         BookReaderProfile(
             layoutRaw: layoutRaw,
@@ -179,8 +182,11 @@ struct ReaderView: View {
                     kind: book.kind,
                     nightMood: book.belongsToAfterDark ? (book.mood?.title ?? "成年人夜读") : nil,
                     currentPage: $currentPage,
+                    ebookProgress: $ebookProgress,
                     pageCount: pageCount,
                     layout: layout,
+                    flow: flow,
+                    coverSingle: coverSingle,
                     ebookFlow: ebookFlow,
                     isEBook: book.kind == .ebook,
                     aiEnabled: aiEnabled && companion.hasAPIKey,
@@ -224,6 +230,7 @@ struct ReaderView: View {
             } else if book.kind != .pdf {
                 imageURLs = library.pageURLs(for: book)
                 pageCount = max(1, imageURLs.count)
+                normalizeComicPageForLayout()
                 schedulePrefetchPages(around: currentPage)
             }
             UIApplication.shared.isIdleTimerDisabled = keepAwake
@@ -231,22 +238,68 @@ struct ReaderView: View {
             if book.kind != .pdf { prepareAIPage() }
         }
         .onChange(of: currentPage) { _, newPage in
+            if book.kind != .ebook {
+                let normalized = ReaderPagePosition(
+                    currentPage: newPage,
+                    pageCount: pageCount,
+                    layout: layout,
+                    flow: flow,
+                    coverSingle: coverSingle,
+                    isEBook: false
+                ).anchorPage
+                if normalized != newPage {
+                    currentPage = normalized
+                    return
+                }
+            }
             if book.kind == .ebook {
                 library.updateEBookProgress(bookID: book.id, chapter: newPage, progression: ebookProgress)
             } else {
-                library.updateProgress(bookID: book.id, page: newPage)
+                let visiblePage = ReaderPagePosition(
+                    currentPage: newPage,
+                    pageCount: pageCount,
+                    layout: layout,
+                    flow: flow,
+                    coverSingle: coverSingle,
+                    isEBook: false
+                ).visibleRange.upperBound
+                library.updateProgress(bookID: book.id, page: visiblePage)
+            }
+            let reachedLastPage: Bool
+            if book.kind == .ebook {
+                reachedLastPage = pageCount > 0 && newPage >= pageCount - 1 && ebookProgress >= 0.995
+            } else {
+                reachedLastPage = ReaderPagePosition(
+                    currentPage: newPage,
+                    pageCount: pageCount,
+                    layout: layout,
+                    flow: flow,
+                    coverSingle: coverSingle,
+                    isEBook: false
+                ).visibleRange.upperBound >= pageCount - 1
             }
             achievements.recordPageTurn(
                 bookID: book.id,
-                reachedLastPage: pageCount > 0 && newPage >= pageCount - 1
+                reachedLastPage: reachedLastPage
             )
             if controlsVisible { scheduleControlsHide() }
-            schedulePrefetchPages(around: newPage)
+            let prefetchAnchor = book.kind == .ebook ? newPage : ReaderPagePosition(
+                currentPage: newPage,
+                pageCount: pageCount,
+                layout: layout,
+                flow: flow,
+                coverSingle: coverSingle,
+                isEBook: false
+            ).visibleRange.upperBound
+            schedulePrefetchPages(around: prefetchAnchor)
             prepareAIPage()
         }
-        .onChange(of: ebookProgress) { _, newValue in
+        .onChange(of: ebookProgress) { oldValue, newValue in
             guard book.kind == .ebook else { return }
             library.updateEBookProgress(bookID: book.id, chapter: currentPage, progression: newValue)
+            if currentPage >= pageCount - 1, oldValue < 0.995, newValue >= 0.995 {
+                achievements.recordPageTurn(bookID: book.id, reachedLastPage: true)
+            }
         }
         .onChange(of: keepAwake) { _, newValue in
             UIApplication.shared.isIdleTimerDisabled = newValue
@@ -254,6 +307,21 @@ struct ReaderView: View {
         .onChange(of: bookReaderProfile) { _, profile in
             guard book.kind != .ebook else { return }
             library.updateReaderProfile(bookID: book.id, profile: profile)
+        }
+        .onChange(of: comicPageConfigurationKey) { _, _ in
+            let originalPage = currentPage
+            normalizeComicPageForLayout()
+            if currentPage == originalPage, book.kind != .ebook {
+                let visiblePage = ReaderPagePosition(
+                    currentPage: currentPage,
+                    pageCount: pageCount,
+                    layout: layout,
+                    flow: flow,
+                    coverSingle: coverSingle,
+                    isEBook: false
+                ).visibleRange.upperBound
+                library.updateProgress(bookID: book.id, page: visiblePage)
+            }
         }
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .active {
@@ -407,6 +475,7 @@ struct ReaderView: View {
         if count > 0 {
             pageCount = count
             currentPage = min(currentPage, count - 1)
+            normalizeComicPageForLayout()
             library.updatePageCount(bookID: book.id, pageCount: count)
         }
         if pdfLocked != locked {
@@ -424,6 +493,19 @@ struct ReaderView: View {
         guard !passwordDraft.isEmpty else { return }
         didTryPassword = true
         pdfPassword = passwordDraft
+    }
+
+    private func normalizeComicPageForLayout() {
+        guard book.kind != .ebook else { return }
+        let normalized = ReaderPagePosition(
+            currentPage: currentPage,
+            pageCount: pageCount,
+            layout: layout,
+            flow: flow,
+            coverSingle: coverSingle,
+            isEBook: false
+        ).anchorPage
+        if normalized != currentPage { currentPage = normalized }
     }
 
     private func togglePageFavorite() {
@@ -706,12 +788,17 @@ private struct AICompactTranslationCard: View {
 }
 
 private struct ReaderControls: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var appeared = false
     let title: String
     let kind: BookKind
     let nightMood: String?
     @Binding var currentPage: Int
+    @Binding var ebookProgress: Double
     let pageCount: Int
     let layout: ReaderLayout
+    let flow: ReaderFlow
+    let coverSingle: Bool
     let ebookFlow: EBookFlow
     let isEBook: Bool
     let aiEnabled: Bool
@@ -731,6 +818,33 @@ private struct ReaderControls: View {
     let showThumbnails: () -> Void
     let showSettings: () -> Void
     let onInteraction: () -> Void
+
+    private var position: ReaderPagePosition {
+        ReaderPagePosition(
+            currentPage: currentPage,
+            pageCount: pageCount,
+            layout: layout,
+            flow: flow,
+            coverSingle: coverSingle,
+            isEBook: isEBook
+        )
+    }
+
+    private var progressBinding: Binding<Double> {
+        Binding(
+            get: { position.sliderValue(ebookProgress: ebookProgress) },
+            set: { value in
+                if isEBook {
+                    let target = position.ebookTarget(forSliderValue: value)
+                    currentPage = target.chapter
+                    ebookProgress = target.progress
+                } else {
+                    currentPage = position.comicPage(forSliderValue: value)
+                }
+                onInteraction()
+            }
+        )
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -796,35 +910,39 @@ private struct ReaderControls: View {
             }
             .padding(.horizontal, 14)
             .safeAreaPadding(.top, 8)
+            .offset(y: appeared ? 0 : -14)
+            .opacity(appeared ? 1 : 0)
 
             Spacer()
 
             VStack(spacing: 12) {
                 HStack {
-                    Text("\(min(currentPage + 1, pageCount))")
-                        .font(.caption.monospacedDigit().weight(.semibold))
+                    Label(position.displayLabel, systemImage: isEBook ? "text.book.closed.fill" : "book.pages.fill")
+                        .font(.caption.weight(.semibold))
                         .contentTransition(.numericText())
+                        .animation(reduceMotion ? nil : .snappy(duration: 0.24), value: currentPage)
+                        .accessibilityIdentifier("reader-page-label")
 
-                    Slider(
-                        value: Binding(
-                            get: { Double(currentPage) },
-                            set: {
-                                currentPage = Int($0.rounded())
-                                onInteraction()
-                            }
-                        ),
-                        in: 0...Double(max(pageCount - 1, 1)),
-                        step: 1
-                    )
-                    .disabled(pageCount <= 1)
+                    Spacer()
+
+                    Text("\(position.progressPercentage(ebookProgress: ebookProgress))%")
+                        .font(.caption.monospacedDigit().weight(.bold))
+                        .foregroundStyle(nightMood == nil ? AppTheme.accent : AppTheme.coral)
+                        .contentTransition(.numericText())
+                        .animation(reduceMotion ? nil : .snappy(duration: 0.24), value: currentPage)
+                        .accessibilityIdentifier("reader-progress-percent")
+                }
+
+                Slider(
+                    value: progressBinding,
+                    in: 0...position.sliderUpperBound,
+                    step: isEBook ? 0.01 : 1
+                )
+                    .disabled(!isEBook && pageCount <= 1)
                     .tint(nightMood == nil ? AppTheme.accent : AppTheme.coral)
                     .accessibilityIdentifier("reader-progress")
                     .accessibilityLabel("阅读进度")
-                    .accessibilityValue("第 \(min(currentPage + 1, pageCount)) 页，共 \(pageCount) 页")
-
-                    Text("\(pageCount)")
-                        .font(.caption.monospacedDigit().weight(.semibold))
-                }
+                    .accessibilityValue(position.accessibilityValue)
 
                 HStack(spacing: 8) {
                     Button { perform(showThumbnails) } label: {
@@ -883,10 +1001,25 @@ private struct ReaderControls: View {
             .padding(.vertical, 14)
             .contentShape(RoundedRectangle(cornerRadius: 25, style: .continuous))
             .inkGlass(cornerRadius: 25)
+            .overlay(alignment: .topLeading) {
+                Circle()
+                    .fill((nightMood == nil ? AppTheme.cyan : AppTheme.coral).opacity(0.16))
+                    .frame(width: 96, height: 96)
+                    .blur(radius: 30)
+                    .offset(x: -18, y: -38)
+                    .allowsHitTesting(false)
+            }
             .padding(.horizontal, 14)
             .safeAreaPadding(.bottom, 8)
+            .offset(y: appeared ? 0 : 18)
+            .opacity(appeared ? 1 : 0)
         }
         .foregroundStyle(.primary)
+        .onAppear {
+            withAnimation(reduceMotion ? nil : .snappy(duration: 0.34)) {
+                appeared = true
+            }
+        }
     }
 
     private func perform(_ action: () -> Void) {

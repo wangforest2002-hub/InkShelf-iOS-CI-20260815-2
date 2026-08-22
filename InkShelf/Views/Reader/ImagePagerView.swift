@@ -178,6 +178,13 @@ struct ImagePagerView: UIViewRepresentable {
             updateCurrentPage(from: scrollView)
         }
 
+        func scrollViewDidScroll(_ scrollView: UIScrollView) {
+            guard parent.flow == .continuous,
+                  scrollView.isDragging || scrollView.isDecelerating
+            else { return }
+            updateCurrentPage(from: scrollView)
+        }
+
         func visibleIndex(in scrollView: UIScrollView) -> Int {
             if let collectionView = scrollView as? UICollectionView {
                 let center = CGPoint(
@@ -186,6 +193,15 @@ struct ImagePagerView: UIViewRepresentable {
                 )
                 if let indexPath = collectionView.indexPathForItem(at: center) {
                     return indexPath.item
+                }
+                if let nearest = collectionView.indexPathsForVisibleItems.min(by: { left, right in
+                    let leftCenter = collectionView.layoutAttributesForItem(at: left)?.center ?? .zero
+                    let rightCenter = collectionView.layoutAttributesForItem(at: right)?.center ?? .zero
+                    let leftDistance = hypot(leftCenter.x - center.x, leftCenter.y - center.y)
+                    let rightDistance = hypot(rightCenter.x - center.x, rightCenter.y - center.y)
+                    return leftDistance < rightDistance
+                }) {
+                    return nearest.item
                 }
             }
             guard scrollView.bounds.width > 0, scrollView.bounds.height > 0 else { return 0 }
