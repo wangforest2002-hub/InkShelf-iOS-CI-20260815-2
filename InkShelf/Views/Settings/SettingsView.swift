@@ -118,6 +118,7 @@ struct SettingsView: View {
                     } label: {
                         Label("回家足迹与成就", systemImage: "medal.star.fill")
                     }
+                    .accessibilityIdentifier("settings-achievements")
 
                     NavigationLink {
                         StorageManagerView()
@@ -182,7 +183,7 @@ struct SettingsView: View {
                 }
 
                 Section("关于") {
-                    LabeledContent("二次元小家", value: "2.2.1 · 足迹乐园版")
+                    LabeledContent("二次元小家", value: "2.2.2 · 足迹重启版")
                     Button("重新查看欢迎页") {
                         hasSeenWelcome = false
                     }

@@ -120,6 +120,12 @@ final class AchievementStore {
         latestUnlock = nil
     }
 
+    func resetProgress() {
+        latestUnlock = nil
+        footprint = ReadingFootprint()
+        defaults.removeObject(forKey: Self.storageKey)
+    }
+
     func dailyQuests(on date: Date = .now) -> [DailyReadingQuest] {
         let key = dayKey(for: date)
         let cameHome = footprint.readingDayKeys.contains(key) ? 1 : 0

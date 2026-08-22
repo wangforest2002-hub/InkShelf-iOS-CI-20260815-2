@@ -71,6 +71,7 @@
 - 连续滚动时页码随当前屏幕实时更新；电子书进度包含章内位置，拖动后可恢复到对应段落。
 - 成就由 8 枚扩展为暖心、闪耀、珍稀、传说四档共 23 枚，并保留旧版累计数据。
 - 新增小家等级、连续阅读、每日约定和“离你最近的成就”，书架与成就页加入轻量入场、滚动、数字和光影动画。
+- 2.2.2 在“回家足迹”右上角加入可确认的成就重置入口，只清空足迹成长数据，不影响任何藏书与阅读位置。
 
 ## iCloud Drive 书库
 
@@ -125,7 +126,7 @@
 发布新的已签名 IPA：
 
 ```powershell
-.\scripts\Publish-OnlineUpdate.ps1 -SignedIpa "D:\path\二次元小家-signed.ipa" -Version "2.2.1" -Build 20 -Notes "修正页码与进度条","新增小家等级、每日约定与四档成就"
+.\scripts\Publish-OnlineUpdate.ps1 -SignedIpa "D:\path\二次元小家-signed.ipa" -Version "2.2.2" -Build 21 -Notes "支持安全重置成就进度","不影响藏书缓存和阅读位置"
 ```
 
 ## X 图片珍藏与 Sharp 清晰化

@@ -104,6 +104,16 @@ final class ReaderNavigationUITests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["after-dark-draw"].exists)
 
         app.tabBars.buttons["设置"].tap()
+        let achievementSettings = app.buttons["settings-achievements"]
+        for _ in 0..<4 where !achievementSettings.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(achievementSettings.waitForExistence(timeout: 3), "The achievement center is missing from Settings")
+        achievementSettings.tap()
+        XCTAssertTrue(app.navigationBars["回家足迹"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["achievements-options"].exists, "The safe achievement reset menu is missing")
+        app.navigationBars["回家足迹"].buttons.element(boundBy: 0).tap()
+
         let onlineUpdate = app.buttons["settings-online-update"]
         for _ in 0..<5 where !onlineUpdate.isHittable {
             app.swipeUp()

@@ -728,6 +728,11 @@ final class BookModelTests: XCTestCase {
         XCTAssertEqual(restored.footprint.openedBookIDs, Set([bookID]))
         XCTAssertEqual(restored.footprint.pagesTurned, 1)
         XCTAssertEqual(restored.unlockedCount, 3)
+        restored.resetProgress()
+        XCTAssertTrue(restored.footprint.openedBookIDs.isEmpty)
+        XCTAssertEqual(restored.footprint.pagesTurned, 0)
+        XCTAssertEqual(restored.unlockedCount, 0)
+        XCTAssertNil(defaults.data(forKey: "reading.footprint.v1"))
     }
 
     func testReaderPagePositionKeepsSpreadLabelAndSliderInSync() {

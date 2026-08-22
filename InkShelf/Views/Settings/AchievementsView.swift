@@ -4,6 +4,8 @@ struct AchievementsView: View {
     @Environment(AchievementStore.self) private var achievements
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var appeared = false
+    @State private var showResetConfirmation = false
+    @State private var resetFeedback = 0
     private let columns = [GridItem(.adaptive(minimum: 150, maximum: 230), spacing: 14)]
 
     var body: some View {
@@ -57,6 +59,43 @@ struct AchievementsView: View {
             }
         }
         .navigationTitle("回家足迹")
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Button(role: .destructive) {
+                        showResetConfirmation = true
+                    } label: {
+                        Label("重置成就进度", systemImage: "arrow.counterclockwise")
+                    }
+                } label: {
+                    Label("足迹设置", systemImage: "ellipsis.circle")
+                }
+                .accessibilityIdentifier("achievements-options")
+            }
+        }
+        .confirmationDialog(
+            "重新开始回家足迹？",
+            isPresented: $showResetConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("清空等级与全部成就", role: .destructive) {
+                withAnimation(reduceMotion ? nil : .smooth(duration: 0.45)) {
+                    achievements.resetProgress()
+                    appeared = false
+                    resetFeedback += 1
+                }
+                Task { @MainActor in
+                    await Task.yield()
+                    withAnimation(reduceMotion ? nil : .smooth(duration: 0.65)) {
+                        appeared = true
+                    }
+                }
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("会清空小家等级、徽章、连续阅读和每日任务；不会删除书籍、缓存、分组、珍藏或阅读位置。")
+        }
+        .sensoryFeedback(.warning, trigger: resetFeedback)
         .onAppear {
             withAnimation(reduceMotion ? nil : .smooth(duration: 0.7)) {
                 appeared = true
