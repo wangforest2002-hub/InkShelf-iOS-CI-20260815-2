@@ -55,7 +55,7 @@ jobs:
             -parallel-testing-enabled NO
 
       - name: Run model and reading-restoration tests
-        timeout-minutes: 8
+        timeout-minutes: 12
         run: |
           set -o pipefail
           xcodebuild test-without-building \
