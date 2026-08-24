@@ -213,7 +213,6 @@ struct ReaderView: View {
                 .zIndex(20)
             }
         }
-        .accessibilityIdentifier("reader-view")
         .toolbar(.hidden, for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
         .statusBarHidden(!controlsVisible)

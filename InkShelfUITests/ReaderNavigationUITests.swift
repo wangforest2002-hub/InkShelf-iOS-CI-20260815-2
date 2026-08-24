@@ -34,16 +34,11 @@ final class ReaderNavigationUITests: XCTestCase {
             book.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         }
 
+        let back = app.buttons["reader-close"]
         XCTAssertTrue(
-            app.descendants(matching: .any)["reader-view"].waitForExistence(timeout: 10),
-            "Tapping a valid local book did not enter ReaderView"
+            back.waitForExistence(timeout: 12),
+            "Tapping a valid local book did not expose ReaderView controls"
         )
-        var back = app.buttons["reader-close"]
-        if !back.waitForExistence(timeout: 8) {
-            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
-            back = app.buttons["reader-close"]
-        }
-        XCTAssertTrue(back.waitForExistence(timeout: 4), "Reader controls never became available")
         let progress = app.sliders["reader-progress"]
         XCTAssertTrue(progress.exists, "Reader controls did not finish loading")
         XCTAssertTrue(
@@ -239,15 +234,9 @@ final class ReaderNavigationUITests: XCTestCase {
         imported.tap()
 
         XCTAssertTrue(
-            app.descendants(matching: .any)["reader-view"].waitForExistence(timeout: 10),
-            "The imported image did not enter ReaderView"
+            app.buttons["reader-close"].waitForExistence(timeout: 12),
+            "The imported image did not expose ReaderView controls"
         )
-        var back = app.buttons["reader-close"]
-        if !back.waitForExistence(timeout: 8) {
-            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
-            back = app.buttons["reader-close"]
-        }
-        XCTAssertTrue(back.waitForExistence(timeout: 4), "Imported-image reader controls never became available")
     }
 
     @discardableResult
