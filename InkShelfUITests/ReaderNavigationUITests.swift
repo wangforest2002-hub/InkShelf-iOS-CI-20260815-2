@@ -89,6 +89,29 @@ final class ReaderNavigationUITests: XCTestCase {
             "The spread page label and progress scrubber are out of sync"
         )
 
+        // Rapid external navigation used to leave several asynchronous scroll
+        // requests queued. A stale request could execute last and pull the
+        // reader back to an older page after the user's finger had stopped.
+        progress.adjust(toNormalizedSliderPosition: 0)
+        progress.adjust(toNormalizedSliderPosition: 1)
+        progress.adjust(toNormalizedSliderPosition: 0)
+        progress.adjust(toNormalizedSliderPosition: 1)
+        Thread.sleep(forTimeInterval: 0.7)
+        XCTAssertTrue(
+            String(describing: progress.value).contains("第 2–3 页，共 3 页"),
+            "A stale image-pager alignment request changed the final spread"
+        )
+
+        layout.tap()
+        progress.adjust(toNormalizedSliderPosition: 0)
+        progress.adjust(toNormalizedSliderPosition: 1)
+        progress.adjust(toNormalizedSliderPosition: 0.5)
+        Thread.sleep(forTimeInterval: 0.7)
+        XCTAssertTrue(
+            String(describing: progress.value).contains("第 2 页，共 3 页"),
+            "Rapid single-page scrubbing did not settle on the user's final request"
+        )
+
         back.tap()
         XCTAssertTrue(book.waitForExistence(timeout: 4), "Returning from ReaderView did not restore the shelf")
         XCTAssertTrue(app.tabBars.buttons["最近"].exists)

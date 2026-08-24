@@ -69,21 +69,7 @@ struct ImagePagerView: UIViewRepresentable {
 
         let groups = context.coordinator.groups
         let target = groups.firstIndex { $0.indices.contains(currentPage) } ?? 0
-        guard !groups.isEmpty,
-              !collectionView.isDragging,
-              !collectionView.isDecelerating,
-              context.coordinator.visibleIndex(in: collectionView) != target
-        else { return }
-
-        DispatchQueue.main.async {
-            collectionView.layoutIfNeeded()
-            guard target < collectionView.numberOfItems(inSection: 0) else { return }
-            collectionView.scrollToItem(
-                at: IndexPath(item: target, section: 0),
-                at: self.flow == .horizontal ? .centeredHorizontally : .centeredVertically,
-                animated: false
-            )
-        }
+        context.coordinator.align(collectionView, to: target)
     }
 
     fileprivate var configurationKey: String {
@@ -103,12 +89,16 @@ struct ImagePagerView: UIViewRepresentable {
         fileprivate var groups: [ImagePageGroup] = []
         fileprivate var configurationKey = ""
         private var continuousAspectRatio: CGFloat = 0.70
+        private var alignmentGeneration = 0
+        private var pendingAlignmentIndex: Int?
+        private var isApplyingProgrammaticAlignment = false
 
         init(parent: ImagePagerView) {
             self.parent = parent
         }
 
         func rebuildConfiguration(from parent: ImagePagerView) {
+            cancelPendingAlignment()
             configurationKey = parent.configurationKey
             groups = ImagePageGroup.make(
                 urls: parent.imageURLs,
@@ -120,6 +110,73 @@ struct ImagePagerView: UIViewRepresentable {
                 let size = ReaderImagePipeline.pixelSize(of: firstURL)
                 continuousAspectRatio = min(max(size.width / max(size.height, 1), 0.12), 3)
             }
+        }
+
+        /// SwiftUI may call `updateUIView` several times before the main queue
+        /// performs a collection-view scroll. Only the newest requested page is
+        /// allowed to execute; older queued requests are invalidated so they
+        /// cannot pull the reader back after a rapid scrub or layout change.
+        func align(_ collectionView: UICollectionView, to requestedIndex: Int) {
+            guard !groups.isEmpty else {
+                cancelPendingAlignment()
+                return
+            }
+            let target = min(max(0, requestedIndex), groups.count - 1)
+            guard !collectionView.isDragging, !collectionView.isDecelerating else {
+                cancelPendingAlignment()
+                return
+            }
+            guard visibleIndex(in: collectionView) != target else {
+                if pendingAlignmentIndex != nil { cancelPendingAlignment() }
+                return
+            }
+            guard pendingAlignmentIndex != target else { return }
+
+            alignmentGeneration += 1
+            let generation = alignmentGeneration
+            pendingAlignmentIndex = target
+
+            DispatchQueue.main.async { [weak self, weak collectionView] in
+                guard let self, let collectionView else { return }
+                guard self.alignmentGeneration == generation,
+                      self.pendingAlignmentIndex == target
+                else { return }
+                guard !collectionView.isDragging, !collectionView.isDecelerating else {
+                    self.cancelPendingAlignment()
+                    return
+                }
+                guard target < collectionView.numberOfItems(inSection: 0) else {
+                    self.finishAlignment(generation: generation)
+                    return
+                }
+
+                collectionView.layoutIfNeeded()
+                guard self.visibleIndex(in: collectionView) != target else {
+                    self.finishAlignment(generation: generation)
+                    return
+                }
+
+                self.isApplyingProgrammaticAlignment = true
+                collectionView.scrollToItem(
+                    at: IndexPath(item: target, section: 0),
+                    at: self.parent.flow == .horizontal ? .centeredHorizontally : .centeredVertically,
+                    animated: false
+                )
+                collectionView.layoutIfNeeded()
+                self.isApplyingProgrammaticAlignment = false
+                self.finishAlignment(generation: generation)
+            }
+        }
+
+        private func finishAlignment(generation: Int) {
+            guard alignmentGeneration == generation else { return }
+            pendingAlignmentIndex = nil
+        }
+
+        private func cancelPendingAlignment() {
+            alignmentGeneration += 1
+            pendingAlignmentIndex = nil
+            isApplyingProgrammaticAlignment = false
         }
 
         func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
@@ -170,6 +227,10 @@ struct ImagePagerView: UIViewRepresentable {
             updateCurrentPage(from: scrollView)
         }
 
+        func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
+            cancelPendingAlignment()
+        }
+
         func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
             if !decelerate { updateCurrentPage(from: scrollView) }
         }
@@ -212,6 +273,7 @@ struct ImagePagerView: UIViewRepresentable {
         }
 
         private func updateCurrentPage(from scrollView: UIScrollView) {
+            guard !isApplyingProgrammaticAlignment, pendingAlignmentIndex == nil else { return }
             let index = min(max(0, visibleIndex(in: scrollView)), max(0, groups.count - 1))
             guard groups.indices.contains(index), let page = groups[index].indices.first else { return }
             if parent.currentPage != page { parent.currentPage = page }

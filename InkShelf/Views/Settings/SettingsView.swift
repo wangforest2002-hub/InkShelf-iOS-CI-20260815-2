@@ -192,7 +192,7 @@ struct SettingsView: View {
                 }
 
                 Section("关于") {
-                    LabeledContent("二次元小家", value: "2.3.0 · 画廊夜灯版")
+                    LabeledContent("二次元小家", value: "2.3.1 · 稳定翻页版")
                     Button("重新查看欢迎页") {
                         hasSeenWelcome = false
                     }

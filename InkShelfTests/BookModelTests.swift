@@ -775,6 +775,50 @@ final class BookModelTests: XCTestCase {
         XCTAssertEqual(continuous.visibleRange, 2...2)
     }
 
+    func testEverySpreadPageNormalizesToOneStableAnchor() {
+        for coverSingle in [false, true] {
+            for flow in [ReaderFlow.horizontal, .vertical] {
+                for page in 0..<13 {
+                    let position = ReaderPagePosition(
+                        currentPage: page,
+                        pageCount: 13,
+                        layout: .spread,
+                        flow: flow,
+                        coverSingle: coverSingle,
+                        isEBook: false
+                    )
+                    XCTAssertTrue(position.visibleRange.contains(page))
+
+                    let normalizedAgain = ReaderPagePosition(
+                        currentPage: position.anchorPage,
+                        pageCount: 13,
+                        layout: .spread,
+                        flow: flow,
+                        coverSingle: coverSingle,
+                        isEBook: false
+                    )
+                    XCTAssertEqual(normalizedAgain.anchorPage, position.anchorPage)
+
+                    for visiblePage in position.visibleRange {
+                        let callbackAnchor = ReaderPagePosition(
+                            currentPage: visiblePage,
+                            pageCount: 13,
+                            layout: .spread,
+                            flow: flow,
+                            coverSingle: coverSingle,
+                            isEBook: false
+                        ).anchorPage
+                        XCTAssertEqual(
+                            callbackAnchor,
+                            position.anchorPage,
+                            "Either physical page reported by PDFKit must resolve to the same spread"
+                        )
+                    }
+                }
+            }
+        }
+    }
+
     func testEBookProgressScrubberIncludesChapterProgress() {
         let position = ReaderPagePosition(
             currentPage: 1,

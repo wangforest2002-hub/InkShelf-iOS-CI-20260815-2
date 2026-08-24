@@ -48,17 +48,7 @@ struct PDFKitReaderView: UIViewRepresentable {
         context.coordinator.applyConfiguration(to: pdfView)
         context.coordinator.tryPasswordIfNeeded(in: pdfView)
 
-        guard let document = pdfView.document,
-              !document.isLocked,
-              currentPage >= 0,
-              currentPage < document.pageCount,
-              let target = document.page(at: currentPage)
-        else { return }
-
-        let visibleIndex = pdfView.currentPage.flatMap { document.index(for: $0) }
-        if visibleIndex != currentPage {
-            pdfView.go(to: target)
-        }
+        context.coordinator.navigate(to: currentPage, in: pdfView)
     }
 
     static func dismantleUIView(_ pdfView: PDFView, coordinator: Coordinator) {
@@ -72,6 +62,8 @@ struct PDFKitReaderView: UIViewRepresentable {
         private weak var observedPDFView: PDFView?
         private var lastConfiguration = ""
         private var attemptedPassword = ""
+        private var navigationGeneration = 0
+        private var pendingTargetPage: Int?
 
         init(parent: PDFKitReaderView) {
             self.parent = parent
@@ -88,6 +80,7 @@ struct PDFKitReaderView: UIViewRepresentable {
         }
 
         func detach() {
+            cancelPendingNavigation()
             NotificationCenter.default.removeObserver(self, name: .PDFViewPageChanged, object: observedPDFView)
             observedPDFView = nil
         }
@@ -98,8 +91,13 @@ struct PDFKitReaderView: UIViewRepresentable {
                   let page = pdfView.currentPage
             else { return }
             let index = document.index(for: page)
-            if parent.currentPage != index {
-                parent.currentPage = index
+            let anchor = normalizedAnchor(for: index, pageCount: document.pageCount)
+            // PDFKit can emit intermediate page-change notifications while
+            // reconfiguring or executing `go(to:)`. Those notifications must
+            // not overwrite a newer slider/thumbnail request.
+            guard pendingTargetPage == nil else { return }
+            if parent.currentPage != anchor {
+                parent.currentPage = anchor
             }
         }
 
@@ -108,6 +106,13 @@ struct PDFKitReaderView: UIViewRepresentable {
             attemptedPassword = ""
             lastConfiguration = ""
             let document = PDFDocument(url: parent.url)
+            cancelPendingNavigation()
+            if let document, !document.isLocked {
+                beginPendingNavigation(
+                    to: normalizedAnchor(for: parent.currentPage, pageCount: document.pageCount),
+                    in: pdfView
+                )
+            }
             pdfView.document = document
             applyConfiguration(to: pdfView)
             tryPasswordIfNeeded(in: pdfView)
@@ -117,17 +122,20 @@ struct PDFKitReaderView: UIViewRepresentable {
                 return
             }
             parent.onDocumentState(document.pageCount, document.isLocked)
-            if !document.isLocked,
-               parent.currentPage < document.pageCount,
-               let page = document.page(at: parent.currentPage) {
-                pdfView.go(to: page)
-            }
+            if !document.isLocked { navigate(to: parent.currentPage, in: pdfView) }
         }
 
         func applyConfiguration(to pdfView: PDFView) {
             let key = "\(parent.layout.rawValue)-\(parent.flow.rawValue)-\(parent.order.rawValue)-\(parent.coverSingle)"
             guard key != lastConfiguration else { return }
             lastConfiguration = key
+
+            let preservedPage = pdfView.document.map {
+                normalizedAnchor(for: parent.currentPage, pageCount: $0.pageCount)
+            }
+            if let preservedPage, pdfView.document?.isLocked == false {
+                beginPendingNavigation(to: preservedPage, in: pdfView)
+            }
 
             pdfView.displaysRTL = parent.order == .rightToLeft
             pdfView.displaysAsBook = parent.coverSingle
@@ -154,6 +162,9 @@ struct PDFKitReaderView: UIViewRepresentable {
             }
 
             pdfView.autoScales = true
+            if let preservedPage, pdfView.document?.isLocked == false {
+                navigate(to: preservedPage, in: pdfView, force: true)
+            }
         }
 
         func tryPasswordIfNeeded(in pdfView: PDFView) {
@@ -172,11 +183,71 @@ struct PDFKitReaderView: UIViewRepresentable {
             parent.onDocumentState(document.pageCount, !unlocked)
             if unlocked {
                 pdfView.autoScales = true
-                if parent.currentPage < document.pageCount,
-                   let page = document.page(at: parent.currentPage) {
-                    pdfView.go(to: page)
+                navigate(to: parent.currentPage, in: pdfView, force: true)
+            }
+        }
+
+        func navigate(to requestedPage: Int, in pdfView: PDFView, force: Bool = false) {
+            guard let document = pdfView.document, !document.isLocked, document.pageCount > 0 else { return }
+            let target = normalizedAnchor(for: requestedPage, pageCount: document.pageCount)
+            let visibleAnchor = pdfView.currentPage.map {
+                normalizedAnchor(for: document.index(for: $0), pageCount: document.pageCount)
+            }
+
+            if visibleAnchor == target, !force {
+                if let pendingTargetPage, pendingTargetPage != target {
+                    beginPendingNavigation(to: target, in: pdfView)
+                }
+                return
+            }
+
+            beginPendingNavigation(to: target, in: pdfView)
+            guard let page = document.page(at: target) else { return }
+            pdfView.go(to: page)
+        }
+
+        private func normalizedAnchor(for page: Int, pageCount: Int) -> Int {
+            ReaderPagePosition(
+                currentPage: page,
+                pageCount: pageCount,
+                layout: parent.layout,
+                flow: parent.flow,
+                coverSingle: parent.coverSingle,
+                isEBook: false
+            ).anchorPage
+        }
+
+        private func beginPendingNavigation(to target: Int, in pdfView: PDFView) {
+            guard pendingTargetPage != target else { return }
+            navigationGeneration += 1
+            let generation = navigationGeneration
+            pendingTargetPage = target
+
+            // Keep the gate open across PDFKit's delayed notifications, then
+            // reconcile once with the page that is actually visible. A newer
+            // request increments the generation and cancels this reconciliation.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) { [weak self, weak pdfView] in
+                guard let self, let pdfView,
+                      self.navigationGeneration == generation,
+                      self.pendingTargetPage == target
+                else { return }
+                self.pendingTargetPage = nil
+                guard let document = pdfView.document,
+                      let visiblePage = pdfView.currentPage
+                else { return }
+                let visibleAnchor = self.normalizedAnchor(
+                    for: document.index(for: visiblePage),
+                    pageCount: document.pageCount
+                )
+                if self.parent.currentPage != visibleAnchor {
+                    self.parent.currentPage = visibleAnchor
                 }
             }
+        }
+
+        private func cancelPendingNavigation() {
+            navigationGeneration += 1
+            pendingTargetPage = nil
         }
 
         @objc func handleTap() {
