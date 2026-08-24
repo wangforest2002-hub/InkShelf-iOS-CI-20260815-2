@@ -6,6 +6,7 @@ struct ImagePagerView: UIViewRepresentable {
     @Binding var currentPage: Int
     let layout: ReaderLayout
     let flow: ReaderFlow
+    let transition: ReaderPageTransition
     let order: ReadingOrder
     let coverSingle: Bool
     let backgroundColor: UIColor
@@ -70,6 +71,7 @@ struct ImagePagerView: UIViewRepresentable {
         let groups = context.coordinator.groups
         let target = groups.firstIndex { $0.indices.contains(currentPage) } ?? 0
         context.coordinator.align(collectionView, to: target)
+        context.coordinator.refreshPageTurnEffects(in: collectionView)
     }
 
     fileprivate var configurationKey: String {
@@ -165,6 +167,7 @@ struct ImagePagerView: UIViewRepresentable {
                 collectionView.layoutIfNeeded()
                 self.isApplyingProgrammaticAlignment = false
                 self.finishAlignment(generation: generation)
+                self.refreshPageTurnEffects(in: collectionView)
             }
         }
 
@@ -215,6 +218,14 @@ struct ImagePagerView: UIViewRepresentable {
             return cell
         }
 
+        func collectionView(
+            _ collectionView: UICollectionView,
+            didEndDisplaying cell: UICollectionViewCell,
+            forItemAt indexPath: IndexPath
+        ) {
+            (cell as? ImagePageCell)?.resetPageTurn()
+        }
+
         func collectionView(_ collectionView: UICollectionView, prefetchItemsAt indexPaths: [IndexPath]) {
             let pixelSize = preferredPixelSize(for: collectionView)
             let urls = indexPaths.flatMap { indexPath in
@@ -225,6 +236,7 @@ struct ImagePagerView: UIViewRepresentable {
 
         func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
             updateCurrentPage(from: scrollView)
+            refreshPageTurnEffects(in: scrollView)
         }
 
         func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
@@ -232,14 +244,19 @@ struct ImagePagerView: UIViewRepresentable {
         }
 
         func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
-            if !decelerate { updateCurrentPage(from: scrollView) }
+            if !decelerate {
+                updateCurrentPage(from: scrollView)
+                refreshPageTurnEffects(in: scrollView)
+            }
         }
 
         func scrollViewDidEndScrollingAnimation(_ scrollView: UIScrollView) {
             updateCurrentPage(from: scrollView)
+            refreshPageTurnEffects(in: scrollView)
         }
 
         func scrollViewDidScroll(_ scrollView: UIScrollView) {
+            refreshPageTurnEffects(in: scrollView)
             guard parent.flow == .continuous,
                   scrollView.isDragging || scrollView.isDecelerating
             else { return }
@@ -277,6 +294,41 @@ struct ImagePagerView: UIViewRepresentable {
             let index = min(max(0, visibleIndex(in: scrollView)), max(0, groups.count - 1))
             guard groups.indices.contains(index), let page = groups[index].indices.first else { return }
             if parent.currentPage != page { parent.currentPage = page }
+        }
+
+        /// The page itself stays inside UICollectionView's native paging model,
+        /// so gesture physics and page accounting remain deterministic. Only the
+        /// visible presentation is transformed, which gives a book-like turn
+        /// without introducing a second navigation state machine.
+        func refreshPageTurnEffects(in scrollView: UIScrollView) {
+            guard let collectionView = scrollView as? UICollectionView else { return }
+            guard parent.flow == .horizontal, parent.transition == .book else {
+                collectionView.visibleCells.forEach { ($0 as? ImagePageCell)?.resetPageTurn() }
+                return
+            }
+            guard collectionView.bounds.width > 0 else { return }
+
+            let viewportWidth = collectionView.bounds.width
+            let viewportCenter = collectionView.contentOffset.x + collectionView.bounds.midX
+            for cell in collectionView.visibleCells {
+                guard let pageCell = cell as? ImagePageCell else { continue }
+                let rawProgress = (cell.center.x - viewportCenter) / viewportWidth
+                let progress = min(max(rawProgress, -1), 1)
+                let magnitude = abs(progress)
+
+                var transform = CATransform3DIdentity
+                transform.m34 = -1 / 900
+                transform = CATransform3DRotate(transform, -progress * .pi * 0.18, 0, 1, 0)
+                transform = CATransform3DScale(
+                    transform,
+                    1 - magnitude * 0.035,
+                    1 - magnitude * 0.018,
+                    1
+                )
+                pageCell.contentView.layer.transform = transform
+                pageCell.layer.zPosition = 1_000 - magnitude * 100
+                pageCell.updatePageTurn(progress: progress)
+            }
         }
 
         private func preferredPixelSize(for collectionView: UICollectionView) -> Int {
@@ -344,6 +396,7 @@ final class PagerCollectionView: UICollectionView {
 private final class ImagePageCell: UICollectionViewCell {
     static let reuseIdentifier = "ImagePageCell"
     private let zoomView = ZoomingSpreadScrollView()
+    private let pageShadeLayer = CAGradientLayer()
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -355,6 +408,10 @@ private final class ImagePageCell: UICollectionViewCell {
             zoomView.topAnchor.constraint(equalTo: contentView.topAnchor),
             zoomView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor)
         ])
+        pageShadeLayer.isHidden = true
+        contentView.layer.addSublayer(pageShadeLayer)
+        contentView.layer.allowsEdgeAntialiasing = true
+        layer.allowsEdgeAntialiasing = true
     }
 
     required init?(coder: NSCoder) {
@@ -364,12 +421,51 @@ private final class ImagePageCell: UICollectionViewCell {
     override func prepareForReuse() {
         super.prepareForReuse()
         zoomView.clear()
+        resetPageTurn()
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        pageShadeLayer.frame = contentView.bounds
     }
 
     func configure(urls: [URL], pageLabel: String, backgroundColor: UIColor, onTap: @escaping () -> Void) {
         accessibilityLabel = "第 \(pageLabel) 页"
         zoomView.backgroundColor = backgroundColor
         zoomView.configure(urls: urls, onTap: onTap)
+    }
+
+    func updatePageTurn(progress: CGFloat) {
+        let magnitude = min(1, abs(progress))
+        guard magnitude > 0.002 else {
+            resetPageTurn()
+            return
+        }
+
+        let clear = UIColor.clear.cgColor
+        let highlight = UIColor.white.withAlphaComponent(0.20).cgColor
+        let shade = UIColor.black.withAlphaComponent(0.58).cgColor
+        pageShadeLayer.colors = progress > 0
+            ? [clear, highlight, shade]
+            : [shade, highlight, clear]
+        pageShadeLayer.locations = [0, 0.78, 1]
+        pageShadeLayer.startPoint = CGPoint(x: 0, y: 0.5)
+        pageShadeLayer.endPoint = CGPoint(x: 1, y: 0.5)
+        pageShadeLayer.opacity = Float(pow(magnitude, 0.72))
+        pageShadeLayer.isHidden = false
+
+        contentView.layer.shadowColor = UIColor.black.cgColor
+        contentView.layer.shadowOpacity = Float(0.28 * magnitude)
+        contentView.layer.shadowRadius = 18
+        contentView.layer.shadowOffset = CGSize(width: progress > 0 ? -8 : 8, height: 2)
+    }
+
+    func resetPageTurn() {
+        contentView.layer.transform = CATransform3DIdentity
+        contentView.layer.shadowOpacity = 0
+        pageShadeLayer.opacity = 0
+        pageShadeLayer.isHidden = true
+        layer.zPosition = 0
     }
 }
 

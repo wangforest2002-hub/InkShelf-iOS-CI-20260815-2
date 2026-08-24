@@ -7,6 +7,7 @@ struct PDFKitReaderView: UIViewRepresentable {
     @Binding var currentPage: Int
     let layout: ReaderLayout
     let flow: ReaderFlow
+    let transition: ReaderPageTransition
     let order: ReadingOrder
     let coverSingle: Bool
     let password: String
@@ -126,7 +127,7 @@ struct PDFKitReaderView: UIViewRepresentable {
         }
 
         func applyConfiguration(to pdfView: PDFView) {
-            let key = "\(parent.layout.rawValue)-\(parent.flow.rawValue)-\(parent.order.rawValue)-\(parent.coverSingle)"
+            let key = "\(parent.layout.rawValue)-\(parent.flow.rawValue)-\(parent.transition.rawValue)-\(parent.order.rawValue)-\(parent.coverSingle)"
             guard key != lastConfiguration else { return }
             lastConfiguration = key
 
@@ -139,6 +140,15 @@ struct PDFKitReaderView: UIViewRepresentable {
 
             pdfView.displaysRTL = parent.order == .rightToLeft
             pdfView.displaysAsBook = parent.coverSingle
+            let usesBookPresentation = parent.transition == .book && parent.flow == .horizontal
+            pdfView.pageShadowsEnabled = usesBookPresentation
+            let pageSpacing: CGFloat = usesBookPresentation ? 4 : 12
+            pdfView.pageBreakMargins = UIEdgeInsets(
+                top: pageSpacing,
+                left: pageSpacing,
+                bottom: pageSpacing,
+                right: pageSpacing
+            )
 
             switch parent.flow {
             case .horizontal:
@@ -146,14 +156,14 @@ struct PDFKitReaderView: UIViewRepresentable {
                 pdfView.displayMode = parent.layout == .single ? .singlePage : .twoUp
                 pdfView.usePageViewController(
                     true,
-                    withViewOptions: [UIPageViewController.OptionsKey.interPageSpacing: 12]
+                    withViewOptions: [UIPageViewController.OptionsKey.interPageSpacing: pageSpacing]
                 )
             case .vertical:
                 pdfView.displayDirection = .vertical
                 pdfView.displayMode = parent.layout == .single ? .singlePage : .twoUp
                 pdfView.usePageViewController(
                     true,
-                    withViewOptions: [UIPageViewController.OptionsKey.interPageSpacing: 12]
+                    withViewOptions: [UIPageViewController.OptionsKey.interPageSpacing: pageSpacing]
                 )
             case .continuous:
                 pdfView.usePageViewController(false, withViewOptions: nil)

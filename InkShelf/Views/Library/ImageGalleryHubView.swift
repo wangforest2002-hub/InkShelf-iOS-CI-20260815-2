@@ -6,6 +6,7 @@ import UniformTypeIdentifiers
 struct ImageGalleryHubView: View {
     @Environment(LibraryStore.self) private var library
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var section: ImageGallerySection = .imports
     @State private var query = ""
     @State private var showFilePicker = false
@@ -161,7 +162,7 @@ struct ImageGalleryHubView: View {
         } message: { book in
             Text("会删除这项内容的本地副本；其他画集、单页珍藏和收藏读物不会受到影响。")
         }
-        .animation(.snappy(duration: 0.34), value: section)
+        .animation(reduceMotion ? nil : AppMotion.panel, value: section)
     }
 
     @ViewBuilder
@@ -431,7 +432,7 @@ private struct ImageGalleryHero: View {
         .opacity(appeared ? 1 : 0)
         .offset(y: appeared ? 0 : 8)
         .onAppear {
-            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.5)) { appeared = true }
+            withAnimation(reduceMotion ? nil : AppMotion.reveal) { appeared = true }
         }
     }
 }

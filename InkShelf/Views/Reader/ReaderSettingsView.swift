@@ -4,6 +4,7 @@ struct ReaderSettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @Binding var layoutRaw: String
     @Binding var flowRaw: String
+    @Binding var pageTransitionRaw: String
     @Binding var orderRaw: String
     @Binding var backdropRaw: String
     @Binding var coverSingle: Bool
@@ -85,6 +86,18 @@ struct ReaderSettingsView: View {
                         }
                         .accessibilityIdentifier("reader-flow")
 
+                        Picker("动效", selection: $pageTransitionRaw) {
+                            ForEach(ReaderPageTransition.allCases) { item in
+                                Label(item.title, systemImage: item.systemImage).tag(item.rawValue)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                        .accessibilityIdentifier("reader-page-transition")
+
+                        Text("纸张翻页会为横向漫画、画集和分页 PDF 加入轻盈的透视、书脊阴影与页缘高光；纵向阅读仍保持自然滚动。")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+
                         Picker("顺序", selection: $orderRaw) {
                             ForEach(ReadingOrder.allCases) { item in
                                 Label(item.title, systemImage: item.systemImage).tag(item.rawValue)
@@ -107,10 +120,10 @@ struct ReaderSettingsView: View {
                         LabeledContent("当前设置", value: "自动记住到本书")
                         Button {
                             saveComicDefaults()
-                            withAnimation(.snappy) { didSaveComicDefaults = true }
+                            withAnimation(AppMotion.panel) { didSaveComicDefaults = true }
                             Task {
                                 try? await Task.sleep(for: .seconds(2))
-                                withAnimation(.easeOut) { didSaveComicDefaults = false }
+                                withAnimation(AppMotion.value) { didSaveComicDefaults = false }
                             }
                         } label: {
                             Label(

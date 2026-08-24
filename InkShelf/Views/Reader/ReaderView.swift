@@ -40,6 +40,7 @@ struct ReaderView: View {
 
     @AppStorage("reader.layout") private var defaultLayoutRaw = ReaderLayout.single.rawValue
     @AppStorage("reader.flow") private var defaultFlowRaw = ReaderFlow.horizontal.rawValue
+    @AppStorage("reader.pageTransition") private var pageTransitionRaw = ReaderPageTransition.book.rawValue
     @AppStorage("reader.order") private var defaultOrderRaw = ReadingOrder.leftToRight.rawValue
     @AppStorage("reader.backdrop") private var defaultBackdropRaw = ReaderBackdrop.black.rawValue
     @AppStorage("reader.coverSingle") private var defaultCoverSingle = true
@@ -82,6 +83,7 @@ struct ReaderView: View {
 
     private var layout: ReaderLayout { ReaderLayout(rawValue: layoutRaw) ?? .single }
     private var flow: ReaderFlow { ReaderFlow(rawValue: flowRaw) ?? .horizontal }
+    private var pageTransition: ReaderPageTransition { ReaderPageTransition(rawValue: pageTransitionRaw) ?? .book }
     private var order: ReadingOrder { ReadingOrder(rawValue: orderRaw) ?? .leftToRight }
     private var backdrop: ReaderBackdrop { ReaderBackdrop(rawValue: backdropRaw) ?? .black }
     private var ebookFlow: EBookFlow { EBookFlow(rawValue: ebookFlowRaw) ?? .paged }
@@ -346,6 +348,7 @@ struct ReaderView: View {
             ReaderSettingsView(
                 layoutRaw: $layoutRaw,
                 flowRaw: $flowRaw,
+                pageTransitionRaw: $pageTransitionRaw,
                 orderRaw: $orderRaw,
                 backdropRaw: $backdropRaw,
                 coverSingle: $coverSingle,
@@ -439,6 +442,7 @@ struct ReaderView: View {
                 currentPage: $currentPage,
                 layout: layout,
                 flow: flow,
+                transition: reduceMotion ? .slide : pageTransition,
                 order: order,
                 coverSingle: coverSingle,
                 password: pdfPassword,
@@ -455,6 +459,7 @@ struct ReaderView: View {
                 currentPage: $currentPage,
                 layout: layout,
                 flow: flow,
+                transition: reduceMotion ? .slide : pageTransition,
                 order: order,
                 coverSingle: coverSingle,
                 backgroundColor: UIColor(backdrop.color),
@@ -479,7 +484,7 @@ struct ReaderView: View {
             library.updatePageCount(bookID: book.id, pageCount: count)
         }
         if pdfLocked != locked {
-            withAnimation(reduceMotion ? nil : .snappy) {
+            withAnimation(reduceMotion ? nil : AppMotion.panel) {
                 pdfLocked = locked
             }
         }
@@ -609,13 +614,13 @@ struct ReaderView: View {
     }
 
     private func showNotice(_ text: String) {
-        withAnimation(reduceMotion ? nil : .snappy(duration: 0.26)) {
+        withAnimation(reduceMotion ? nil : AppMotion.panel) {
             readerNotice = text
         }
         Task {
             try? await Task.sleep(for: .seconds(2.2))
             guard readerNotice == text else { return }
-            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.22)) {
+            withAnimation(reduceMotion ? nil : AppMotion.value) {
                 readerNotice = nil
             }
         }
@@ -623,13 +628,13 @@ struct ReaderView: View {
 
     private func toggleLayout() {
         if book.kind == .ebook {
-            withAnimation(reduceMotion ? nil : .snappy) {
+            withAnimation(reduceMotion ? nil : AppMotion.panel) {
                 ebookFlowRaw = ebookFlow == .paged ? EBookFlow.scroll.rawValue : EBookFlow.paged.rawValue
             }
             showControlsTemporarily()
             return
         }
-        withAnimation(reduceMotion ? nil : .snappy) {
+        withAnimation(reduceMotion ? nil : AppMotion.panel) {
             layoutRaw = layout == .single ? ReaderLayout.spread.rawValue : ReaderLayout.single.rawValue
         }
         showControlsTemporarily()
@@ -646,7 +651,7 @@ struct ReaderView: View {
 
     private func toggleControls() {
         hideControlsTask?.cancel()
-        withAnimation(reduceMotion ? nil : .snappy(duration: 0.28)) {
+        withAnimation(reduceMotion ? nil : AppMotion.panel) {
             controlsVisible.toggle()
         }
         if controlsVisible { scheduleControlsHide() }
@@ -654,7 +659,7 @@ struct ReaderView: View {
 
     private func showControlsTemporarily() {
         if !controlsVisible {
-            withAnimation(reduceMotion ? nil : .snappy) {
+            withAnimation(reduceMotion ? nil : AppMotion.panel) {
                 controlsVisible = true
             }
         }
@@ -746,7 +751,7 @@ struct ReaderView: View {
                   !showEndComments,
                   !pdfLocked
             else { return }
-            withAnimation(reduceMotion ? nil : .smooth(duration: 0.28)) {
+            withAnimation(reduceMotion ? nil : AppMotion.value) {
                 controlsVisible = false
             }
         }
@@ -920,7 +925,7 @@ private struct ReaderControls: View {
                     Label(position.displayLabel, systemImage: isEBook ? "text.book.closed.fill" : "book.pages.fill")
                         .font(.caption.weight(.semibold))
                         .contentTransition(.numericText())
-                        .animation(reduceMotion ? nil : .snappy(duration: 0.24), value: currentPage)
+                        .animation(reduceMotion ? nil : AppMotion.value, value: currentPage)
                         .accessibilityIdentifier("reader-page-label")
 
                     Spacer()
@@ -929,7 +934,7 @@ private struct ReaderControls: View {
                         .font(.caption.monospacedDigit().weight(.bold))
                         .foregroundStyle(nightMood == nil ? AppTheme.accent : AppTheme.coral)
                         .contentTransition(.numericText())
-                        .animation(reduceMotion ? nil : .snappy(duration: 0.24), value: currentPage)
+                        .animation(reduceMotion ? nil : AppMotion.value, value: currentPage)
                         .accessibilityIdentifier("reader-progress-percent")
                 }
 
@@ -1016,7 +1021,7 @@ private struct ReaderControls: View {
         }
         .foregroundStyle(.primary)
         .onAppear {
-            withAnimation(reduceMotion ? nil : .snappy(duration: 0.34)) {
+            withAnimation(reduceMotion ? nil : AppMotion.panel) {
                 appeared = true
             }
         }

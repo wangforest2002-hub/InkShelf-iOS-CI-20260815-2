@@ -7,6 +7,7 @@ struct SettingsView: View {
     @AppStorage("appearance") private var appearance = AppAppearance.light.rawValue
     @AppStorage("reader.layout") private var layout = ReaderLayout.single.rawValue
     @AppStorage("reader.flow") private var flow = ReaderFlow.horizontal.rawValue
+    @AppStorage("reader.pageTransition") private var pageTransition = ReaderPageTransition.book.rawValue
     @AppStorage("reader.order") private var order = ReadingOrder.leftToRight.rawValue
     @AppStorage("reader.backdrop") private var backdrop = ReaderBackdrop.black.rawValue
     @AppStorage("reader.coverSingle") private var coverSingle = true
@@ -66,6 +67,12 @@ struct SettingsView: View {
 
                     Picker("翻页方向", selection: $flow) {
                         ForEach(ReaderFlow.allCases) { item in
+                            Label(item.title, systemImage: item.systemImage).tag(item.rawValue)
+                        }
+                    }
+
+                    Picker("翻页动效", selection: $pageTransition) {
+                        ForEach(ReaderPageTransition.allCases) { item in
                             Label(item.title, systemImage: item.systemImage).tag(item.rawValue)
                         }
                     }
@@ -192,7 +199,7 @@ struct SettingsView: View {
                 }
 
                 Section("关于") {
-                    LabeledContent("二次元小家", value: "2.3.1 · 稳定翻页版")
+                    LabeledContent("二次元小家", value: "2.4.0 · 纸张翻页版")
                     Button("重新查看欢迎页") {
                         hasSeenWelcome = false
                     }

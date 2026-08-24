@@ -20,6 +20,14 @@ enum AppTheme {
     )
 }
 
+/// Shared motion timing keeps cards, panels and reader chrome feeling like one app.
+enum AppMotion {
+    static let press = Animation.snappy(duration: 0.20)
+    static let value = Animation.smooth(duration: 0.24)
+    static let panel = Animation.spring(response: 0.46, dampingFraction: 0.88)
+    static let reveal = Animation.spring(response: 0.58, dampingFraction: 0.86)
+}
+
 struct AuroraBackground: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var colorScheme
@@ -192,7 +200,7 @@ struct PressableCardStyle: ButtonStyle {
         configuration.label
             .scaleEffect(configuration.isPressed ? 0.975 : 1)
             .opacity(configuration.isPressed ? 0.92 : 1)
-            .animation(reduceMotion ? nil : .snappy(duration: 0.22), value: configuration.isPressed)
+            .animation(reduceMotion ? nil : AppMotion.press, value: configuration.isPressed)
     }
 }
 
@@ -220,7 +228,7 @@ struct AppearanceModeButton: View {
     }
 
     private func toggle() {
-        withAnimation(reduceMotion ? nil : .smooth(duration: 0.38)) {
+        withAnimation(reduceMotion ? nil : AppMotion.panel) {
             appearance = isNight ? AppAppearance.light.rawValue : AppAppearance.dark.rawValue
         }
     }

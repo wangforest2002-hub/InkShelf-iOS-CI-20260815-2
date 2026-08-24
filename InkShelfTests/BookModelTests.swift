@@ -1135,6 +1135,12 @@ final class BookModelTests: XCTestCase {
         XCTAssertEqual(properties[kCGImagePropertyPixelHeight] as? Int, inputHeight * 2)
     }
 
+    func testReaderPageTransitionOffersBookAndReducedMotionFallback() {
+        XCTAssertEqual(ReaderPageTransition.allCases.map(\.rawValue), ["book", "slide"])
+        XCTAssertEqual(ReaderPageTransition.book.title, "纸张翻页")
+        XCTAssertEqual(ReaderPageTransition.slide.title, "平滑滑动")
+    }
+
     @MainActor
     func testPreparingOnlineUpdateBacksUpIndexesWithoutTouchingBookPages() throws {
         let fileManager = FileManager.default

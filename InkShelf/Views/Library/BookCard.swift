@@ -122,8 +122,7 @@ struct BookCard: View {
             withAnimation(
                 reduceMotion
                     ? nil
-                    : .spring(response: 0.62, dampingFraction: 0.84)
-                        .delay(entranceDelay)
+                    : AppMotion.reveal.delay(entranceDelay)
             ) {
                 settled = true
             }

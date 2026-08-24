@@ -31,6 +31,15 @@ enum ReaderFlow: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
+enum ReaderPageTransition: String, CaseIterable, Identifiable, Sendable {
+    case book
+    case slide
+
+    var id: String { rawValue }
+    var title: String { self == .book ? "纸张翻页" : "平滑滑动" }
+    var systemImage: String { self == .book ? "book.pages.fill" : "rectangle.portrait.on.rectangle.portrait" }
+}
+
 enum ReadingOrder: String, CaseIterable, Identifiable {
     case leftToRight
     case rightToLeft

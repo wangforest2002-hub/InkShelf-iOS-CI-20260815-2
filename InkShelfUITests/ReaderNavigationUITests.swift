@@ -70,6 +70,10 @@ final class ReaderNavigationUITests: XCTestCase {
             app.descendants(matching: .any)["reader-flow"].exists,
             "The horizontal, vertical, and continuous reading selector is missing"
         )
+        XCTAssertTrue(
+            app.descendants(matching: .any)["reader-page-transition"].exists,
+            "The book-turn and smooth-slide selector is missing"
+        )
         app.buttons["完成"].tap()
 
         let thumbnails = app.buttons["reader-thumbnails"]

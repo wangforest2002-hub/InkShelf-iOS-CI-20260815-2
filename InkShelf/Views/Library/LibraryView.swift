@@ -7,6 +7,7 @@ struct LibraryView: View {
     @Environment(AchievementStore.self) private var achievements
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let scope: LibraryScope
 
     @AppStorage("library.sortOrder") private var sortOrderRaw = LibrarySortOrder.lastOpened.rawValue
@@ -390,7 +391,7 @@ struct LibraryView: View {
             case .create:
                 ShelfGroupEditorView(navigationTitle: "新建分组") { title in
                     if let group = library.createShelfGroup(title: title) {
-                        withAnimation(.snappy(duration: 0.3)) {
+                        withAnimation(reduceMotion ? nil : AppMotion.panel) {
                             shelfFilter = .group(group.id)
                         }
                     }
@@ -923,7 +924,7 @@ private struct HomeWelcomeHeader: View {
         .opacity(appeared ? 1 : 0)
         .offset(y: appeared ? 0 : 8)
         .onAppear {
-            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.55)) {
+            withAnimation(reduceMotion ? nil : AppMotion.reveal) {
                 appeared = true
             }
         }
@@ -1032,7 +1033,7 @@ private struct FootprintHomeCard: View {
         .inkGlass(cornerRadius: 22, interactive: true)
         .overlay { WarmLightSweep().clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous)) }
         .onAppear {
-            withAnimation(reduceMotion ? nil : .smooth(duration: 0.65)) { appeared = true }
+            withAnimation(reduceMotion ? nil : AppMotion.reveal) { appeared = true }
         }
         .accessibilityElement(children: .combine)
     }

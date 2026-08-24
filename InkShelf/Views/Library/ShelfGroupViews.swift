@@ -7,6 +7,7 @@ enum ShelfFilter: Hashable {
 }
 
 struct ShelfGroupStrip: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Binding var selection: ShelfFilter
     let groups: [ShelfGroup]
     let totalCount: Int
@@ -78,7 +79,7 @@ struct ShelfGroupStrip: View {
     ) -> some View {
         let selected = selection == filter
         return Button {
-            withAnimation(.snappy(duration: 0.28)) { selection = filter }
+            withAnimation(reduceMotion ? nil : AppMotion.panel) { selection = filter }
         } label: {
             HStack(spacing: 7) {
                 Image(systemName: symbol)
