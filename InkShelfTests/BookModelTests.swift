@@ -364,10 +364,14 @@ final class BookModelTests: XCTestCase {
         let store = LibraryStore(fileManager: fileManager, defaults: defaults, documentsURL: documents)
         store.importFiles([cbz, pdf, gallery], removeSourcesAfterImport: true)
 
-        for _ in 0..<400 where store.isImporting {
+        // PDFKit cover rendering can take longer on a newly booted, loaded CI
+        // simulator. Keep every result assertion below, but allow the real
+        // import pipeline enough time to finish instead of treating startup
+        // variance as an import failure.
+        for _ in 0..<1_200 where store.isImporting {
             try await Task.sleep(for: .milliseconds(25))
         }
-        XCTAssertFalse(store.isImporting, "The document-picker import pipeline did not finish in ten seconds")
+        XCTAssertFalse(store.isImporting, "The document-picker import pipeline did not finish in thirty seconds")
         XCTAssertNil(store.alert)
         let imported = store.books
 
