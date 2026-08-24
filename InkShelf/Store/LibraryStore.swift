@@ -7,6 +7,23 @@ struct LibraryAlert: Identifiable {
     let message: String
 }
 
+struct DuplicateImportMatch: Identifiable, Sendable {
+    let importedBook: Book
+    let existingBook: Book
+    var id: UUID { importedBook.id }
+}
+
+struct DuplicateImportPrompt: Identifiable, Sendable {
+    let id = UUID()
+    let matches: [DuplicateImportMatch]
+}
+
+struct DuplicateBookGroup: Identifiable, Sendable {
+    let fingerprint: String
+    let books: [Book]
+    var id: String { fingerprint }
+}
+
 @MainActor
 @Observable
 final class LibraryStore {
@@ -18,6 +35,12 @@ final class LibraryStore {
     private(set) var optimizingBookID: UUID?
     private(set) var storageOptimizationProgress: Double?
     private(set) var measuredStorageSizes: [UUID: Int64] = [:]
+    private(set) var duplicateImportPrompt: DuplicateImportPrompt?
+    private(set) var duplicateGroups: [DuplicateBookGroup] = []
+    private(set) var isScanningDuplicates = false
+    private(set) var duplicateScanProgress: Double?
+    private(set) var duplicateScanCompletedAt: Date?
+    private(set) var duplicateScanUnavailableCount = 0
     var alert: LibraryAlert?
 
     @ObservationIgnored private let fileManager: FileManager
@@ -27,6 +50,7 @@ final class LibraryStore {
     @ObservationIgnored private let groupsURL: URL
     @ObservationIgnored private var saveTask: Task<Void, Never>?
     @ObservationIgnored private var pageURLCache: [UUID: [URL]] = [:]
+    @ObservationIgnored private var pendingDuplicateBooks: [Book] = []
     let libraryURL: URL
 
     init(
@@ -179,9 +203,11 @@ final class LibraryStore {
             if let cleanupDirectory { try? fileManager.removeItem(at: cleanupDirectory) }
             return
         }
-        guard !isImporting else {
+        guard !isImporting, duplicateImportPrompt == nil else {
             if let cleanupDirectory { try? fileManager.removeItem(at: cleanupDirectory) }
-            alert = LibraryAlert(title: "正在导入", message: "请等待当前导入完成后再试。")
+            alert = duplicateImportPrompt == nil
+                ? LibraryAlert(title: "正在导入", message: "请等待当前导入完成后再试。")
+                : LibraryAlert(title: "先确认重复项目", message: "请先选择保留或跳过刚才发现的重复画册。")
             return
         }
         isImporting = true
@@ -217,11 +243,51 @@ final class LibraryStore {
                     imported[index].shelfGroupID = destinationGroupID
                     imported[index].isFavorite = favoriteOnImport
                 }
-                books.append(contentsOf: imported)
-                saveImmediately()
                 let destinationName = destinationGroupID.flatMap { id in
                     shelfGroups.first(where: { $0.id == id })?.title
                 }
+                let shouldWarn = (defaults.object(forKey: "duplicates.warnOnImport") as? Bool) ?? true
+                if shouldWarn {
+                    importStatusText = "正在核对是否已有相同画册…"
+                    await populateMissingContentFingerprints()
+                    var referenceByFingerprint = Dictionary(
+                        books.compactMap { book in
+                            book.contentFingerprint.map { ($0, book) }
+                        },
+                        uniquingKeysWith: { first, _ in first }
+                    )
+                    var matches: [DuplicateImportMatch] = []
+                    for importedBook in imported {
+                        guard let fingerprint = importedBook.contentFingerprint else { continue }
+                        if let existingBook = referenceByFingerprint[fingerprint] {
+                            matches.append(DuplicateImportMatch(
+                                importedBook: importedBook,
+                                existingBook: existingBook
+                            ))
+                        } else {
+                            referenceByFingerprint[fingerprint] = importedBook
+                        }
+                    }
+                    if !matches.isEmpty {
+                        // Persist first, then ask. If iOS suspends the app while
+                        // the decision sheet is open, the newly copied files do
+                        // not become unindexed orphan data. Skipping removes the
+                        // duplicates atomically from the shelf and disk.
+                        books.append(contentsOf: imported)
+                        invalidateDuplicateScan()
+                        saveImmediately()
+                        pendingDuplicateBooks = matches.map(\.importedBook)
+                        duplicateImportPrompt = DuplicateImportPrompt(matches: matches)
+                        importNotice = nil
+                        importStatusText = nil
+                        isImporting = false
+                        return
+                    }
+                }
+
+                books.append(contentsOf: imported)
+                invalidateDuplicateScan()
+                saveImmediately()
                 if favoriteOnImport {
                     importNotice = imported.count == 1
                         ? "“\(imported[0].title)”已放进珍藏角落"
@@ -320,6 +386,7 @@ final class LibraryStore {
             try? fileManager.removeItem(at: oldFolder)
         }
         books.append(book)
+        invalidateDuplicateScan()
         saveImmediately()
         return book
     }
@@ -383,6 +450,117 @@ final class LibraryStore {
             try? await Task.sleep(for: .seconds(2.2))
             self?.importNotice = nil
         }
+    }
+
+    func resolveDuplicateImport(keepCopies: Bool) {
+        guard duplicateImportPrompt != nil else { return }
+        let duplicates = pendingDuplicateBooks
+        pendingDuplicateBooks = []
+        duplicateImportPrompt = nil
+
+        if keepCopies {
+            importNotice = duplicates.count == 1
+                ? "已保留这本重复画册的副本"
+                : "已保留 \(duplicates.count) 本重复画册的副本"
+        } else {
+            let duplicateIDs = Set(duplicates.map(\.id))
+            for book in duplicates {
+                let folder = libraryURL.appendingPathComponent(book.folderName, isDirectory: true)
+                try? fileManager.removeItem(at: folder)
+                pageURLCache.removeValue(forKey: book.id)
+                measuredStorageSizes.removeValue(forKey: book.id)
+            }
+            books.removeAll { duplicateIDs.contains($0.id) }
+            saveImmediately()
+            importNotice = duplicates.count == 1
+                ? "已跳过重复画册，原有读物保持不变"
+                : "已跳过 \(duplicates.count) 本重复画册"
+        }
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(3))
+            self?.importNotice = nil
+        }
+    }
+
+    func scanForDuplicateContent() async {
+        guard !isScanningDuplicates else { return }
+        isScanningDuplicates = true
+        duplicateScanProgress = books.isEmpty ? nil : 0
+        duplicateScanUnavailableCount = 0
+        let snapshot = books
+        let root = libraryURL
+        var fingerprints: [(UUID, String)] = []
+
+        for (offset, book) in snapshot.enumerated() {
+            let fingerprint: String?
+            if let existing = book.contentFingerprint {
+                fingerprint = existing
+            } else {
+                fingerprint = await Task.detached(priority: .utility) {
+                    try? BookContentFingerprint.fingerprint(for: book, libraryURL: root)
+                }.value
+            }
+            if let fingerprint {
+                fingerprints.append((book.id, fingerprint))
+            } else {
+                duplicateScanUnavailableCount += 1
+            }
+            duplicateScanProgress = Double(offset + 1) / Double(max(snapshot.count, 1))
+        }
+
+        var didAddFingerprints = false
+        let fingerprintByID = Dictionary(uniqueKeysWithValues: fingerprints)
+        for index in books.indices where books[index].contentFingerprint == nil {
+            if let fingerprint = fingerprintByID[books[index].id] {
+                books[index].contentFingerprint = fingerprint
+                didAddFingerprints = true
+            }
+        }
+        if didAddFingerprints { saveImmediately() }
+
+        let bookByID = Dictionary(uniqueKeysWithValues: books.map { ($0.id, $0) })
+        let grouped = Dictionary(grouping: fingerprints) { $0.1 }
+        duplicateGroups = grouped.compactMap { fingerprint, values in
+            let matches = values.compactMap { bookByID[$0.0] }
+                .sorted { $0.importedAt < $1.importedAt }
+            guard matches.count > 1 else { return nil }
+            return DuplicateBookGroup(fingerprint: fingerprint, books: matches)
+        }
+        .sorted { left, right in
+            let leftDate = left.books.first?.importedAt ?? .distantPast
+            let rightDate = right.books.first?.importedAt ?? .distantPast
+            return leftDate > rightDate
+        }
+        duplicateScanCompletedAt = .now
+        duplicateScanProgress = nil
+        isScanningDuplicates = false
+    }
+
+    private func populateMissingContentFingerprints() async {
+        let missing = books.filter { $0.contentFingerprint == nil }
+        guard !missing.isEmpty else { return }
+        let root = libraryURL
+        var additions: [UUID: String] = [:]
+        for book in missing {
+            let fingerprint = await Task.detached(priority: .utility) {
+                try? BookContentFingerprint.fingerprint(for: book, libraryURL: root)
+            }.value
+            if let fingerprint { additions[book.id] = fingerprint }
+        }
+        guard !additions.isEmpty else { return }
+        for index in books.indices {
+            if let fingerprint = additions[books[index].id] {
+                books[index].contentFingerprint = fingerprint
+            }
+        }
+        saveImmediately()
+    }
+
+    private func invalidateDuplicateScan() {
+        duplicateGroups = []
+        duplicateScanCompletedAt = nil
+        duplicateScanProgress = nil
+        duplicateScanUnavailableCount = 0
     }
 
     func updateBookProfile(
@@ -595,6 +773,12 @@ final class LibraryStore {
                 try fileManager.removeItem(at: folder)
             }
             books.removeAll { $0.id == book.id }
+            duplicateGroups = duplicateGroups.compactMap { group in
+                let remaining = group.books.filter { $0.id != book.id }
+                return remaining.count > 1
+                    ? DuplicateBookGroup(fingerprint: group.fingerprint, books: remaining)
+                    : nil
+            }
             pageURLCache.removeValue(forKey: book.id)
             measuredStorageSizes.removeValue(forKey: book.id)
             endReading(book.id)

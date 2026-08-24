@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct RootView: View {
     @Environment(LibraryStore.self) private var library
@@ -58,12 +59,23 @@ struct RootView: View {
                     initialURL: request.postURL
                 )
             }
+            .sheet(item: duplicateImportBinding) { prompt in
+                DuplicateImportDecisionView(prompt: prompt)
+                    .interactiveDismissDisabled()
+            }
     }
 
     private var socialImportBinding: Binding<SocialImportRequest?> {
         Binding(
             get: { socialImports.pendingRequest },
             set: { socialImports.pendingRequest = $0 }
+        )
+    }
+
+    private var duplicateImportBinding: Binding<DuplicateImportPrompt?> {
+        Binding(
+            get: { library.duplicateImportPrompt },
+            set: { _ in }
         )
     }
 
@@ -128,6 +140,78 @@ private struct MainTabView: View {
             Tab("设置", systemImage: "gearshape.fill", value: .settings) {
                 SettingsView()
             }
+        }
+    }
+
+}
+
+private struct DuplicateImportDecisionView: View {
+    @Environment(LibraryStore.self) private var library
+    let prompt: DuplicateImportPrompt
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    Label("发现完全一致的内容", systemImage: "doc.on.doc.fill")
+                        .font(.headline)
+                        .foregroundStyle(AppTheme.honey)
+                    Text("二次元小家比较的是文件或画册页面的实际内容，不会只因为名称相同就拦住导入。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
+                Section("重复项目") {
+                    ForEach(prompt.matches) { match in
+                        HStack(spacing: 12) {
+                            Group {
+                                if let coverURL = library.coverURL(for: match.existingBook),
+                                   let image = UIImage(contentsOfFile: coverURL.path) {
+                                    AdaptiveCoverImage(image: Image(uiImage: image))
+                                } else {
+                                    Image(systemName: match.existingBook.kind.systemImage)
+                                        .foregroundStyle(AppTheme.accent)
+                                }
+                            }
+                            .frame(width: 44, height: 58)
+                            .background(AppTheme.cream.opacity(0.4))
+                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(match.importedBook.title)
+                                    .font(.subheadline.weight(.semibold))
+                                    .lineLimit(2)
+                                Text("书架中已有“\(match.existingBook.title)”")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+
+                Section {
+                    Button {
+                        library.resolveDuplicateImport(keepCopies: false)
+                    } label: {
+                        Label("跳过重复项目", systemImage: "arrow.uturn.backward.circle.fill")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .accessibilityIdentifier("duplicate-import-skip")
+
+                    Button {
+                        library.resolveDuplicateImport(keepCopies: true)
+                    } label: {
+                        Label("仍然保留副本", systemImage: "plus.square.on.square")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .accessibilityIdentifier("duplicate-import-keep")
+                }
+                .listRowBackground(Color.clear)
+            }
+            .navigationTitle("重复画册提醒")
+            .navigationBarTitleDisplayMode(.inline)
         }
     }
 }

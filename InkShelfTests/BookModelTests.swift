@@ -1142,6 +1142,76 @@ final class BookModelTests: XCTestCase {
     }
 
     @MainActor
+    func testOrderedPageFingerprintUsesContentInsteadOfFileNames() throws {
+        let fileManager = FileManager.default
+        let root = fileManager.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let first = root.appendingPathComponent("first", isDirectory: true)
+        let second = root.appendingPathComponent("second", isDirectory: true)
+        try fileManager.createDirectory(at: first, withIntermediateDirectories: true)
+        try fileManager.createDirectory(at: second, withIntermediateDirectories: true)
+        defer { try? fileManager.removeItem(at: root) }
+
+        let pink = testPNG(color: .systemPink)
+        let blue = testPNG(color: .systemBlue)
+        try pink.write(to: first.appendingPathComponent("001.png"))
+        try blue.write(to: first.appendingPathComponent("002.png"))
+        try pink.write(to: second.appendingPathComponent("page-a.png"))
+        try blue.write(to: second.appendingPathComponent("page-b.png"))
+
+        XCTAssertEqual(
+            try BookContentFingerprint.fingerprint(ofOrderedFilesIn: first),
+            try BookContentFingerprint.fingerprint(ofOrderedFilesIn: second)
+        )
+        try testPNG(color: .systemGreen).write(to: second.appendingPathComponent("page-b.png"))
+        XCTAssertNotEqual(
+            try BookContentFingerprint.fingerprint(ofOrderedFilesIn: first),
+            try BookContentFingerprint.fingerprint(ofOrderedFilesIn: second)
+        )
+    }
+
+    @MainActor
+    func testDuplicateImportCanSkipOrKeepAndExistingShelfCanBeScanned() async throws {
+        let fileManager = FileManager.default
+        let root = fileManager.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let input = root.appendingPathComponent("input", isDirectory: true)
+        let documents = root.appendingPathComponent("documents", isDirectory: true)
+        let suiteName = "InkShelfDuplicateTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        try fileManager.createDirectory(at: input, withIntermediateDirectories: true)
+        try fileManager.createDirectory(at: documents, withIntermediateDirectories: true)
+        defer {
+            try? fileManager.removeItem(at: root)
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        defaults.set(true, forKey: "duplicates.warnOnImport")
+        let source = input.appendingPathComponent("same-page.png")
+        try testPNG(color: .systemPink).write(to: source)
+        let store = LibraryStore(fileManager: fileManager, defaults: defaults, documentsURL: documents)
+
+        store.importFiles([source])
+        for _ in 0..<400 where store.isImporting { try await Task.sleep(for: .milliseconds(25)) }
+        XCTAssertEqual(store.books.count, 1)
+        XCTAssertNotNil(store.books.first?.contentFingerprint)
+
+        store.importFiles([source])
+        for _ in 0..<400 where store.isImporting { try await Task.sleep(for: .milliseconds(25)) }
+        XCTAssertEqual(store.books.count, 2, "A pending duplicate must remain indexed until the user decides")
+        XCTAssertEqual(store.duplicateImportPrompt?.matches.count, 1)
+        store.resolveDuplicateImport(keepCopies: false)
+        XCTAssertEqual(store.books.count, 1)
+
+        store.importFiles([source])
+        for _ in 0..<400 where store.isImporting { try await Task.sleep(for: .milliseconds(25)) }
+        XCTAssertEqual(store.duplicateImportPrompt?.matches.count, 1)
+        store.resolveDuplicateImport(keepCopies: true)
+        XCTAssertEqual(store.books.count, 2)
+
+        await store.scanForDuplicateContent()
+        XCTAssertEqual(store.duplicateGroups.count, 1)
+        XCTAssertEqual(store.duplicateGroups.first?.books.count, 2)
+    }
+
+    @MainActor
     func testPreparingOnlineUpdateBacksUpIndexesWithoutTouchingBookPages() throws {
         let fileManager = FileManager.default
         let root = fileManager.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)

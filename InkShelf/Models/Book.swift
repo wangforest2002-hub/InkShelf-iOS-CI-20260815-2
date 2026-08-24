@@ -67,6 +67,7 @@ struct Book: Identifiable, Codable, Hashable, Sendable {
     var personalNote: String?
     var heartRating: Int?
     var spiceRating: Int?
+    var contentFingerprint: String?
     var readerProfile: BookReaderProfile?
 
     init(
@@ -96,6 +97,7 @@ struct Book: Identifiable, Codable, Hashable, Sendable {
         personalNote: String? = nil,
         heartRating: Int? = nil,
         spiceRating: Int? = nil,
+        contentFingerprint: String? = nil,
         readerProfile: BookReaderProfile? = nil
     ) {
         self.id = id
@@ -124,6 +126,7 @@ struct Book: Identifiable, Codable, Hashable, Sendable {
         self.personalNote = personalNote
         self.heartRating = heartRating.map { min(max($0, 0), 5) }
         self.spiceRating = spiceRating.map { min(max($0, 0), 5) }
+        self.contentFingerprint = contentFingerprint
         self.readerProfile = readerProfile
     }
 

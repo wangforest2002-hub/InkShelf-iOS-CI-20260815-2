@@ -160,6 +160,16 @@ final class ReaderNavigationUITests: XCTestCase {
         XCTAssertTrue(app.buttons["achievements-options"].exists, "The safe achievement reset menu is missing")
         app.navigationBars["回家足迹"].buttons.element(boundBy: 0).tap()
 
+        let duplicateSettings = app.buttons["settings-duplicate-content"]
+        for _ in 0..<6 where !duplicateSettings.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(duplicateSettings.waitForExistence(timeout: 3), "The duplicate-content scanner is missing")
+        duplicateSettings.tap()
+        XCTAssertTrue(app.navigationBars["重复内容检测"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["duplicate-scan-start"].waitForExistence(timeout: 3))
+        app.navigationBars["重复内容检测"].buttons.element(boundBy: 0).tap()
+
         let onlineUpdate = app.buttons["settings-online-update"]
         for _ in 0..<5 where !onlineUpdate.isHittable {
             app.swipeUp()

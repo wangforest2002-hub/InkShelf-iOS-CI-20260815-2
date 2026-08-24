@@ -15,6 +15,7 @@ struct SettingsView: View {
     @AppStorage("ebook.flow") private var ebookFlow = EBookFlow.paged.rawValue
     @AppStorage("ebook.theme") private var ebookTheme = EBookTheme.paper.rawValue
     @AppStorage("ebook.font") private var ebookFont = EBookFont.serif.rawValue
+    @AppStorage("duplicates.warnOnImport") private var warnOnDuplicateImport = true
     @AppStorage("hasSeenWelcome") private var hasSeenWelcome = true
 
     var body: some View {
@@ -188,6 +189,20 @@ struct SettingsView: View {
                         Text("\(library.books.count) 本")
                     }
 
+                    Toggle("导入重复内容时提醒", isOn: $warnOnDuplicateImport)
+
+                    NavigationLink {
+                        DuplicateContentView()
+                    } label: {
+                        LabeledContent {
+                            Text("扫描书架")
+                                .foregroundStyle(.secondary)
+                        } label: {
+                            Label("重复内容检测", systemImage: "doc.on.doc.fill")
+                        }
+                    }
+                    .accessibilityIdentifier("settings-duplicate-content")
+
                     Label {
                         Text("从“文件”App 导入时可以直接选择 iCloud Drive 中的读物，应用只保存自己的本地副本，不会修改 iCloud 原文件。启用 AI 后，仅将本机识别出的文字和粗略画面标签发送给 DeepSeek，不上传整页原图。")
                             .font(.footnote)
@@ -199,7 +214,7 @@ struct SettingsView: View {
                 }
 
                 Section("关于") {
-                    LabeledContent("二次元小家", value: "2.4.0 · 纸张翻页版")
+                    LabeledContent("二次元小家", value: "2.4.0 · 纸张翻页与整理版")
                     Button("重新查看欢迎页") {
                         hasSeenWelcome = false
                     }

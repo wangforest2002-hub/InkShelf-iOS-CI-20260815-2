@@ -95,8 +95,14 @@ jobs:
             -only-testing:InkShelfTests/BookModelTests/testLocalCBZPDFFolderSmokeImport \
             -parallel-testing-enabled NO
 
+      - name: Restart simulator before UI tests
+        run: |
+          xcrun simctl shutdown "$DEVICE_ID" 2>/dev/null || true
+          xcrun simctl boot "$DEVICE_ID"
+          xcrun simctl bootstatus "$DEVICE_ID" -b
+
       - name: Run shelf-to-reader UI navigation smoke test
-        timeout-minutes: 5
+        timeout-minutes: 8
         run: |
           set -o pipefail
           xcodebuild test-without-building \

@@ -78,6 +78,12 @@ enum BookImporter {
             }
 
             guard !imported.isEmpty else { throw BookImportError.noImages }
+            for index in imported.indices {
+                imported[index].contentFingerprint = try? BookContentFingerprint.fingerprint(
+                    for: imported[index],
+                    libraryURL: libraryURL
+                )
+            }
             return imported
         } catch {
             for folder in createdFolders {
