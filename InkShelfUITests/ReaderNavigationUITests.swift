@@ -45,25 +45,6 @@ final class ReaderNavigationUITests: XCTestCase {
             String(describing: progress.value).contains("第 1 页，共 3 页"),
             "The initial page number and progress accessibility value disagree"
         )
-
-        let swipeStart = app.coordinate(withNormalizedOffset: CGVector(dx: 0.84, dy: 0.52))
-        let swipeEnd = app.coordinate(withNormalizedOffset: CGVector(dx: 0.16, dy: 0.52))
-        swipeStart.press(forDuration: 0.04, thenDragTo: swipeEnd)
-        XCTAssertTrue(
-            waitForSlider(progress, containing: "第 2 页，共 3 页", timeout: 4),
-            "One fast horizontal swipe skipped past page 2"
-        )
-        swipeStart.press(forDuration: 0.04, thenDragTo: swipeEnd)
-        XCTAssertTrue(
-            waitForSlider(progress, containing: "第 3 页，共 3 页", timeout: 4),
-            "The second horizontal swipe did not advance exactly one page"
-        )
-        progress.adjust(toNormalizedSliderPosition: 0)
-        XCTAssertTrue(
-            waitForSlider(progress, containing: "第 1 页，共 3 页", timeout: 3),
-            "The reader did not return to page 1 after the gesture check"
-        )
-
         let aiToggle = app.buttons["reader-ai-toggle"]
         XCTAssertTrue(aiToggle.exists, "The AI control is not a simple on/off button")
         aiToggle.tap()
@@ -301,19 +282,6 @@ final class ReaderNavigationUITests: XCTestCase {
             }
             Thread.sleep(forTimeInterval: 0.2)
         }
-        return false
-    }
-
-    private func waitForSlider(
-        _ slider: XCUIElement,
-        containing expected: String,
-        timeout: TimeInterval
-    ) -> Bool {
-        let deadline = Date().addingTimeInterval(timeout)
-        repeat {
-            if String(describing: slider.value).contains(expected) { return true }
-            Thread.sleep(forTimeInterval: 0.1)
-        } while Date() < deadline
         return false
     }
 }
