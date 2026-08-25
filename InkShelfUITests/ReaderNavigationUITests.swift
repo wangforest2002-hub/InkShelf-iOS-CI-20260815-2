@@ -41,9 +41,11 @@ final class ReaderNavigationUITests: XCTestCase {
         )
         let progress = app.sliders["reader-progress"]
         XCTAssertTrue(progress.exists, "Reader controls did not finish loading")
+        let pageLabel = app.descendants(matching: .any)["reader-page-label"]
+        XCTAssertTrue(pageLabel.exists, "The page counter did not appear")
         XCTAssertTrue(
-            String(describing: progress.value).contains("第 1 页，共 3 页"),
-            "The initial page number and progress accessibility value disagree"
+            pageLabel.label.contains("第 1 页 · 共 3 页"),
+            "The initial page number is incorrect"
         )
         let aiToggle = app.buttons["reader-ai-toggle"]
         XCTAssertTrue(aiToggle.exists, "The AI control is not a simple on/off button")
@@ -88,7 +90,7 @@ final class ReaderNavigationUITests: XCTestCase {
         XCTAssertNotEqual(layout.label, originalLayoutLabel, "The layout button did not change reader layout")
         progress.adjust(toNormalizedSliderPosition: 1)
         XCTAssertTrue(
-            String(describing: progress.value).contains("第 2–3 页，共 3 页"),
+            pageLabel.label.contains("第 2–3 页 · 共 3 页"),
             "The spread page label and progress scrubber are out of sync"
         )
 
@@ -101,7 +103,7 @@ final class ReaderNavigationUITests: XCTestCase {
         progress.adjust(toNormalizedSliderPosition: 1)
         Thread.sleep(forTimeInterval: 0.7)
         XCTAssertTrue(
-            String(describing: progress.value).contains("第 2–3 页，共 3 页"),
+            pageLabel.label.contains("第 2–3 页 · 共 3 页"),
             "A stale image-pager alignment request changed the final spread"
         )
 
@@ -111,7 +113,7 @@ final class ReaderNavigationUITests: XCTestCase {
         progress.adjust(toNormalizedSliderPosition: 0.5)
         Thread.sleep(forTimeInterval: 0.7)
         XCTAssertTrue(
-            String(describing: progress.value).contains("第 2 页，共 3 页"),
+            pageLabel.label.contains("第 2 页 · 共 3 页"),
             "Rapid single-page scrubbing did not settle on the user's final request"
         )
 
@@ -195,20 +197,27 @@ final class ReaderNavigationUITests: XCTestCase {
 
         let progress = app.sliders["reader-progress"]
         XCTAssertTrue(progress.waitForExistence(timeout: 12), "The long album did not open")
-        assertPage(1, of: 61, on: progress)
+        let pageLabel = app.descendants(matching: .any)["reader-page-label"]
+        XCTAssertTrue(pageLabel.waitForExistence(timeout: 3), "The long album page counter did not appear")
+        assertPage(1, of: 61, on: pageLabel)
 
         // Deliberate, ordinary swipes—not high-velocity flicks—must move one
         // physical page throughout a long album.
         for page in 2...59 {
             swipeOnePageForward(in: app)
-            assertPage(page, of: 61, on: progress)
+            assertPage(page, of: 61, on: pageLabel)
             if page == 39 {
                 swipeOnePageBackward(in: app)
-                assertPage(38, of: 61, on: progress)
+                assertPage(38, of: 61, on: pageLabel)
                 swipeOnePageForward(in: app)
-                assertPage(39, of: 61, on: progress)
+                assertPage(39, of: 61, on: pageLabel)
             }
         }
+
+        // The progress control keeps its native numeric accessibility value,
+        // so a midpoint request must map to the exact middle physical page.
+        progress.adjust(toNormalizedSliderPosition: 0.5)
+        assertPage(31, of: 61, on: pageLabel)
     }
 
     private func swipeOnePageForward(in app: XCUIApplication) {
@@ -226,18 +235,18 @@ final class ReaderNavigationUITests: XCTestCase {
     private func assertPage(
         _ page: Int,
         of pageCount: Int,
-        on progress: XCUIElement,
+        on pageLabel: XCUIElement,
         file: StaticString = #filePath,
         line: UInt = #line
     ) {
-        let expected = "第 \(page) 页，共 \(pageCount) 页"
-        let predicate = NSPredicate(format: "value CONTAINS %@", expected)
-        let expectation = XCTNSPredicateExpectation(predicate: predicate, object: progress)
+        let expected = "第 \(page) 页 · 共 \(pageCount) 页"
+        let predicate = NSPredicate(format: "label CONTAINS %@", expected)
+        let expectation = XCTNSPredicateExpectation(predicate: predicate, object: pageLabel)
         let result = XCTWaiter.wait(for: [expectation], timeout: 3)
         XCTAssertEqual(
             result,
             .completed,
-            "Expected \(expected), got \(String(describing: progress.value))",
+            "Expected \(expected), got \(pageLabel.label)",
             file: file,
             line: line
         )

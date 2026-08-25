@@ -948,8 +948,10 @@ private struct ReaderControls: View {
                     .disabled(!isEBook && pageCount <= 1)
                     .tint(nightMood == nil ? AppTheme.accent : AppTheme.coral)
                     .accessibilityIdentifier("reader-progress")
-                    .accessibilityLabel("阅读进度")
-                    .accessibilityValue(position.accessibilityValue)
+                    // Keep Slider's native numeric accessibility value intact.
+                    // Assistive scrubbing and XCUITest both depend on it to
+                    // map a normalized position to the real slider range.
+                    .accessibilityLabel("阅读进度，\(position.accessibilityValue)")
 
                 HStack(spacing: 8) {
                     Button { perform(showThumbnails) } label: {

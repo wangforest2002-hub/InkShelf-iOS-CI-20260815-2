@@ -1,7 +1,50 @@
 import SwiftUI
 import UIKit
 
-struct ImagePagerView: UIViewRepresentable {
+struct ImagePagerView: View {
+    let imageURLs: [URL]
+    @Binding var currentPage: Int
+    let layout: ReaderLayout
+    let flow: ReaderFlow
+    let transition: ReaderPageTransition
+    let order: ReadingOrder
+    let coverSingle: Bool
+    let backgroundColor: UIColor
+    let onTap: () -> Void
+
+    var body: some View {
+        if flow == .continuous {
+            ContinuousImagePagerView(
+                imageURLs: imageURLs,
+                currentPage: $currentPage,
+                layout: layout,
+                flow: flow,
+                transition: transition,
+                order: order,
+                coverSingle: coverSingle,
+                backgroundColor: backgroundColor,
+                onTap: onTap
+            )
+        } else {
+            SystemImagePageView(
+                imageURLs: imageURLs,
+                currentPage: $currentPage,
+                layout: layout,
+                flow: flow,
+                transition: transition,
+                order: order,
+                coverSingle: coverSingle,
+                backgroundColor: backgroundColor,
+                onTap: onTap
+            )
+            // UIPageViewController's axis and transition style are immutable.
+            // Recreate only when one of those user-facing modes changes.
+            .id("\(flow.rawValue)|\(transition.rawValue)")
+        }
+    }
+}
+
+private struct ContinuousImagePagerView: UIViewRepresentable {
     let imageURLs: [URL]
     @Binding var currentPage: Int
     let layout: ReaderLayout
@@ -90,7 +133,7 @@ struct ImagePagerView: UIViewRepresentable {
     }
 
     final class Coordinator: NSObject, UICollectionViewDataSource, UICollectionViewDataSourcePrefetching, UICollectionViewDelegateFlowLayout, UIScrollViewDelegate {
-        var parent: ImagePagerView
+        var parent: ContinuousImagePagerView
         fileprivate var groups: [ImagePageGroup] = []
         fileprivate var configurationKey = ""
         private var continuousAspectRatio: CGFloat = 0.70
@@ -101,11 +144,11 @@ struct ImagePagerView: UIViewRepresentable {
         private var dragStartContentOffset: CGPoint?
         private var pendingGestureTargetIndex: Int?
 
-        init(parent: ImagePagerView) {
+        init(parent: ContinuousImagePagerView) {
             self.parent = parent
         }
 
-        func rebuildConfiguration(from parent: ImagePagerView) {
+        func rebuildConfiguration(from parent: ContinuousImagePagerView) {
             cancelPendingAlignment()
             resetPagedGesture()
             configurationKey = parent.configurationKey
@@ -526,6 +569,273 @@ struct ImagePagerView: UIViewRepresentable {
             let scale = collectionView.window?.screen.scale ?? UIScreen.main.scale
             return min(4_096, max(1_800, Int((longestSide * scale * 1.25).rounded(.up))))
         }
+    }
+}
+
+/// Full-screen comic pages use UIKit's dedicated page container. Its data
+/// source can expose only the immediate page before and after the current one,
+/// so a single gesture cannot be projected across an arbitrary number of
+/// collection-view items. Continuous reading intentionally stays on the
+/// collection-view implementation above.
+private struct SystemImagePageView: UIViewControllerRepresentable {
+    let imageURLs: [URL]
+    @Binding var currentPage: Int
+    let layout: ReaderLayout
+    let flow: ReaderFlow
+    let transition: ReaderPageTransition
+    let order: ReadingOrder
+    let coverSingle: Bool
+    let backgroundColor: UIColor
+    let onTap: () -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(parent: self)
+    }
+
+    func makeUIViewController(context: Context) -> UIPageViewController {
+        let transitionStyle: UIPageViewController.TransitionStyle = transition == .book ? .pageCurl : .scroll
+        let orientation: UIPageViewController.NavigationOrientation = flow == .vertical ? .vertical : .horizontal
+        let options: [UIPageViewController.OptionsKey: Any]
+        if transitionStyle == .pageCurl {
+            options = [.spineLocation: NSNumber(value: UIPageViewController.SpineLocation.min.rawValue)]
+        } else {
+            options = [.interPageSpacing: NSNumber(value: 0)]
+        }
+
+        let controller = UIPageViewController(
+            transitionStyle: transitionStyle,
+            navigationOrientation: orientation,
+            options: options
+        )
+        controller.isDoubleSided = false
+        controller.dataSource = context.coordinator
+        controller.delegate = context.coordinator
+        controller.view.backgroundColor = backgroundColor
+
+        context.coordinator.rebuildConfiguration(from: self)
+        context.coordinator.installInitialPage(in: controller)
+        return controller
+    }
+
+    func updateUIViewController(_ controller: UIPageViewController, context: Context) {
+        context.coordinator.parent = self
+        controller.view.backgroundColor = backgroundColor
+
+        let configurationChanged = context.coordinator.configurationKey != configurationKey
+        if configurationChanged {
+            context.coordinator.rebuildConfiguration(from: self)
+        }
+        context.coordinator.align(
+            controller,
+            toPage: currentPage,
+            forceReplace: configurationChanged
+        )
+    }
+
+    fileprivate var configurationKey: String {
+        [
+            String(imageURLs.count),
+            imageURLs.first?.standardizedFileURL.path ?? "",
+            imageURLs.last?.standardizedFileURL.path ?? "",
+            layout.rawValue,
+            order.rawValue,
+            String(coverSingle)
+        ].joined(separator: "|")
+    }
+
+    final class Coordinator: NSObject, UIPageViewControllerDataSource, UIPageViewControllerDelegate {
+        var parent: SystemImagePageView
+        fileprivate var groups: [ImagePageGroup] = []
+        fileprivate var configurationKey = ""
+        private var isUserTransitioning = false
+        private var alignmentGeneration = 0
+
+        init(parent: SystemImagePageView) {
+            self.parent = parent
+        }
+
+        func rebuildConfiguration(from parent: SystemImagePageView) {
+            alignmentGeneration += 1
+            configurationKey = parent.configurationKey
+            groups = ImagePageGroup.make(
+                urls: parent.imageURLs,
+                layout: parent.layout,
+                flow: parent.flow,
+                coverSingle: parent.coverSingle
+            )
+        }
+
+        func installInitialPage(in pageViewController: UIPageViewController) {
+            guard !groups.isEmpty else {
+                pageViewController.setViewControllers(nil, direction: .forward, animated: false)
+                return
+            }
+            let target = groupIndex(containing: parent.currentPage)
+            guard let content = makePage(at: target) else { return }
+            pageViewController.setViewControllers([content], direction: .forward, animated: false)
+            prefetch(around: target, in: pageViewController)
+        }
+
+        func align(
+            _ pageViewController: UIPageViewController,
+            toPage page: Int,
+            forceReplace: Bool
+        ) {
+            guard !groups.isEmpty, !isUserTransitioning else { return }
+            let target = groupIndex(containing: page)
+            let visible = (pageViewController.viewControllers?.first as? ImagePageViewController)?.groupIndex
+
+            if !forceReplace, visible == target {
+                (pageViewController.viewControllers?.first as? ImagePageViewController)?
+                    .update(backgroundColor: parent.backgroundColor)
+                return
+            }
+            guard let content = makePage(at: target) else { return }
+
+            alignmentGeneration += 1
+            let generation = alignmentGeneration
+            let direction = navigationDirection(from: visible ?? target, to: target)
+            pageViewController.setViewControllers([content], direction: direction, animated: false) { [weak self, weak pageViewController] _ in
+                guard let self, let pageViewController, self.alignmentGeneration == generation else { return }
+                self.prefetch(around: target, in: pageViewController)
+            }
+        }
+
+        func pageViewController(
+            _ pageViewController: UIPageViewController,
+            viewControllerBefore viewController: UIViewController
+        ) -> UIViewController? {
+            guard let content = viewController as? ImagePageViewController else { return nil }
+            return makePage(at: content.groupIndex - physicalForwardStep)
+        }
+
+        func pageViewController(
+            _ pageViewController: UIPageViewController,
+            viewControllerAfter viewController: UIViewController
+        ) -> UIViewController? {
+            guard let content = viewController as? ImagePageViewController else { return nil }
+            return makePage(at: content.groupIndex + physicalForwardStep)
+        }
+
+        func pageViewController(
+            _ pageViewController: UIPageViewController,
+            willTransitionTo pendingViewControllers: [UIViewController]
+        ) {
+            alignmentGeneration += 1
+            isUserTransitioning = true
+        }
+
+        func pageViewController(
+            _ pageViewController: UIPageViewController,
+            didFinishAnimating finished: Bool,
+            previousViewControllers: [UIViewController],
+            transitionCompleted completed: Bool
+        ) {
+            isUserTransitioning = false
+            guard completed,
+                  let content = pageViewController.viewControllers?.first as? ImagePageViewController,
+                  groups.indices.contains(content.groupIndex),
+                  let page = groups[content.groupIndex].indices.first
+            else { return }
+
+            if parent.currentPage != page {
+                parent.currentPage = page
+            }
+            prefetch(around: content.groupIndex, in: pageViewController)
+        }
+
+        private var physicalForwardStep: Int {
+            parent.flow == .horizontal && parent.order == .rightToLeft ? -1 : 1
+        }
+
+        private func navigationDirection(from current: Int, to target: Int) -> UIPageViewController.NavigationDirection {
+            guard target != current else { return .forward }
+            let logicalStep = target > current ? 1 : -1
+            return logicalStep == physicalForwardStep ? .forward : .reverse
+        }
+
+        private func groupIndex(containing page: Int) -> Int {
+            let boundedPage = min(max(0, page), max(0, parent.imageURLs.count - 1))
+            return groups.firstIndex { $0.indices.contains(boundedPage) } ?? 0
+        }
+
+        private func makePage(at index: Int) -> UIViewController? {
+            guard groups.indices.contains(index) else { return nil }
+            let group = groups[index]
+            let urls = parent.order == .rightToLeft ? Array(group.urls.reversed()) : group.urls
+            return ImagePageViewController(
+                groupIndex: index,
+                urls: urls,
+                pageLabel: group.indices.map { String($0 + 1) }.joined(separator: "、"),
+                backgroundColor: parent.backgroundColor,
+                onTap: parent.onTap
+            )
+        }
+
+        private func prefetch(around index: Int, in pageViewController: UIPageViewController) {
+            let nearby = [index - 2, index - 1, index + 1, index + 2]
+                .filter { groups.indices.contains($0) }
+                .flatMap { groups[$0].urls }
+            guard !nearby.isEmpty else { return }
+            let longestSide = max(pageViewController.view.bounds.width, pageViewController.view.bounds.height)
+            let scale = pageViewController.view.window?.screen.scale ?? UIScreen.main.scale
+            let pixelSize = min(4_096, max(1_800, Int((longestSide * scale * 1.25).rounded(.up))))
+            ReaderImagePipeline.shared.prefetch(nearby, maxPixelSize: pixelSize)
+        }
+    }
+}
+
+private final class ImagePageViewController: UIViewController {
+    let groupIndex: Int
+    private let zoomView = ZoomingSpreadScrollView()
+    private var pageBackgroundColor: UIColor
+    private let urls: [URL]
+    private let pageLabel: String
+    private let onTap: () -> Void
+
+    init(
+        groupIndex: Int,
+        urls: [URL],
+        pageLabel: String,
+        backgroundColor: UIColor,
+        onTap: @escaping () -> Void
+    ) {
+        self.groupIndex = groupIndex
+        self.urls = urls
+        self.pageLabel = pageLabel
+        self.pageBackgroundColor = backgroundColor
+        self.onTap = onTap
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func loadView() {
+        let root = UIView()
+        root.backgroundColor = pageBackgroundColor
+        view = root
+
+        zoomView.translatesAutoresizingMaskIntoConstraints = false
+        zoomView.backgroundColor = pageBackgroundColor
+        zoomView.accessibilityLabel = "第 \(pageLabel) 页"
+        root.addSubview(zoomView)
+        NSLayoutConstraint.activate([
+            zoomView.leadingAnchor.constraint(equalTo: root.leadingAnchor),
+            zoomView.trailingAnchor.constraint(equalTo: root.trailingAnchor),
+            zoomView.topAnchor.constraint(equalTo: root.topAnchor),
+            zoomView.bottomAnchor.constraint(equalTo: root.bottomAnchor)
+        ])
+        zoomView.configure(urls: urls, onTap: onTap)
+    }
+
+    func update(backgroundColor: UIColor) {
+        pageBackgroundColor = backgroundColor
+        guard isViewLoaded else { return }
+        view.backgroundColor = backgroundColor
+        zoomView.backgroundColor = backgroundColor
     }
 }
 
