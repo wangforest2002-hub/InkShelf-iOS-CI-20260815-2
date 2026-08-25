@@ -95,7 +95,6 @@ struct ImagePagerView: UIViewRepresentable {
         private var pendingAlignmentIndex: Int?
         private var isApplyingProgrammaticAlignment = false
         private var dragStartIndex: Int?
-        private var dragStartContentOffset: CGPoint?
 
         init(parent: ImagePagerView) {
             self.parent = parent
@@ -104,7 +103,6 @@ struct ImagePagerView: UIViewRepresentable {
         func rebuildConfiguration(from parent: ImagePagerView) {
             cancelPendingAlignment()
             dragStartIndex = nil
-            dragStartContentOffset = nil
             configurationKey = parent.configurationKey
             groups = ImagePageGroup.make(
                 urls: parent.imageURLs,
@@ -242,13 +240,11 @@ struct ImagePagerView: UIViewRepresentable {
             updateCurrentPage(from: scrollView)
             refreshPageTurnEffects(in: scrollView)
             dragStartIndex = nil
-            dragStartContentOffset = nil
         }
 
         func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
             cancelPendingAlignment()
             dragStartIndex = visibleIndex(in: scrollView)
-            dragStartContentOffset = scrollView.contentOffset
         }
 
         func scrollViewWillEndDragging(
@@ -262,28 +258,10 @@ struct ImagePagerView: UIViewRepresentable {
             else { return }
 
             let start = dragStartIndex ?? visibleIndex(in: collectionView)
-            var proposed = nearestItemIndex(
+            let proposed = nearestItemIndex(
                 to: targetContentOffset.pointee,
                 in: collectionView
             ) ?? start
-            if proposed == start,
-               let direction = draggedContentDirection(
-                    from: dragStartContentOffset,
-                    to: collectionView.contentOffset,
-                    velocity: velocity,
-                    viewport: collectionView.bounds.size
-               ),
-               let adjacent = adjacentItemIndex(
-                    from: start,
-                    contentDirection: direction,
-                    in: collectionView
-               ) {
-                // With nested zoom views UIKit can occasionally project a
-                // completed page drag back onto its starting cell. The user's
-                // actual travel is authoritative in that case, so the gesture
-                // still lands on exactly one neighboring page.
-                proposed = adjacent
-            }
             let target = ReaderPageStepLimiter.destination(
                 start: start,
                 proposed: proposed,
@@ -299,7 +277,6 @@ struct ImagePagerView: UIViewRepresentable {
                 updateCurrentPage(from: scrollView)
                 refreshPageTurnEffects(in: scrollView)
                 dragStartIndex = nil
-                dragStartContentOffset = nil
             }
         }
 
@@ -402,67 +379,6 @@ struct ImagePagerView: UIViewRepresentable {
                 offset.y = min(max(attributes.center.y - collectionView.bounds.midY, minimum), maximum)
             }
             return offset
-        }
-
-        private func draggedContentDirection(
-            from startOffset: CGPoint?,
-            to currentOffset: CGPoint,
-            velocity: CGPoint,
-            viewport: CGSize
-        ) -> CGFloat? {
-            guard let startOffset else { return nil }
-            let travel: CGFloat
-            let dimension: CGFloat
-            let gestureVelocity: CGFloat
-            if parent.flow == .horizontal {
-                travel = currentOffset.x - startOffset.x
-                dimension = viewport.width
-                gestureVelocity = velocity.x
-            } else {
-                travel = currentOffset.y - startOffset.y
-                dimension = viewport.height
-                gestureVelocity = velocity.y
-            }
-
-            // A deliberate drag of roughly one eighth of the viewport should
-            // turn the page even if UIKit predicts a snap back. A quick flick
-            // gets the same treatment when its travel is shorter.
-            if abs(travel) >= max(24, dimension * 0.12) {
-                return travel > 0 ? 1 : -1
-            }
-            guard abs(gestureVelocity) >= 350 else { return nil }
-            // UIScrollView's velocity is expressed in finger coordinates,
-            // opposite to the content offset's direction.
-            return gestureVelocity < 0 ? 1 : -1
-        }
-
-        private func adjacentItemIndex(
-            from start: Int,
-            contentDirection: CGFloat,
-            in collectionView: UICollectionView
-        ) -> Int? {
-            guard let startAttributes = collectionView.collectionViewLayout.layoutAttributesForItem(
-                at: IndexPath(item: start, section: 0)
-            ) else { return nil }
-
-            let startPosition = parent.flow == .horizontal
-                ? startAttributes.center.x
-                : startAttributes.center.y
-            return [start - 1, start + 1]
-                .filter { groups.indices.contains($0) }
-                .compactMap { index -> (index: Int, distance: CGFloat)? in
-                    guard let attributes = collectionView.collectionViewLayout.layoutAttributesForItem(
-                        at: IndexPath(item: index, section: 0)
-                    ) else { return nil }
-                    let position = parent.flow == .horizontal
-                        ? attributes.center.x
-                        : attributes.center.y
-                    let distance = position - startPosition
-                    guard distance * contentDirection > 0 else { return nil }
-                    return (index, abs(distance))
-                }
-                .min { $0.distance < $1.distance }?
-                .index
         }
 
         private func updateCurrentPage(from scrollView: UIScrollView) {
