@@ -49,8 +49,8 @@ targets:
             CFBundleURLName: com.inkshelf.reader.social-import
             CFBundleURLSchemes:
               - nijigenhome
-        CFBundleShortVersionString: "2.4.0"
-        CFBundleVersion: "24"
+        CFBundleShortVersionString: "2.4.2"
+        CFBundleVersion: "26"
         NSPhotoLibraryAddUsageDescription: 用于把你喜欢的当前画面保存到系统照片图库。
         NSLocalNetworkUsageDescription: 用于连接你自己的 Windows 电脑，按 Sharp 方案清晰化当前图片。
         NSAppTransportSecurity:
