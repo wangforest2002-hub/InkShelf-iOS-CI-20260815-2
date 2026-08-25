@@ -49,14 +49,16 @@ final class ReaderNavigationUITests: XCTestCase {
         let swipeStart = app.coordinate(withNormalizedOffset: CGVector(dx: 0.84, dy: 0.52))
         let swipeEnd = app.coordinate(withNormalizedOffset: CGVector(dx: 0.16, dy: 0.52))
         swipeStart.press(forDuration: 0.04, thenDragTo: swipeEnd)
+        let reachedSecondPage = waitForSlider(progress, containing: "第 2 页，共 3 页", timeout: 4)
         XCTAssertTrue(
-            waitForSlider(progress, containing: "第 2 页，共 3 页", timeout: 4),
-            "One fast horizontal swipe skipped past page 2"
+            reachedSecondPage,
+            "One fast horizontal swipe did not land on page 2; actual value: \(String(describing: progress.value))"
         )
         swipeStart.press(forDuration: 0.04, thenDragTo: swipeEnd)
+        let reachedThirdPage = waitForSlider(progress, containing: "第 3 页，共 3 页", timeout: 4)
         XCTAssertTrue(
-            waitForSlider(progress, containing: "第 3 页，共 3 页", timeout: 4),
-            "The second horizontal swipe did not advance exactly one page"
+            reachedThirdPage,
+            "The second horizontal swipe did not land on page 3; actual value: \(String(describing: progress.value))"
         )
         progress.adjust(toNormalizedSliderPosition: 0)
         XCTAssertTrue(
