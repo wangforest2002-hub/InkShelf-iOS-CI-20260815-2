@@ -14,7 +14,7 @@ on:
 jobs:
   build:
     runs-on: macos-26
-    timeout-minutes: 30
+    timeout-minutes: 40
     env:
       IOS_SIGNING_ENABLED: ${{ secrets.IOS_P12_BASE64 != '' && secrets.IOS_MOBILEPROVISION_BASE64 != '' }}
 
@@ -34,14 +34,17 @@ jobs:
             -project InkShelf.xcodeproj \
             -scheme InkShelf
 
-      - name: Select an available iPhone Simulator
+      - name: Select available iPhone and iPad Simulators
         run: |
           DEVICE_ID=$(xcrun simctl list devices available --json | python3 -c 'import json,sys; data=json.load(sys.stdin); print(next(device["udid"] for runtime in data["devices"].values() for device in runtime if device.get("isAvailable") and device["name"].startswith("iPhone")))')
+          IPAD_DEVICE_ID=$(xcrun simctl list devices available --json | python3 -c 'import json,sys; data=json.load(sys.stdin); print(next(device["udid"] for runtime in data["devices"].values() for device in runtime if device.get("isAvailable") and device["name"].startswith("iPad")))')
           test -n "$DEVICE_ID"
+          test -n "$IPAD_DEVICE_ID"
           xcrun simctl boot "$DEVICE_ID" 2>/dev/null || true
           # Compilation does not require SpringBoard to be ready. The first
           # xcodebuild test command will wait for the destination if needed.
           echo "DEVICE_ID=$DEVICE_ID" >> "$GITHUB_ENV"
+          echo "IPAD_DEVICE_ID=$IPAD_DEVICE_ID" >> "$GITHUB_ENV"
 
       - name: Build the simulator test bundle
         run: |
@@ -115,12 +118,31 @@ jobs:
             -only-testing:InkShelfUITests/ReaderNavigationUITests \
             -parallel-testing-enabled NO
 
+      - name: Run long-album paging test on iPad
+        timeout-minutes: 7
+        run: |
+          set -o pipefail
+          xcrun simctl shutdown "$DEVICE_ID" 2>/dev/null || true
+          xcrun simctl boot "$IPAD_DEVICE_ID"
+          xcrun simctl bootstatus "$IPAD_DEVICE_ID" -b
+          xcodebuild test-without-building \
+            -project InkShelf.xcodeproj \
+            -scheme InkShelf \
+            -configuration Debug \
+            -destination "platform=iOS Simulator,id=$IPAD_DEVICE_ID" \
+            -derivedDataPath build-simulator \
+            -resultBundlePath ui-tests-ipad.xcresult \
+            -only-testing:InkShelfUITests/ReaderNavigationUITests/testLongSinglePageAlbumAdvancesExactlyOnceAtStartMiddleAndEnd \
+            -parallel-testing-enabled NO
+
       - name: Upload UI test diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: InkShelf-ui-test-results
-          path: ui-tests.xcresult
+          path: |
+            ui-tests.xcresult
+            ui-tests-ipad.xcresult
           if-no-files-found: ignore
           retention-days: 14
 
@@ -128,6 +150,9 @@ jobs:
         run: |
           APP_PATH="build-simulator/Build/Products/Debug-iphonesimulator/InkShelf.app"
           test -d "$APP_PATH"
+          xcrun simctl shutdown "$IPAD_DEVICE_ID" 2>/dev/null || true
+          xcrun simctl boot "$DEVICE_ID" 2>/dev/null || true
+          xcrun simctl bootstatus "$DEVICE_ID" -b
           xcrun simctl terminate "$DEVICE_ID" com.inkshelf.reader 2>/dev/null || true
           xcrun simctl uninstall "$DEVICE_ID" com.inkshelf.reader 2>/dev/null || true
           xcrun simctl install "$DEVICE_ID" "$APP_PATH"

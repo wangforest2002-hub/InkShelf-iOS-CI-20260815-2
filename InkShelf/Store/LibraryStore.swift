@@ -1,5 +1,8 @@
 import Foundation
 import Observation
+#if DEBUG
+import UIKit
+#endif
 
 struct LibraryAlert: Identifiable {
     let id = UUID()
@@ -976,13 +979,13 @@ final class LibraryStore {
         guard !books.contains(where: { $0.id == id }) else { return }
         let folder = libraryURL.appendingPathComponent(id.uuidString.lowercased(), isDirectory: true)
         let pages = folder.appendingPathComponent("pages", isDirectory: true)
-        let png = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLxVQAAAABJRU5ErkJggg==")!
+        let pageData = makeLongReaderDiagnosticPage()
         let pageCount = 61
         do {
             try fileManager.createDirectory(at: pages, withIntermediateDirectories: true)
             for page in 1...pageCount {
-                try png.write(
-                    to: pages.appendingPathComponent(String(format: "%06d.png", page)),
+                try pageData.write(
+                    to: pages.appendingPathComponent(String(format: "%06d.jpg", page)),
                     options: .atomic
                 )
             }
@@ -992,9 +995,9 @@ final class LibraryStore {
                 kind: .imageCollection,
                 sourceFileName: "长画册翻页诊断",
                 contentRelativePath: "\(id.uuidString.lowercased())/pages",
-                coverRelativePath: "\(id.uuidString.lowercased())/pages/000001.png",
+                coverRelativePath: "\(id.uuidString.lowercased())/pages/000001.jpg",
                 pageCount: pageCount,
-                fileSize: Int64(png.count * pageCount),
+                fileSize: Int64(pageData.count * pageCount),
                 readerProfile: BookReaderProfile(
                     layoutRaw: ReaderLayout.single.rawValue,
                     flowRaw: ReaderFlow.horizontal.rawValue,
@@ -1007,6 +1010,28 @@ final class LibraryStore {
         } catch {
             alert = LibraryAlert(title: "长画册诊断数据失败", message: error.localizedDescription)
         }
+    }
+
+    private func makeLongReaderDiagnosticPage() -> Data {
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        format.opaque = true
+        let size = CGSize(width: 1_600, height: 2_400)
+        let image = UIGraphicsImageRenderer(size: size, format: format).image { context in
+            UIColor(red: 0.98, green: 0.91, blue: 0.93, alpha: 1).setFill()
+            context.fill(CGRect(origin: .zero, size: size))
+            for stripe in 0..<24 {
+                let hue = CGFloat(stripe) / 24
+                UIColor(
+                    hue: 0.90 + hue * 0.08,
+                    saturation: 0.18 + hue * 0.20,
+                    brightness: 0.96 - hue * 0.10,
+                    alpha: 1
+                ).setFill()
+                context.fill(CGRect(x: 0, y: CGFloat(stripe) * 100, width: size.width, height: 100))
+            }
+        }
+        return image.jpegData(compressionQuality: 0.94)!
     }
 
     private func installPickerSmokeInput() {

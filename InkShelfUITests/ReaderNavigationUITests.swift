@@ -199,27 +199,15 @@ final class ReaderNavigationUITests: XCTestCase {
 
         // Deliberate, ordinary swipes—not high-velocity flicks—must move one
         // physical page throughout a long album.
-        for page in 2...15 {
+        for page in 2...59 {
             swipeOnePageForward(in: app)
             assertPage(page, of: 61, on: progress)
-        }
-
-        progress.adjust(toNormalizedSliderPosition: 0.5)
-        assertPage(31, of: 61, on: progress)
-        for page in 32...39 {
-            swipeOnePageForward(in: app)
-            assertPage(page, of: 61, on: progress)
-        }
-        swipeOnePageBackward(in: app)
-        assertPage(38, of: 61, on: progress)
-        swipeOnePageForward(in: app)
-        assertPage(39, of: 61, on: progress)
-
-        progress.adjust(toNormalizedSliderPosition: 5.0 / 6.0)
-        assertPage(51, of: 61, on: progress)
-        for page in 52...59 {
-            swipeOnePageForward(in: app)
-            assertPage(page, of: 61, on: progress)
+            if page == 39 {
+                swipeOnePageBackward(in: app)
+                assertPage(38, of: 61, on: progress)
+                swipeOnePageForward(in: app)
+                assertPage(39, of: 61, on: progress)
+            }
         }
     }
 
