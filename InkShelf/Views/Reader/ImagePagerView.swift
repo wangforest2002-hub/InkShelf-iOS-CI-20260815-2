@@ -310,6 +310,9 @@ struct ImagePagerView: UIViewRepresentable {
 
             let startOffset = dragStartContentOffset ?? collectionView.contentOffset
             let travel = axisValue(currentOffset) - axisValue(startOffset)
+            let fingerTravel = axisValue(
+                collectionView.panGestureRecognizer.translation(in: collectionView)
+            )
             let viewport = max(1, parent.flow == .horizontal
                 ? collectionView.bounds.width
                 : collectionView.bounds.height)
@@ -323,6 +326,11 @@ struct ImagePagerView: UIViewRepresentable {
             let direction: CGFloat?
             if abs(travel) >= max(28, viewport * 0.12) {
                 direction = travel > 0 ? 1 : -1
+            } else if abs(fingerTravel) >= max(28, viewport * 0.12) {
+                // Collection offsets can briefly snap back to their origin
+                // before this delegate callback. Finger translation remains
+                // authoritative and runs opposite the content direction.
+                direction = fingerTravel < 0 ? 1 : -1
             } else if abs(projectedTravel) >= viewport * 0.25 {
                 // A short flick may have little physical travel but a clear
                 // projected destination. Only its direction matters; the
