@@ -179,6 +179,72 @@ final class ReaderNavigationUITests: XCTestCase {
         XCTAssertTrue(app.buttons["update-check"].exists)
     }
 
+    func testLongSinglePageAlbumAdvancesExactlyOnceAtStartMiddleAndEnd() throws {
+        let app = XCUIApplication()
+        app.launchArguments.append("INKSHELF_UI_TEST_LONG_READER")
+        app.launch()
+
+        let skip = app.buttons["跳过"]
+        if skip.waitForExistence(timeout: 3) {
+            skip.tap()
+        }
+
+        let book = app.descendants(matching: .any)["book-a11ce000-0000-4000-8000-000000000061"]
+        XCTAssertTrue(book.waitForExistence(timeout: 8), "The long paging fixture never appeared")
+        book.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+
+        let progress = app.sliders["reader-progress"]
+        XCTAssertTrue(progress.waitForExistence(timeout: 12), "The long album did not open")
+        assertPage(1, of: 61, on: progress)
+
+        // Deliberate, ordinary swipes—not high-velocity flicks—must move one
+        // physical page throughout a long album.
+        for page in 2...15 {
+            swipeOnePageForward(in: app)
+            assertPage(page, of: 61, on: progress)
+        }
+
+        progress.adjust(toNormalizedSliderPosition: 0.5)
+        assertPage(31, of: 61, on: progress)
+        for page in 32...39 {
+            swipeOnePageForward(in: app)
+            assertPage(page, of: 61, on: progress)
+        }
+
+        progress.adjust(toNormalizedSliderPosition: 5.0 / 6.0)
+        assertPage(51, of: 61, on: progress)
+        for page in 52...59 {
+            swipeOnePageForward(in: app)
+            assertPage(page, of: 61, on: progress)
+        }
+    }
+
+    private func swipeOnePageForward(in app: XCUIApplication) {
+        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.78, dy: 0.52))
+        let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.22, dy: 0.52))
+        start.press(forDuration: 0.12, thenDragTo: end)
+    }
+
+    private func assertPage(
+        _ page: Int,
+        of pageCount: Int,
+        on progress: XCUIElement,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let expected = "第 \(page) 页，共 \(pageCount) 页"
+        let predicate = NSPredicate(format: "value CONTAINS %@", expected)
+        let expectation = XCTNSPredicateExpectation(predicate: predicate, object: progress)
+        let result = XCTWaiter.wait(for: [expectation], timeout: 3)
+        XCTAssertEqual(
+            result,
+            .completed,
+            "Expected \(expected), got \(String(describing: progress.value))",
+            file: file,
+            line: line
+        )
+    }
+
     func testSystemDocumentPickerImportsThenOpensImage() throws {
         let app = XCUIApplication()
         app.launchArguments.append("INKSHELF_UI_TEST_PICKER")

@@ -83,7 +83,8 @@ struct RootView: View {
     private func offerUpdateIfAvailable() async {
         guard !ProcessInfo.processInfo.arguments.contains("INKSHELF_UI_TEST_SEED"),
               !ProcessInfo.processInfo.arguments.contains("INKSHELF_UI_TEST_PICKER"),
-              !ProcessInfo.processInfo.arguments.contains("INKSHELF_UI_TEST_NIGHT")
+              !ProcessInfo.processInfo.arguments.contains("INKSHELF_UI_TEST_NIGHT"),
+              !ProcessInfo.processInfo.arguments.contains("INKSHELF_UI_TEST_LONG_READER")
         else { return }
         if !updates.didCheckThisLaunch {
             await updates.checkForUpdates(silent: true)

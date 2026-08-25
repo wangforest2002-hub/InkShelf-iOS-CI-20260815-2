@@ -737,7 +737,9 @@ struct ReaderView: View {
     private func scheduleControlsHide() {
 #if DEBUG
         let arguments = ProcessInfo.processInfo.arguments
-        if arguments.contains("INKSHELF_UI_TEST_SEED") || arguments.contains("INKSHELF_UI_TEST_PICKER") {
+        if arguments.contains("INKSHELF_UI_TEST_SEED")
+            || arguments.contains("INKSHELF_UI_TEST_PICKER")
+            || arguments.contains("INKSHELF_UI_TEST_LONG_READER") {
             return
         }
 #endif

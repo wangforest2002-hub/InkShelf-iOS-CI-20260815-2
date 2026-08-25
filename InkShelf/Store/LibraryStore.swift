@@ -83,6 +83,10 @@ final class LibraryStore {
             || ProcessInfo.processInfo.arguments.contains("INKSHELF_UI_TEST_NIGHT") {
             installReaderNavigationSmokeBook()
         }
+        if ProcessInfo.processInfo.arguments.contains("INKSHELF_UI_TEST_LONG_READER") {
+            defaults.removeObject(forKey: Self.activeReaderKey)
+            installLongReaderNavigationSmokeBook()
+        }
         if ProcessInfo.processInfo.arguments.contains("INKSHELF_UI_TEST_PICKER") {
             installPickerSmokeInput()
         }
@@ -960,6 +964,46 @@ final class LibraryStore {
             saveImmediately()
         } catch {
             alert = LibraryAlert(title: "UI 冒烟数据失败", message: error.localizedDescription)
+        }
+    }
+
+    /// A long, explicitly single-page fixture catches position-dependent paging
+    /// regressions that the three-page feature smoke book cannot reveal.
+    private func installLongReaderNavigationSmokeBook() {
+        let id = UUID(uuidString: "A11CE000-0000-4000-8000-000000000061")!
+        guard !books.contains(where: { $0.id == id }) else { return }
+        let folder = libraryURL.appendingPathComponent(id.uuidString.lowercased(), isDirectory: true)
+        let pages = folder.appendingPathComponent("pages", isDirectory: true)
+        let png = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLxVQAAAABJRU5ErkJggg==")!
+        let pageCount = 61
+        do {
+            try fileManager.createDirectory(at: pages, withIntermediateDirectories: true)
+            for page in 1...pageCount {
+                try png.write(
+                    to: pages.appendingPathComponent(String(format: "%06d.png", page)),
+                    options: .atomic
+                )
+            }
+            books.append(Book(
+                id: id,
+                title: "长画册翻页诊断",
+                kind: .imageCollection,
+                sourceFileName: "长画册翻页诊断",
+                contentRelativePath: "\(id.uuidString.lowercased())/pages",
+                coverRelativePath: "\(id.uuidString.lowercased())/pages/000001.png",
+                pageCount: pageCount,
+                fileSize: Int64(png.count * pageCount),
+                readerProfile: BookReaderProfile(
+                    layoutRaw: ReaderLayout.single.rawValue,
+                    flowRaw: ReaderFlow.horizontal.rawValue,
+                    orderRaw: ReadingOrder.leftToRight.rawValue,
+                    backdropRaw: ReaderBackdrop.black.rawValue,
+                    coverSingle: true
+                )
+            ))
+            saveImmediately()
+        } catch {
+            alert = LibraryAlert(title: "长画册诊断数据失败", message: error.localizedDescription)
         }
     }
 
