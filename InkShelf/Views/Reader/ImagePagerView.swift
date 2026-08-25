@@ -26,7 +26,10 @@ struct ImagePagerView: UIViewRepresentable {
         collectionView.usesContinuousItemSizing = flow == .continuous
         collectionView.backgroundColor = backgroundColor
         collectionView.contentInsetAdjustmentBehavior = .never
-        collectionView.isPagingEnabled = flow != .continuous
+        // UIKit's native paging can project an ordinary drag across multiple
+        // full-screen collection items. Paged modes use the coordinator's
+        // deterministic adjacent-page snap instead.
+        collectionView.isPagingEnabled = false
         collectionView.decelerationRate = flow == .continuous ? .normal : .fast
         collectionView.showsHorizontalScrollIndicator = false
         collectionView.showsVerticalScrollIndicator = false
@@ -46,7 +49,7 @@ struct ImagePagerView: UIViewRepresentable {
         collectionView.backgroundColor = backgroundColor
         collectionView.semanticContentAttribute = order == .rightToLeft && flow == .horizontal ? .forceRightToLeft : .forceLeftToRight
         collectionView.usesContinuousItemSizing = flow == .continuous
-        collectionView.isPagingEnabled = flow != .continuous
+        collectionView.isPagingEnabled = false
         collectionView.decelerationRate = flow == .continuous ? .normal : .fast
 
         if let flowLayout = collectionView.collectionViewLayout as? UICollectionViewFlowLayout {
@@ -94,6 +97,9 @@ struct ImagePagerView: UIViewRepresentable {
         private var alignmentGeneration = 0
         private var pendingAlignmentIndex: Int?
         private var isApplyingProgrammaticAlignment = false
+        private var dragStartIndex: Int?
+        private var dragStartContentOffset: CGPoint?
+        private var pendingGestureTargetIndex: Int?
 
         init(parent: ImagePagerView) {
             self.parent = parent
@@ -101,6 +107,7 @@ struct ImagePagerView: UIViewRepresentable {
 
         func rebuildConfiguration(from parent: ImagePagerView) {
             cancelPendingAlignment()
+            resetPagedGesture()
             configurationKey = parent.configurationKey
             groups = ImagePageGroup.make(
                 urls: parent.imageURLs,
@@ -235,18 +242,46 @@ struct ImagePagerView: UIViewRepresentable {
         }
 
         func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
-            updateCurrentPage(from: scrollView)
-            refreshPageTurnEffects(in: scrollView)
+            finishPagedGesture(in: scrollView)
         }
 
         func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
             cancelPendingAlignment()
+            dragStartIndex = visibleIndex(in: scrollView)
+            dragStartContentOffset = scrollView.contentOffset
+            pendingGestureTargetIndex = nil
+        }
+
+        func scrollViewWillEndDragging(
+            _ scrollView: UIScrollView,
+            withVelocity _: CGPoint,
+            targetContentOffset: UnsafeMutablePointer<CGPoint>
+        ) {
+            guard parent.flow != .continuous,
+                  let collectionView = scrollView as? UICollectionView,
+                  !groups.isEmpty
+            else { return }
+
+            collectionView.layoutIfNeeded()
+            let start = min(
+                max(0, dragStartIndex ?? visibleIndex(in: collectionView)),
+                groups.count - 1
+            )
+            let target = pagedGestureTarget(
+                from: start,
+                currentOffset: collectionView.contentOffset,
+                proposedOffset: targetContentOffset.pointee,
+                in: collectionView
+            )
+            pendingGestureTargetIndex = target
+            if let offset = contentOffset(forItemAt: target, in: collectionView) {
+                targetContentOffset.pointee = offset
+            }
         }
 
         func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
             if !decelerate {
-                updateCurrentPage(from: scrollView)
-                refreshPageTurnEffects(in: scrollView)
+                finishPagedGesture(in: scrollView)
             }
         }
 
@@ -261,6 +296,154 @@ struct ImagePagerView: UIViewRepresentable {
                   scrollView.isDragging || scrollView.isDecelerating
             else { return }
             updateCurrentPage(from: scrollView)
+        }
+
+        private func pagedGestureTarget(
+            from start: Int,
+            currentOffset: CGPoint,
+            proposedOffset: CGPoint,
+            in collectionView: UICollectionView
+        ) -> Int {
+            guard let startAttributes = collectionView.collectionViewLayout.layoutAttributesForItem(
+                at: IndexPath(item: start, section: 0)
+            ) else { return start }
+
+            let startOffset = dragStartContentOffset ?? collectionView.contentOffset
+            let travel = axisValue(currentOffset) - axisValue(startOffset)
+            let viewport = max(1, parent.flow == .horizontal
+                ? collectionView.bounds.width
+                : collectionView.bounds.height)
+
+            let proposedCenter = axisValue(proposedOffset) + viewport / 2
+            let startCenter = parent.flow == .horizontal
+                ? startAttributes.center.x
+                : startAttributes.center.y
+            let projectedTravel = proposedCenter - startCenter
+
+            let direction: CGFloat?
+            if abs(travel) >= max(28, viewport * 0.12) {
+                direction = travel > 0 ? 1 : -1
+            } else if abs(projectedTravel) >= viewport * 0.25 {
+                // A short flick may have little physical travel but a clear
+                // projected destination. Only its direction matters; the
+                // destination is still clamped to the adjacent item.
+                direction = projectedTravel > 0 ? 1 : -1
+            } else {
+                direction = nil
+            }
+
+            guard let direction else { return start }
+            return adjacentItemIndex(
+                from: start,
+                contentDirection: direction,
+                in: collectionView
+            ) ?? start
+        }
+
+        private func axisValue(_ point: CGPoint) -> CGFloat {
+            parent.flow == .horizontal ? point.x : point.y
+        }
+
+        private func adjacentItemIndex(
+            from start: Int,
+            contentDirection: CGFloat,
+            in collectionView: UICollectionView
+        ) -> Int? {
+            guard let startAttributes = collectionView.collectionViewLayout.layoutAttributesForItem(
+                at: IndexPath(item: start, section: 0)
+            ) else { return nil }
+
+            let startPosition = parent.flow == .horizontal
+                ? startAttributes.center.x
+                : startAttributes.center.y
+            return [start - 1, start + 1]
+                .filter { groups.indices.contains($0) }
+                .compactMap { index -> (index: Int, distance: CGFloat)? in
+                    guard let attributes = collectionView.collectionViewLayout.layoutAttributesForItem(
+                        at: IndexPath(item: index, section: 0)
+                    ) else { return nil }
+                    let position = parent.flow == .horizontal
+                        ? attributes.center.x
+                        : attributes.center.y
+                    let distance = position - startPosition
+                    guard distance * contentDirection > 0 else { return nil }
+                    return (index, abs(distance))
+                }
+                .min { $0.distance < $1.distance }?
+                .index
+        }
+
+        private func contentOffset(
+            forItemAt index: Int,
+            in collectionView: UICollectionView
+        ) -> CGPoint? {
+            guard groups.indices.contains(index),
+                  let attributes = collectionView.collectionViewLayout.layoutAttributesForItem(
+                    at: IndexPath(item: index, section: 0)
+                  )
+            else { return nil }
+
+            var offset = collectionView.contentOffset
+            if parent.flow == .horizontal {
+                let minimum = -collectionView.adjustedContentInset.left
+                let maximum = max(
+                    minimum,
+                    collectionView.contentSize.width
+                        - collectionView.bounds.width
+                        + collectionView.adjustedContentInset.right
+                )
+                offset.x = min(max(attributes.center.x - collectionView.bounds.midX, minimum), maximum)
+            } else {
+                let minimum = -collectionView.adjustedContentInset.top
+                let maximum = max(
+                    minimum,
+                    collectionView.contentSize.height
+                        - collectionView.bounds.height
+                        + collectionView.adjustedContentInset.bottom
+                )
+                offset.y = min(max(attributes.center.y - collectionView.bounds.midY, minimum), maximum)
+            }
+            return offset
+        }
+
+        private func finishPagedGesture(in scrollView: UIScrollView) {
+            guard parent.flow != .continuous,
+                  let collectionView = scrollView as? UICollectionView,
+                  !groups.isEmpty
+            else {
+                updateCurrentPage(from: scrollView)
+                refreshPageTurnEffects(in: scrollView)
+                resetPagedGesture()
+                return
+            }
+
+            let target = min(
+                max(0, pendingGestureTargetIndex ?? visibleIndex(in: collectionView)),
+                groups.count - 1
+            )
+            collectionView.layoutIfNeeded()
+            if let exactOffset = contentOffset(forItemAt: target, in: collectionView),
+               hypot(
+                    exactOffset.x - collectionView.contentOffset.x,
+                    exactOffset.y - collectionView.contentOffset.y
+               ) > 0.75 {
+                // Normally the custom target offset lands exactly. This only
+                // removes residual sub-page drift after nested zoom-view
+                // gesture arbitration; it never chooses another page.
+                collectionView.setContentOffset(exactOffset, animated: false)
+                collectionView.layoutIfNeeded()
+            }
+            if let page = groups[target].indices.first, parent.currentPage != page {
+                parent.currentPage = page
+            }
+            refreshPageTurnEffects(in: collectionView)
+            resetPagedGesture()
+        }
+
+        private func resetPagedGesture() {
+            dragStartIndex = nil
+            dragStartContentOffset = nil
+            pendingGestureTargetIndex = nil
         }
 
         func visibleIndex(in scrollView: UIScrollView) -> Int {
@@ -296,10 +479,9 @@ struct ImagePagerView: UIViewRepresentable {
             if parent.currentPage != page { parent.currentPage = page }
         }
 
-        /// The page itself stays inside UICollectionView's native paging model,
-        /// so gesture physics and page accounting remain deterministic. Only the
-        /// visible presentation is transformed, which gives a book-like turn
-        /// without introducing a second navigation state machine.
+        /// Page placement stays inside UICollectionView's custom adjacent-item
+        /// snap. Only the visible presentation is transformed, so the book-like
+        /// turn does not introduce a second navigation state machine.
         func refreshPageTurnEffects(in scrollView: UIScrollView) {
             guard let collectionView = scrollView as? UICollectionView else { return }
             guard parent.flow == .horizontal, parent.transition == .book else {

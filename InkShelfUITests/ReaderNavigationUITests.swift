@@ -210,6 +210,10 @@ final class ReaderNavigationUITests: XCTestCase {
             swipeOnePageForward(in: app)
             assertPage(page, of: 61, on: progress)
         }
+        swipeOnePageBackward(in: app)
+        assertPage(38, of: 61, on: progress)
+        swipeOnePageForward(in: app)
+        assertPage(39, of: 61, on: progress)
 
         progress.adjust(toNormalizedSliderPosition: 5.0 / 6.0)
         assertPage(51, of: 61, on: progress)
@@ -222,6 +226,12 @@ final class ReaderNavigationUITests: XCTestCase {
     private func swipeOnePageForward(in app: XCUIApplication) {
         let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.78, dy: 0.52))
         let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.22, dy: 0.52))
+        start.press(forDuration: 0.12, thenDragTo: end)
+    }
+
+    private func swipeOnePageBackward(in app: XCUIApplication) {
+        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.22, dy: 0.52))
+        let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.78, dy: 0.52))
         start.press(forDuration: 0.12, thenDragTo: end)
     }
 

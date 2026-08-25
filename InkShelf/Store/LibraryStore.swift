@@ -68,11 +68,14 @@ final class LibraryStore {
         metadataRepository = LibraryMetadataRepository(primaryURL: metadata)
         groupsURL = root.appendingPathComponent("shelf-groups.json")
 #if DEBUG
-        if ProcessInfo.processInfo.arguments.contains("INKSHELF_UI_TEST_PICKER") {
+        let launchArguments = ProcessInfo.processInfo.arguments
+        if launchArguments.contains(where: { $0.hasPrefix("INKSHELF_UI_TEST_") }) {
+            defaults.removeObject(forKey: Self.activeReaderKey)
+        }
+        if launchArguments.contains("INKSHELF_UI_TEST_PICKER") {
             // Each picker test must begin on a truly empty shelf. UI test
             // methods share the same simulator container unless we reset it.
             try? fileManager.removeItem(at: libraryURL)
-            defaults.removeObject(forKey: Self.activeReaderKey)
         }
 #endif
         try? fileManager.createDirectory(at: libraryURL, withIntermediateDirectories: true)
@@ -84,7 +87,6 @@ final class LibraryStore {
             installReaderNavigationSmokeBook()
         }
         if ProcessInfo.processInfo.arguments.contains("INKSHELF_UI_TEST_LONG_READER") {
-            defaults.removeObject(forKey: Self.activeReaderKey)
             installLongReaderNavigationSmokeBook()
         }
         if ProcessInfo.processInfo.arguments.contains("INKSHELF_UI_TEST_PICKER") {
