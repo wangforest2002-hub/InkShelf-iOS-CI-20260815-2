@@ -88,3 +88,15 @@ struct ReaderPagePosition: Equatable, Sendable {
         return (chapter, min(max(bounded - Double(chapter), 0), 1))
     }
 }
+
+/// Keeps a paged drag deterministic even when UIKit's projected velocity
+/// would otherwise carry the collection view across several full screens.
+/// A spread is one item here, so two-page reading still advances one spread.
+enum ReaderPageStepLimiter {
+    static func destination(start: Int, proposed: Int, itemCount: Int) -> Int {
+        guard itemCount > 0 else { return 0 }
+        let boundedStart = min(max(0, start), itemCount - 1)
+        let boundedProposal = min(max(0, proposed), itemCount - 1)
+        return min(max(boundedProposal, boundedStart - 1), boundedStart + 1)
+    }
+}

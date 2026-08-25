@@ -94,6 +94,7 @@ struct ImagePagerView: UIViewRepresentable {
         private var alignmentGeneration = 0
         private var pendingAlignmentIndex: Int?
         private var isApplyingProgrammaticAlignment = false
+        private var dragStartIndex: Int?
 
         init(parent: ImagePagerView) {
             self.parent = parent
@@ -101,6 +102,7 @@ struct ImagePagerView: UIViewRepresentable {
 
         func rebuildConfiguration(from parent: ImagePagerView) {
             cancelPendingAlignment()
+            dragStartIndex = nil
             configurationKey = parent.configurationKey
             groups = ImagePageGroup.make(
                 urls: parent.imageURLs,
@@ -237,16 +239,44 @@ struct ImagePagerView: UIViewRepresentable {
         func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
             updateCurrentPage(from: scrollView)
             refreshPageTurnEffects(in: scrollView)
+            dragStartIndex = nil
         }
 
         func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
             cancelPendingAlignment()
+            dragStartIndex = visibleIndex(in: scrollView)
+        }
+
+        func scrollViewWillEndDragging(
+            _ scrollView: UIScrollView,
+            withVelocity velocity: CGPoint,
+            targetContentOffset: UnsafeMutablePointer<CGPoint>
+        ) {
+            guard parent.flow != .continuous,
+                  let collectionView = scrollView as? UICollectionView,
+                  !groups.isEmpty
+            else { return }
+
+            let start = dragStartIndex ?? visibleIndex(in: collectionView)
+            let proposed = nearestItemIndex(
+                to: targetContentOffset.pointee,
+                in: collectionView
+            ) ?? start
+            let target = ReaderPageStepLimiter.destination(
+                start: start,
+                proposed: proposed,
+                itemCount: groups.count
+            )
+            if let offset = contentOffset(forItemAt: target, in: collectionView) {
+                targetContentOffset.pointee = offset
+            }
         }
 
         func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
             if !decelerate {
                 updateCurrentPage(from: scrollView)
                 refreshPageTurnEffects(in: scrollView)
+                dragStartIndex = nil
             }
         }
 
@@ -287,6 +317,68 @@ struct ImagePagerView: UIViewRepresentable {
                 return Int(round(scrollView.contentOffset.x / scrollView.bounds.width))
             }
             return Int(round(scrollView.contentOffset.y / scrollView.bounds.height))
+        }
+
+        private func nearestItemIndex(
+            to proposedContentOffset: CGPoint,
+            in collectionView: UICollectionView
+        ) -> Int? {
+            let center = CGPoint(
+                x: proposedContentOffset.x + collectionView.bounds.midX,
+                y: proposedContentOffset.y + collectionView.bounds.midY
+            )
+            let searchRect = CGRect(
+                x: center.x - collectionView.bounds.width,
+                y: center.y - collectionView.bounds.height,
+                width: collectionView.bounds.width * 2,
+                height: collectionView.bounds.height * 2
+            )
+            return collectionView.collectionViewLayout
+                .layoutAttributesForElements(in: searchRect)?
+                .filter { $0.representedElementCategory == .cell }
+                .min { left, right in
+                    let leftDistance = parent.flow == .horizontal
+                        ? abs(left.center.x - center.x)
+                        : abs(left.center.y - center.y)
+                    let rightDistance = parent.flow == .horizontal
+                        ? abs(right.center.x - center.x)
+                        : abs(right.center.y - center.y)
+                    return leftDistance < rightDistance
+                }?
+                .indexPath.item
+        }
+
+        private func contentOffset(
+            forItemAt index: Int,
+            in collectionView: UICollectionView
+        ) -> CGPoint? {
+            guard groups.indices.contains(index),
+                  let attributes = collectionView.collectionViewLayout.layoutAttributesForItem(
+                    at: IndexPath(item: index, section: 0)
+                  )
+            else { return nil }
+
+            var offset = collectionView.contentOffset
+            if parent.flow == .horizontal {
+                let minimum = -collectionView.adjustedContentInset.left
+                let maximum = max(
+                    minimum,
+                    collectionView.contentSize.width
+                        - collectionView.bounds.width
+                        + collectionView.adjustedContentInset.right
+                )
+                offset.x = min(max(attributes.center.x - collectionView.bounds.midX, minimum), maximum)
+            } else {
+                let minimum = -collectionView.adjustedContentInset.top
+                let maximum = max(
+                    minimum,
+                    collectionView.contentSize.height
+                        - collectionView.bounds.height
+                        + collectionView.adjustedContentInset.bottom
+                )
+                offset.y = min(max(attributes.center.y - collectionView.bounds.midY, minimum), maximum)
+            }
+            return offset
         }
 
         private func updateCurrentPage(from scrollView: UIScrollView) {

@@ -823,6 +823,29 @@ final class BookModelTests: XCTestCase {
         }
     }
 
+    func testPagedGestureCanOnlyAdvanceOneVisibleItem() {
+        XCTAssertEqual(
+            ReaderPageStepLimiter.destination(start: 0, proposed: 6, itemCount: 12),
+            1
+        )
+        XCTAssertEqual(
+            ReaderPageStepLimiter.destination(start: 6, proposed: 1, itemCount: 12),
+            5
+        )
+        XCTAssertEqual(
+            ReaderPageStepLimiter.destination(start: 6, proposed: 6, itemCount: 12),
+            6
+        )
+        XCTAssertEqual(
+            ReaderPageStepLimiter.destination(start: 0, proposed: -4, itemCount: 12),
+            0
+        )
+        XCTAssertEqual(
+            ReaderPageStepLimiter.destination(start: 11, proposed: 18, itemCount: 12),
+            11
+        )
+    }
+
     func testEBookProgressScrubberIncludesChapterProgress() {
         let position = ReaderPagePosition(
             currentPage: 1,
