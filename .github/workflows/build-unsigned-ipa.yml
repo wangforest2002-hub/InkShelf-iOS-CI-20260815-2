@@ -118,8 +118,8 @@ jobs:
             -only-testing:InkShelfUITests/ReaderNavigationUITests/testLongSinglePageAlbumAdvancesExactlyOnceAtStartMiddleAndEnd \
             -parallel-testing-enabled NO
 
-      - name: Run shelf-to-reader UI navigation smoke test
-        timeout-minutes: 6
+      - name: Run shelf-to-reader and app-navigation UI smoke test
+        timeout-minutes: 8
         run: |
           set -o pipefail
           xcodebuild test-without-building \
@@ -130,6 +130,19 @@ jobs:
             -derivedDataPath build-simulator \
             -resultBundlePath ui-tests.xcresult \
             -only-testing:InkShelfUITests/ReaderNavigationUITests/testSeededLocalBookOpensAndReturnsFromReader \
+            -parallel-testing-enabled NO
+
+      - name: Run system document-picker UI smoke test
+        timeout-minutes: 5
+        run: |
+          set -o pipefail
+          xcodebuild test-without-building \
+            -project InkShelf.xcodeproj \
+            -scheme InkShelf \
+            -configuration Debug \
+            -destination "platform=iOS Simulator,id=$DEVICE_ID" \
+            -derivedDataPath build-simulator \
+            -resultBundlePath ui-tests-picker.xcresult \
             -only-testing:InkShelfUITests/ReaderNavigationUITests/testSystemDocumentPickerImportsThenOpensImage \
             -parallel-testing-enabled NO
 
@@ -157,6 +170,7 @@ jobs:
           name: InkShelf-ui-test-results
           path: |
             ui-tests.xcresult
+            ui-tests-picker.xcresult
             ui-tests-paging-iphone.xcresult
             ui-tests-ipad.xcresult
           if-no-files-found: ignore
