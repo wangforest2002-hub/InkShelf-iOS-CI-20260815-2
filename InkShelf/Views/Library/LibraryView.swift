@@ -46,12 +46,20 @@ struct LibraryView: View {
         LibraryGridDensity(rawValue: gridDensityRaw) ?? .comfortable
     }
 
+    private var presentationSortOrder: LibrarySortOrder {
+        scope == .recent ? .lastOpened : sortOrder
+    }
+
+    private var presentationReadingStatus: ReadingStatusFilter {
+        scope == .recent ? .all : readingStatus
+    }
+
     private var books: [Book] {
         let filtered = library.filteredBooks(
             scope: scope,
             query: query,
-            sortOrder: sortOrder,
-            status: readingStatus
+            sortOrder: presentationSortOrder,
+            status: presentationReadingStatus
         )
         guard scope == .all else { return filtered }
         switch shelfFilter {
@@ -70,7 +78,7 @@ struct LibraryView: View {
 
     private var shelfColumnCount: Int {
         if horizontalSizeClass == .compact { return 2 }
-        return gridDensity == .compact ? 5 : 4
+        return gridDensity == .compact ? 4 : 3
     }
 
     private var shelfGridSpacing: CGFloat {
@@ -219,6 +227,7 @@ struct LibraryView: View {
                             }
                             .opacity(shelfContentOpacity)
                             .offset(y: shelfContentVisible ? 0 : 3)
+                            .id(shelfPresentationID)
                         }
                         .padding(.horizontal, 18)
                         .padding(.top, 12)
@@ -259,15 +268,20 @@ struct LibraryView: View {
 
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
-                        Picker("排序方式", selection: $sortOrderRaw) {
-                            ForEach(LibrarySortOrder.allCases) { order in
-                                Label(order.title, systemImage: order.systemImage).tag(order.rawValue)
+                        if scope == .recent {
+                            Label("按最近打开自动排序", systemImage: "clock.arrow.circlepath")
+                            Text("这里只显示真正翻开过的读物")
+                        } else {
+                            Picker("排序方式", selection: $sortOrderRaw) {
+                                ForEach(LibrarySortOrder.allCases) { order in
+                                    Label(order.title, systemImage: order.systemImage).tag(order.rawValue)
+                                }
                             }
-                        }
 
-                        Picker("阅读状态", selection: $readingStatusRaw) {
-                            ForEach(ReadingStatusFilter.allCases) { status in
-                                Label(status.title, systemImage: status.systemImage).tag(status.rawValue)
+                            Picker("阅读状态", selection: $readingStatusRaw) {
+                                ForEach(ReadingStatusFilter.allCases) { status in
+                                    Label(status.title, systemImage: status.systemImage).tag(status.rawValue)
+                                }
                             }
                         }
 
@@ -463,7 +477,7 @@ struct LibraryView: View {
 
     private var shelfContentOpacity: Double {
         guard scope == .all, query.isEmpty else { return 1 }
-        return shelfContentVisible ? 1 : 0.88
+        return shelfContentVisible ? 1 : 0
     }
 
     private func coverAspectRatio(for book: Book) -> CGFloat? {
@@ -478,7 +492,7 @@ struct LibraryView: View {
         var transaction = Transaction()
         transaction.disablesAnimations = true
         withTransaction(transaction) {
-            shelfContentVisible = reduceMotion
+            shelfContentVisible = false
             shelfFilter = next
         }
     }
@@ -715,8 +729,8 @@ struct LibraryView: View {
     }
 
     private var sectionSubtitle: String {
-        var parts = ["\(books.count) 本读物", sortOrder.title]
-        if readingStatus != .all { parts.append(readingStatus.title) }
+        var parts = ["\(books.count) 本读物", presentationSortOrder.title]
+        if presentationReadingStatus != .all { parts.append(presentationReadingStatus.title) }
         return parts.joined(separator: " · ")
     }
 
@@ -893,7 +907,7 @@ private struct ShelfBookRowLayout: Layout {
             subview.place(
                 at: CGPoint(x: x, y: bounds.minY),
                 anchor: .topLeading,
-                proposal: ProposedViewSize(width: itemWidth, height: nil)
+                proposal: ProposedViewSize(width: itemWidth, height: bounds.height)
             )
             x += itemWidth + spacing
         }

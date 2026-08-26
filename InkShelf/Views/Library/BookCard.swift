@@ -142,6 +142,7 @@ struct BookCard: View {
             }
         }
         .padding(9)
+        .frame(maxHeight: .infinity, alignment: .top)
         .background {
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .fill(

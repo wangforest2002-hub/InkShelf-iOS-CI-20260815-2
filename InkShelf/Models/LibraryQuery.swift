@@ -102,9 +102,13 @@ struct LibraryQuery: Sendable {
     var status: ReadingStatusFilter
 
     func apply(to books: [Book]) -> [Book] {
-        books
+        // “最近”是一份阅读历史，不应继承书架页上次留下的
+        // “未读/已读”筛选或标题排序，否则它会突然变空或看起来
+        // 与普通书架没有区别。
+        let effectiveStatus: ReadingStatusFilter = scope == .recent ? .all : status
+        return books
             .filter(matchesScope)
-            .filter { status == .all || $0.readingStatus.rawValue == status.rawValue }
+            .filter { effectiveStatus == .all || $0.readingStatus.rawValue == effectiveStatus.rawValue }
             .filter { $0.matchesLibrarySearch(searchText) }
             .sorted(by: isOrderedBefore)
     }
@@ -119,7 +123,8 @@ struct LibraryQuery: Sendable {
 
     private func isOrderedBefore(_ left: Book, _ right: Book) -> Bool {
         let fallback = left.title.localizedStandardCompare(right.title) == .orderedAscending
-        switch sortOrder {
+        let effectiveSortOrder: LibrarySortOrder = scope == .recent ? .lastOpened : sortOrder
+        switch effectiveSortOrder {
         case .lastOpened:
             let lhs = left.lastOpenedAt ?? left.importedAt
             let rhs = right.lastOpenedAt ?? right.importedAt

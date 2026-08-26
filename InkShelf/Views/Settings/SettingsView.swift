@@ -217,7 +217,7 @@ struct SettingsView: View {
                 }
 
                 Section("欢迎与版本") {
-                    LabeledContent("二次元小家", value: "2.5.0 · 正式版")
+                    LabeledContent("二次元小家", value: "2.5.1 · 正式版")
 
                     Button {
                         showingWelcome = true

@@ -1095,6 +1095,18 @@ final class BookModelTests: XCTestCase {
             status: .finished
         ).apply(to: [unread, reading, finished])
         XCTAssertEqual(favorites.map(\.id), [finished.id])
+
+        let recent = LibraryQuery(
+            scope: .recent,
+            searchText: "",
+            sortOrder: .title,
+            status: .unread
+        ).apply(to: [unread, finished, reading])
+        XCTAssertEqual(
+            recent.map(\.id),
+            [reading.id, finished.id],
+            "Recent history must ignore stale shelf filters and stay ordered by last-opened date"
+        )
     }
 
     func testReaderProfileNormalizesInvalidPersistedValuesAndOffersContinuousFlow() {

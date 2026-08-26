@@ -38,6 +38,7 @@ struct ReaderView: View {
     @State private var orderRaw: String
     @State private var backdropRaw: String
     @State private var coverSingle: Bool
+    @GestureState private var topEdgeExitDistance: CGFloat = 0
 
     @AppStorage("reader.layout") private var defaultLayoutRaw = ReaderLayout.single.rawValue
     @AppStorage("reader.flow") private var defaultFlowRaw = ReaderFlow.horizontal.rawValue
@@ -110,6 +111,8 @@ struct ReaderView: View {
 
             readerContent
                 .ignoresSafeArea()
+
+            topEdgeExitLayer
 
             if aiEnabled,
                autoDanmaku,
@@ -439,6 +442,50 @@ struct ReaderView: View {
         .alert(item: $readerAlert) { alert in
             Alert(title: Text(alert.title), message: Text(alert.message), dismissButton: .default(Text("好")))
         }
+    }
+
+    private var topEdgeExitLayer: some View {
+        ZStack(alignment: .top) {
+            VStack(spacing: 0) {
+                Color.clear
+                    .frame(height: 76)
+                    .contentShape(Rectangle())
+                    .gesture(topEdgeExitGesture)
+                    .accessibilityIdentifier("reader-top-edge-exit")
+                    .accessibilityLabel("从顶部向下滑动返回书架")
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .ignoresSafeArea(edges: .top)
+
+            if topEdgeExitDistance > 0 {
+                Image(systemName: topEdgeExitDistance >= 64 ? "xmark.circle.fill" : "chevron.down.circle.fill")
+                    .font(.title2.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .padding(9)
+                    .background(.black.opacity(0.42), in: Circle())
+                    .offset(y: min(48, 7 + topEdgeExitDistance * 0.34))
+                    .opacity(min(1, Double(topEdgeExitDistance / 34)))
+                    .allowsHitTesting(false)
+            }
+        }
+        .zIndex(18)
+    }
+
+    private var topEdgeExitGesture: some Gesture {
+        DragGesture(minimumDistance: 8, coordinateSpace: .global)
+            .updating($topEdgeExitDistance) { value, distance, _ in
+                let vertical = value.translation.height
+                guard vertical > 0, vertical > abs(value.translation.width) * 1.25 else { return }
+                distance = min(vertical, 110)
+            }
+            .onEnded { value in
+                let downward = max(value.translation.height, value.predictedEndTranslation.height)
+                guard downward >= 64,
+                      downward > abs(value.translation.width) * 1.25
+                else { return }
+                closeReader()
+            }
     }
 
     @ViewBuilder
