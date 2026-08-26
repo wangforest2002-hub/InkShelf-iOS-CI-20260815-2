@@ -2,6 +2,12 @@ name: Build unsigned IPA
 
 on:
   workflow_dispatch:
+    inputs:
+      quick_release:
+        description: Build the release IPA without running simulator tests
+        required: false
+        type: boolean
+        default: false
   push:
     branches: [main]
     paths:
@@ -35,6 +41,7 @@ jobs:
             -scheme InkShelf
 
       - name: Select available iPhone and iPad Simulators
+        if: ${{ inputs.quick_release != true }}
         run: |
           DEVICE_ID=$(xcrun simctl list devices available --json | python3 -c 'import json,sys; data=json.load(sys.stdin); print(next(device["udid"] for runtime in data["devices"].values() for device in runtime if device.get("isAvailable") and device["name"].startswith("iPhone")))')
           IPAD_DEVICE_ID=$(xcrun simctl list devices available --json | python3 -c 'import json,sys; data=json.load(sys.stdin); print(next(device["udid"] for runtime in data["devices"].values() for device in runtime if device.get("isAvailable") and device["name"].startswith("iPad")))')
@@ -47,6 +54,7 @@ jobs:
           echo "IPAD_DEVICE_ID=$IPAD_DEVICE_ID" >> "$GITHUB_ENV"
 
       - name: Build the simulator test bundle
+        if: ${{ inputs.quick_release != true }}
         run: |
           set -o pipefail
           xcodebuild build-for-testing \
@@ -58,6 +66,7 @@ jobs:
             -parallel-testing-enabled NO
 
       - name: Run model and reading-restoration tests
+        if: ${{ inputs.quick_release != true }}
         timeout-minutes: 12
         run: |
           set -o pipefail
@@ -73,6 +82,7 @@ jobs:
             -parallel-testing-enabled NO
 
       - name: Run security-scoped copy smoke test
+        if: ${{ inputs.quick_release != true }}
         timeout-minutes: 3
         run: |
           set -o pipefail
@@ -86,6 +96,7 @@ jobs:
             -parallel-testing-enabled NO
 
       - name: Run CBZ, PDF, and folder import smoke test
+        if: ${{ inputs.quick_release != true }}
         timeout-minutes: 4
         run: |
           set -o pipefail
@@ -99,12 +110,14 @@ jobs:
             -parallel-testing-enabled NO
 
       - name: Restart simulator before UI tests
+        if: ${{ inputs.quick_release != true }}
         run: |
           xcrun simctl shutdown "$DEVICE_ID" 2>/dev/null || true
           xcrun simctl boot "$DEVICE_ID"
           xcrun simctl bootstatus "$DEVICE_ID" -b
 
       - name: Run shelf-to-reader and app-navigation UI smoke test
+        if: ${{ inputs.quick_release != true }}
         timeout-minutes: 10
         run: |
           set -o pipefail
@@ -119,6 +132,7 @@ jobs:
             -parallel-testing-enabled NO
 
       - name: Run system document-picker UI smoke test
+        if: ${{ inputs.quick_release != true }}
         timeout-minutes: 5
         run: |
           set -o pipefail
@@ -133,7 +147,7 @@ jobs:
             -parallel-testing-enabled NO
 
       - name: Freeze UI test diagnostics
-        if: always()
+        if: ${{ always() && inputs.quick_release != true }}
         run: |
           for BUNDLE in \
             ui-tests.xcresult \
@@ -144,7 +158,7 @@ jobs:
           done
 
       - name: Upload UI test diagnostics
-        if: always()
+        if: ${{ always() && inputs.quick_release != true }}
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
@@ -157,6 +171,7 @@ jobs:
           retention-days: 14
 
       - name: Launch app and capture formal welcome and UI smoke screenshots
+        if: ${{ inputs.quick_release != true }}
         run: |
           APP_PATH="build-simulator/Build/Products/Debug-iphonesimulator/InkShelf.app"
           test -d "$APP_PATH"
@@ -188,6 +203,7 @@ jobs:
           test -s welcome-2-5-ipad.png
 
       - name: Upload UI smoke screenshot
+        if: ${{ inputs.quick_release != true }}
         uses: actions/upload-artifact@v4
         with:
           name: InkShelf-ui-smoke
