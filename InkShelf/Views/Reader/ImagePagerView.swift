@@ -84,6 +84,7 @@ private struct ContinuousImagePagerView: UIViewRepresentable {
         collectionView.register(ImagePageCell.self, forCellWithReuseIdentifier: ImagePageCell.reuseIdentifier)
         collectionView.semanticContentAttribute = order == .rightToLeft && flow == .horizontal ? .forceRightToLeft : .forceLeftToRight
         context.coordinator.rebuildConfiguration(from: self)
+        context.coordinator.resolveContinuousAspectRatio(in: collectionView)
         return collectionView
     }
 
@@ -112,6 +113,7 @@ private struct ContinuousImagePagerView: UIViewRepresentable {
             context.coordinator.rebuildConfiguration(from: self)
             collectionView.reloadData()
             collectionView.collectionViewLayout.invalidateLayout()
+            context.coordinator.resolveContinuousAspectRatio(in: collectionView)
         }
 
         let groups = context.coordinator.groups
@@ -158,9 +160,27 @@ private struct ContinuousImagePagerView: UIViewRepresentable {
                 flow: parent.flow,
                 coverSingle: parent.coverSingle
             )
-            if let firstURL = parent.imageURLs.first {
+            // Opening continuous mode must not synchronously touch image
+            // metadata on the interaction thread. A neutral comic ratio is
+            // replaced below after a utility-queue metadata read.
+            continuousAspectRatio = 0.70
+        }
+
+        func resolveContinuousAspectRatio(in collectionView: UICollectionView) {
+            guard parent.flow == .continuous, let firstURL = parent.imageURLs.first else { return }
+            let expectedConfiguration = configurationKey
+            DispatchQueue.global(qos: .utility).async { [weak self, weak collectionView] in
                 let size = ReaderImagePipeline.pixelSize(of: firstURL)
-                continuousAspectRatio = min(max(size.width / max(size.height, 1), 0.12), 3)
+                let ratio = min(max(size.width / max(size.height, 1), 0.12), 3)
+                DispatchQueue.main.async {
+                    guard let self,
+                          let collectionView,
+                          self.configurationKey == expectedConfiguration,
+                          abs(self.continuousAspectRatio - ratio) > 0.005
+                    else { return }
+                    self.continuousAspectRatio = ratio
+                    collectionView.collectionViewLayout.invalidateLayout()
+                }
             }
         }
 
@@ -773,7 +793,10 @@ private struct SystemImagePageView: UIViewControllerRepresentable {
         }
 
         private func prefetch(around index: Int, in pageViewController: UIPageViewController) {
-            let nearby = [index - 2, index - 1, index + 1, index + 2]
+            // Keep exactly the adjacent spreads warm. Decoding two pages ahead
+            // competes with the page the finger is actively revealing on large
+            // PNG albums and raises peak memory without improving navigation.
+            let nearby = [index - 1, index + 1]
                 .filter { groups.indices.contains($0) }
                 .flatMap { groups[$0].urls }
             guard !nearby.isEmpty else { return }

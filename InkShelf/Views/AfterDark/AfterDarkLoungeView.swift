@@ -4,6 +4,7 @@ import UIKit
 struct AfterDarkLoungeView: View {
     @Environment(LibraryStore.self) private var library
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.ambientMotionEnabled) private var ambientMotionEnabled
     @State private var selectedMood: BookMood?
     @State private var drawnBook: Book?
     @State private var openedBook: Book?
@@ -88,6 +89,7 @@ struct AfterDarkLoungeView: View {
                 ReaderView(book: book) { openedBook = nil }
             }
         }
+        .environment(\.ambientMotionEnabled, ambientMotionEnabled && openedBook == nil)
         .sheet(item: $editingBook) { book in
             BookProfileEditorView(book: book) { profile in
                 library.updateBookProfile(
@@ -208,7 +210,13 @@ struct AfterDarkLoungeView: View {
 
 private struct AfterDarkBackground: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.ambientMotionEnabled) private var ambientMotionEnabled
     @State private var drifting = false
+
+    private var canAnimate: Bool {
+        ambientMotionEnabled && scenePhase == .active && !reduceMotion
+    }
 
     var body: some View {
         ZStack {
@@ -255,8 +263,13 @@ private struct AfterDarkBackground: View {
             .offset(x: drifting ? 160 : -180)
         }
         .ignoresSafeArea()
-        .onAppear {
-            guard !reduceMotion else { return }
+        .task(id: canAnimate) {
+            var reset = Transaction()
+            reset.disablesAnimations = true
+            withTransaction(reset) { drifting = false }
+            guard canAnimate else { return }
+            await Task.yield()
+            guard !Task.isCancelled else { return }
             withAnimation(.easeInOut(duration: 11).repeatForever(autoreverses: true)) {
                 drifting = true
             }
@@ -269,7 +282,13 @@ private struct AfterDarkHero: View {
     let nightCount: Int
     let favoritePages: Int
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.ambientMotionEnabled) private var ambientMotionEnabled
     @State private var breathing = false
+
+    private var canAnimate: Bool {
+        ambientMotionEnabled && scenePhase == .active && !reduceMotion
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -316,8 +335,13 @@ private struct AfterDarkHero: View {
                 .stroke(.white.opacity(0.15), lineWidth: 1)
         }
         .shadow(color: .black.opacity(0.30), radius: 28, y: 14)
-        .onAppear {
-            guard !reduceMotion else { return }
+        .task(id: canAnimate) {
+            var reset = Transaction()
+            reset.disablesAnimations = true
+            withTransaction(reset) { breathing = false }
+            guard canAnimate else { return }
+            await Task.yield()
+            guard !Task.isCancelled else { return }
             withAnimation(.easeInOut(duration: 2.5).repeatForever(autoreverses: true)) {
                 breathing = true
             }

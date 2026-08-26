@@ -7,6 +7,7 @@ struct ImageGalleryHubView: View {
     @Environment(LibraryStore.self) private var library
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.ambientMotionEnabled) private var ambientMotionEnabled
     @State private var section: ImageGallerySection = .imports
     @State private var query = ""
     @State private var showFilePicker = false
@@ -100,6 +101,7 @@ struct ImageGalleryHubView: View {
                     .navigationTransition(.zoom(sourceID: book.id, in: coverTransition))
             }
         }
+        .environment(\.ambientMotionEnabled, ambientMotionEnabled && openedBook == nil)
         .sheet(isPresented: $showFilePicker) {
             DocumentPickerView(
                 contentTypes: [.image],

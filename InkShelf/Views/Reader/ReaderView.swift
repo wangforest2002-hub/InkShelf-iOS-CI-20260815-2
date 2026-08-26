@@ -26,7 +26,6 @@ struct ReaderView: View {
     @State private var pdfPassword = ""
     @State private var didTryPassword = false
     @State private var hideControlsTask: Task<Void, Never>?
-    @State private var prefetchTask: Task<Void, Never>?
     @State private var readerAlert: ReaderAlert?
     @State private var readerNotice: String?
     @State private var isSavingPage = false
@@ -237,7 +236,6 @@ struct ReaderView: View {
                 imageURLs = urls
                 pageCount = max(1, urls.count)
                 normalizeComicPageForLayout()
-                schedulePrefetchPages(around: currentPage)
                 prepareAIPage()
             case .ebook:
                 let package = await library.loadEBookPackage(for: book)
@@ -295,15 +293,6 @@ struct ReaderView: View {
                 reachedLastPage: reachedLastPage
             )
             if controlsVisible { scheduleControlsHide() }
-            let prefetchAnchor = book.kind == .ebook ? newPage : ReaderPagePosition(
-                currentPage: newPage,
-                pageCount: pageCount,
-                layout: layout,
-                flow: flow,
-                coverSingle: coverSingle,
-                isEBook: false
-            ).visibleRange.upperBound
-            schedulePrefetchPages(around: prefetchAnchor)
             prepareAIPage()
         }
         .onChange(of: ebookProgress) { oldValue, newValue in
@@ -346,7 +335,6 @@ struct ReaderView: View {
         }
         .onDisappear {
             hideControlsTask?.cancel()
-            prefetchTask?.cancel()
             companion.cancelAll()
             library.flushProgress()
             achievements.flush()
@@ -726,24 +714,6 @@ struct ReaderView: View {
         }
         guard let source else { return }
         companion.preparePage(book: book, page: currentPage, pageCount: pageCount, source: source, force: force)
-    }
-
-    private func schedulePrefetchPages(around page: Int) {
-        prefetchTask?.cancel()
-        guard book.kind == .archive || book.kind == .imageCollection, !imageURLs.isEmpty else { return }
-        let neighborIndexes = [page + 1, page - 1, page + 2]
-            .filter { imageURLs.indices.contains($0) }
-        let urls = neighborIndexes.map { imageURLs[$0] }
-        guard !urls.isEmpty else { return }
-
-        // Let the visible cell request its quick preview first. Starting full
-        // neighbor decodes synchronously here can otherwise make the current
-        // page wait behind background work on very large PNG files.
-        prefetchTask = Task {
-            try? await Task.sleep(for: .milliseconds(180))
-            guard !Task.isCancelled else { return }
-            ReaderImagePipeline.shared.prefetch(urls, maxPixelSize: 3_072)
-        }
     }
 
     private func scheduleControlsHide() {

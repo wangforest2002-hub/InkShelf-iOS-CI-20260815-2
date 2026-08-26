@@ -10,10 +10,20 @@ struct RootView: View {
     @State private var updatePrompt: AppUpdateRelease?
 
     var body: some View {
-        MainTabView()
+        MainTabView(
+            isActive: launchDestination == nil
+                && updatePrompt == nil
+                && socialImports.pendingRequest == nil
+                && library.duplicateImportPrompt == nil
+        )
             .task {
-                if ProcessInfo.processInfo.arguments.contains("INKSHELF_UI_TEST_NIGHT") {
+                let launchArguments = ProcessInfo.processInfo.arguments
+                if launchArguments.contains("INKSHELF_UI_TEST_NIGHT")
+                    || launchArguments.contains("INKSHELF_UI_TEST_SEED")
+                    || launchArguments.contains("INKSHELF_UI_TEST_PICKER")
+                    || launchArguments.contains("INKSHELF_UI_TEST_LONG_READER") {
                     hasSeenWelcome = true
+                    launchDestination = nil
                     return
                 }
                 if !hasSeenWelcome {
@@ -110,6 +120,7 @@ private enum LaunchDestination: Identifiable, Equatable {
 }
 
 private struct MainTabView: View {
+    let isActive: Bool
     @State private var selectedTab: MainTab = .library
 
     var body: some View {
@@ -128,18 +139,22 @@ private struct MainTabView: View {
         TabView(selection: $selectedTab) {
             Tab("书架", systemImage: "books.vertical.fill", value: .library) {
                 LibraryView(scope: .all)
+                    .environment(\.ambientMotionEnabled, isActive && selectedTab == .library)
             }
 
             Tab("最近", systemImage: "clock.fill", value: .recent) {
                 LibraryView(scope: .recent)
+                    .environment(\.ambientMotionEnabled, isActive && selectedTab == .recent)
             }
 
             Tab("画廊", systemImage: "photo.stack.fill", value: .gallery) {
                 ImageGalleryHubView()
+                    .environment(\.ambientMotionEnabled, isActive && selectedTab == .gallery)
             }
 
             Tab("设置", systemImage: "gearshape.fill", value: .settings) {
                 SettingsView()
+                    .environment(\.ambientMotionEnabled, isActive && selectedTab == .settings)
             }
         }
     }

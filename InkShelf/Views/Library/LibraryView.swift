@@ -8,6 +8,7 @@ struct LibraryView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.ambientMotionEnabled) private var ambientMotionEnabled
     let scope: LibraryScope
 
     @AppStorage("library.sortOrder") private var sortOrderRaw = LibrarySortOrder.lastOpened.rawValue
@@ -309,6 +310,7 @@ struct LibraryView: View {
                     .navigationTransition(.zoom(sourceID: book.id, in: coverTransition))
             }
         }
+        .environment(\.ambientMotionEnabled, ambientMotionEnabled && openedBook == nil)
         .sheet(item: $importPicker) { picker in
             DocumentPickerView(
                 contentTypes: UTType.inkShelfFileTypes,
@@ -770,15 +772,32 @@ private struct NightModeShelfCard: View {
     let featuredBook: Book?
     let openFeatured: (Book) -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.ambientMotionEnabled) private var ambientMotionEnabled
     @State private var glowing = false
+
+    private var canAnimate: Bool {
+        ambientMotionEnabled && scenePhase == .active && !reduceMotion
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top, spacing: 13) {
                 ZStack {
                     Circle()
+                        .fill(
+                            RadialGradient(
+                                colors: [AppTheme.honey.opacity(glowing ? 0.28 : 0.10), .clear],
+                                center: .center,
+                                startRadius: 0,
+                                endRadius: 28
+                            )
+                        )
+                        .frame(width: 58, height: 58)
+                        .scaleEffect(glowing ? 1.08 : 0.92)
+                    Circle()
                         .fill(AppTheme.peach.opacity(glowing ? 0.22 : 0.12))
-                        .shadow(color: AppTheme.honey.opacity(glowing ? 0.28 : 0.10), radius: glowing ? 16 : 6)
+                        .shadow(color: AppTheme.honey.opacity(0.12), radius: 6)
                     Image(systemName: "moon.stars.fill")
                         .font(.title3.weight(.semibold))
                         .foregroundStyle(AppTheme.peach)
@@ -841,8 +860,13 @@ private struct NightModeShelfCard: View {
         )
         .overlay { RoundedRectangle(cornerRadius: 26).stroke(.white.opacity(0.12), lineWidth: 1) }
         .shadow(color: AppTheme.lilac.opacity(0.13), radius: 20, y: 10)
-        .onAppear {
-            guard !reduceMotion else { return }
+        .task(id: canAnimate) {
+            var reset = Transaction()
+            reset.disablesAnimations = true
+            withTransaction(reset) { glowing = false }
+            guard canAnimate else { return }
+            await Task.yield()
+            guard !Task.isCancelled else { return }
             withAnimation(.easeInOut(duration: 2.6).repeatForever(autoreverses: true)) {
                 glowing = true
             }

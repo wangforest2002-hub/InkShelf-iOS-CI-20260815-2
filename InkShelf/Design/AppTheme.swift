@@ -1,5 +1,19 @@
 import SwiftUI
 
+private struct AmbientMotionEnabledKey: EnvironmentKey {
+    static let defaultValue = true
+}
+
+extension EnvironmentValues {
+    /// Ambient decoration keeps moving only while its screen is actually
+    /// visible. Navigation destinations and inactive tabs can therefore keep
+    /// their state without running hidden animation loops behind the reader.
+    var ambientMotionEnabled: Bool {
+        get { self[AmbientMotionEnabledKey.self] }
+        set { self[AmbientMotionEnabledKey.self] = newValue }
+    }
+}
+
 enum AppTheme {
     static let accent = Color(red: 0.26, green: 0.56, blue: 0.98)
     static let cyan = Color(red: 0.24, green: 0.80, blue: 0.94)
@@ -31,7 +45,13 @@ enum AppMotion {
 struct AuroraBackground: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.ambientMotionEnabled) private var ambientMotionEnabled
     @State private var animate = false
+
+    private var canAnimate: Bool {
+        ambientMotionEnabled && scenePhase == .active && !reduceMotion
+    }
 
     var body: some View {
         ZStack {
@@ -88,8 +108,13 @@ struct AuroraBackground: View {
             .offset(x: animate ? 100 : -40)
         }
         .ignoresSafeArea()
-        .onAppear {
-            guard !reduceMotion else { return }
+        .task(id: canAnimate) {
+            var reset = Transaction()
+            reset.disablesAnimations = true
+            withTransaction(reset) { animate = false }
+            guard canAnimate else { return }
+            await Task.yield()
+            guard !Task.isCancelled else { return }
             withAnimation(.easeInOut(duration: 18).repeatForever(autoreverses: true)) {
                 animate = true
             }
@@ -101,8 +126,14 @@ struct AuroraBackground: View {
 struct CozyWindowView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.ambientMotionEnabled) private var ambientMotionEnabled
     @State private var glowing = false
     @State private var drifting = false
+
+    private var canAnimate: Bool {
+        ambientMotionEnabled && scenePhase == .active && !reduceMotion
+    }
 
     var body: some View {
         GeometryReader { proxy in
@@ -121,14 +152,32 @@ struct CozyWindowView: View {
                         )
                     )
 
-                Circle()
-                    .fill(colorScheme == .dark ? AppTheme.cream : AppTheme.honey)
-                    .frame(width: size.width * 0.24)
-                    .shadow(
-                        color: (colorScheme == .dark ? AppTheme.honey : Color.white).opacity(glowing ? 0.70 : 0.34),
-                        radius: glowing ? 18 : 9
-                    )
-                    .offset(x: size.width * 0.22, y: -size.height * 0.20)
+                ZStack {
+                    Circle()
+                        .fill(
+                            RadialGradient(
+                                colors: [
+                                    (colorScheme == .dark ? AppTheme.honey : Color.white)
+                                        .opacity(glowing ? 0.42 : 0.18),
+                                    .clear
+                                ],
+                                center: .center,
+                                startRadius: 0,
+                                endRadius: size.width * 0.19
+                            )
+                        )
+                        .frame(width: size.width * 0.42)
+                        .scaleEffect(glowing ? 1.06 : 0.92)
+
+                    Circle()
+                        .fill(colorScheme == .dark ? AppTheme.cream : AppTheme.honey)
+                        .frame(width: size.width * 0.24)
+                        .shadow(
+                            color: (colorScheme == .dark ? AppTheme.honey : Color.white).opacity(0.32),
+                            radius: 8
+                        )
+                }
+                .offset(x: size.width * 0.22, y: -size.height * 0.20)
 
                 Image(systemName: colorScheme == .dark ? "sparkles" : "cloud.fill")
                     .font(.system(size: size.width * 0.15, weight: .medium))
@@ -165,8 +214,16 @@ struct CozyWindowView: View {
             }
             .shadow(color: AppTheme.honey.opacity(colorScheme == .dark ? 0.15 : 0.22), radius: 16, y: 8)
         }
-        .onAppear {
-            guard !reduceMotion else { return }
+        .task(id: canAnimate) {
+            var reset = Transaction()
+            reset.disablesAnimations = true
+            withTransaction(reset) {
+                glowing = false
+                drifting = false
+            }
+            guard canAnimate else { return }
+            await Task.yield()
+            guard !Task.isCancelled else { return }
             withAnimation(.easeInOut(duration: 2.8).repeatForever(autoreverses: true)) {
                 glowing = true
             }
@@ -180,7 +237,13 @@ struct CozyWindowView: View {
 
 struct WarmLightSweep: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.ambientMotionEnabled) private var ambientMotionEnabled
     @State private var moving = false
+
+    private var canAnimate: Bool {
+        ambientMotionEnabled && scenePhase == .active && !reduceMotion
+    }
 
     var body: some View {
         GeometryReader { proxy in
@@ -191,13 +254,16 @@ struct WarmLightSweep: View {
             )
             .frame(width: max(100, proxy.size.width * 0.52))
             .rotationEffect(.degrees(-16))
-            .offset(x: reduceMotion ? -proxy.size.width : (moving ? proxy.size.width * 1.35 : -proxy.size.width))
-            .opacity(reduceMotion ? 0 : 1)
+            .offset(x: canAnimate ? (moving ? proxy.size.width * 1.35 : -proxy.size.width) : -proxy.size.width)
+            .opacity(canAnimate ? 1 : 0)
         }
         .clipped()
         .allowsHitTesting(false)
-        .task(id: reduceMotion) {
-            guard !reduceMotion else { return }
+        .task(id: canAnimate) {
+            var initialReset = Transaction()
+            initialReset.disablesAnimations = true
+            withTransaction(initialReset) { moving = false }
+            guard canAnimate else { return }
             while !Task.isCancelled {
                 var reset = Transaction()
                 reset.disablesAnimations = true

@@ -5,7 +5,13 @@ struct EmptyLibraryView: View {
     let hasSearch: Bool
     let importAction: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.ambientMotionEnabled) private var ambientMotionEnabled
     @State private var floating = false
+
+    private var canAnimate: Bool {
+        ambientMotionEnabled && scenePhase == .active && !reduceMotion
+    }
 
     var body: some View {
         ScrollView {
@@ -32,7 +38,7 @@ struct EmptyLibraryView: View {
                 }
                 .padding(.bottom, 18)
                 .animation(
-                    reduceMotion ? nil : .easeInOut(duration: 2.4).repeatForever(autoreverses: true),
+                    canAnimate ? .easeInOut(duration: 2.4).repeatForever(autoreverses: true) : nil,
                     value: floating
                 )
 
@@ -66,7 +72,15 @@ struct EmptyLibraryView: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 34)
         }
-        .onAppear { floating = true }
+        .task(id: canAnimate) {
+            var reset = Transaction()
+            reset.disablesAnimations = true
+            withTransaction(reset) { floating = false }
+            guard canAnimate else { return }
+            await Task.yield()
+            guard !Task.isCancelled else { return }
+            floating = true
+        }
     }
 
     private var title: String {

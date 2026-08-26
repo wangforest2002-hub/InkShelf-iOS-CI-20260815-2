@@ -13,7 +13,8 @@ enum AIPageSource: Sendable {
 actor PageInsightService {
     static let shared = PageInsightService()
 
-    func analyze(source: AIPageSource, page: Int, pageCount: Int) throws -> AIPageInsight {
+    func analyze(source: AIPageSource, page: Int, pageCount: Int) async throws -> AIPageInsight {
+        try Task.checkCancellation()
         if case .ebookText(let text, let format) = source {
             return AIPageInsight(
                 page: page,
@@ -25,7 +26,9 @@ actor PageInsightService {
             )
         }
         let prepared = try prepareImage(source: source, page: page)
-        let recognized = recognize(cgImage: prepared.cgImage)
+        try Task.checkCancellation()
+        let recognized = try recognize(cgImage: prepared.cgImage)
+        try Task.checkCancellation()
         let combinedText = normalizedText([prepared.embeddedText, recognized.text]
             .filter { !$0.isEmpty }
             .joined(separator: "\n"))
@@ -80,7 +83,7 @@ actor PageInsightService {
         }
     }
 
-    private func recognize(cgImage: CGImage) -> (text: String, labels: [String], faceCount: Int) {
+    private func recognize(cgImage: CGImage) throws -> (text: String, labels: [String], faceCount: Int) {
         let handler = VNImageRequestHandler(cgImage: cgImage, orientation: .up)
 
         let textRequest = VNRecognizeTextRequest()
@@ -88,13 +91,17 @@ actor PageInsightService {
         textRequest.usesLanguageCorrection = true
         textRequest.automaticallyDetectsLanguage = true
         textRequest.recognitionLanguages = ["zh-Hans", "zh-Hant", "ja-JP", "en-US"]
-        try? handler.perform([textRequest])
+        try Task.checkCancellation()
+        try handler.perform([textRequest])
 
         let faceRequest = VNDetectFaceRectanglesRequest()
-        try? handler.perform([faceRequest])
+        try Task.checkCancellation()
+        try handler.perform([faceRequest])
 
         let classifyRequest = VNClassifyImageRequest()
-        try? handler.perform([classifyRequest])
+        try Task.checkCancellation()
+        try handler.perform([classifyRequest])
+        try Task.checkCancellation()
 
         let observations = (textRequest.results ?? []).sorted(by: readingOrder)
         let lines = observations.compactMap { $0.topCandidates(1).first?.string }

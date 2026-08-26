@@ -201,10 +201,9 @@ final class ReaderNavigationUITests: XCTestCase {
         XCTAssertTrue(pageLabel.waitForExistence(timeout: 3), "The long album page counter did not appear")
         assertPage(1, of: 61, on: pageLabel)
 
-        // Deliberate, ordinary swipes—not high-velocity flicks—must move one
-        // physical page throughout a long album. The simulator can occasionally
-        // drop a synthesized drag entirely; retry that no-op once, but fail
-        // immediately if the first gesture moved past the adjacent page.
+        // UIPageViewController exposes only its adjacent controller. A native
+        // XCTest swipe therefore has one possible completed destination and is
+        // less prone to the delayed synthetic-drag delivery seen on iPad.
         for page in 2...59 {
             advanceExactlyOnePageForward(
                 from: page - 1,
@@ -241,15 +240,11 @@ final class ReaderNavigationUITests: XCTestCase {
     }
 
     private func swipeOnePageForward(in app: XCUIApplication) {
-        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.78, dy: 0.52))
-        let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.22, dy: 0.52))
-        start.press(forDuration: 0.12, thenDragTo: end)
+        app.swipeLeft()
     }
 
     private func swipeOnePageBackward(in app: XCUIApplication) {
-        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.22, dy: 0.52))
-        let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.78, dy: 0.52))
-        start.press(forDuration: 0.12, thenDragTo: end)
+        app.swipeRight()
     }
 
     private func advanceExactlyOnePageForward(
@@ -261,12 +256,15 @@ final class ReaderNavigationUITests: XCTestCase {
         file: StaticString = #filePath,
         line: UInt = #line
     ) {
-        swipeOnePageForward(in: app)
-        guard !waitForPage(expectedPage, of: pageCount, on: pageLabel, timeout: 3) else { return }
-
         assertPage(currentPage, of: pageCount, on: pageLabel, file: file, line: line)
         swipeOnePageForward(in: app)
-        assertPage(expectedPage, of: pageCount, on: pageLabel, file: file, line: line)
+        let expected = "第 \(expectedPage) 页 · 共 \(pageCount) 页"
+        XCTAssertTrue(
+            waitForPage(expectedPage, of: pageCount, on: pageLabel, timeout: 6),
+            "Expected exactly one completed page turn to \(expected), got \(pageLabel.label)",
+            file: file,
+            line: line
+        )
     }
 
     private func advanceExactlyOnePageBackward(
@@ -278,12 +276,15 @@ final class ReaderNavigationUITests: XCTestCase {
         file: StaticString = #filePath,
         line: UInt = #line
     ) {
-        swipeOnePageBackward(in: app)
-        guard !waitForPage(expectedPage, of: pageCount, on: pageLabel, timeout: 3) else { return }
-
         assertPage(currentPage, of: pageCount, on: pageLabel, file: file, line: line)
         swipeOnePageBackward(in: app)
-        assertPage(expectedPage, of: pageCount, on: pageLabel, file: file, line: line)
+        let expected = "第 \(expectedPage) 页 · 共 \(pageCount) 页"
+        XCTAssertTrue(
+            waitForPage(expectedPage, of: pageCount, on: pageLabel, timeout: 6),
+            "Expected exactly one completed page turn to \(expected), got \(pageLabel.label)",
+            file: file,
+            line: line
+        )
     }
 
     private func waitForPage(
