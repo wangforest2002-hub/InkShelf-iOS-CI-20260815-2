@@ -1014,6 +1014,11 @@ private final class ZoomingSpreadScrollView: UIScrollView, UIScrollViewDelegate 
         showsVerticalScrollIndicator = false
         delaysContentTouches = false
         isDirectionalLockEnabled = true
+        // At fitted scale the page container, rather than this nested zoom
+        // view, owns one-finger swipes. Disable the child pan immediately so
+        // a newly-created page cannot steal the next turn before its first
+        // layout pass. Pinch/double-tap zoom re-enables panning as needed.
+        panGestureRecognizer.isEnabled = false
         addSubview(canvas)
         addSubview(spinner)
         spinner.hidesWhenStopped = true
@@ -1034,6 +1039,9 @@ private final class ZoomingSpreadScrollView: UIScrollView, UIScrollViewDelegate 
 
     func configure(urls: [URL], onTap: @escaping () -> Void) {
         tapAction = onTap
+        if zoomScale <= minimumZoomScale + 0.01 {
+            panGestureRecognizer.isEnabled = false
+        }
         let paths = urls.map(\.standardizedFileURL.path)
         guard paths != representedPaths else { return }
 
@@ -1072,6 +1080,7 @@ private final class ZoomingSpreadScrollView: UIScrollView, UIScrollViewDelegate 
         minimumZoomScale = 1
         maximumZoomScale = 1
         zoomScale = 1
+        panGestureRecognizer.isEnabled = false
         contentSize = .zero
         contentOffset = .zero
         needsFit = true

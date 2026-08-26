@@ -341,7 +341,14 @@ final class ReaderNavigationUITests: XCTestCase {
         let expected = "第 \(page) 页 · 共 \(pageCount) 页"
         let predicate = NSPredicate(format: "label CONTAINS %@", expected)
         let expectation = XCTNSPredicateExpectation(predicate: predicate, object: pageLabel)
-        return XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed
+        let completed = XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed
+        if completed {
+            // Let UIPageViewController finish its transition bookkeeping before
+            // the next synthetic gesture. This mirrors the shortest realistic
+            // pause between two deliberate human page turns.
+            RunLoop.current.run(until: Date().addingTimeInterval(0.12))
+        }
+        return completed
     }
 
     private func assertPage(
