@@ -27,6 +27,12 @@ struct DuplicateBookGroup: Identifiable, Sendable {
     var id: String { fingerprint }
 }
 
+private struct PendingReadingProgress: Sendable {
+    var page: Int
+    var ebookProgress: Double?
+    var openedAt: Date
+}
+
 @MainActor
 @Observable
 final class LibraryStore {
@@ -53,6 +59,7 @@ final class LibraryStore {
     @ObservationIgnored private let metadataWriter: LibraryMetadataWriter
     @ObservationIgnored private let groupsURL: URL
     @ObservationIgnored private var saveTask: Task<Void, Never>?
+    @ObservationIgnored private var pendingReadingProgress: [UUID: PendingReadingProgress] = [:]
     @ObservationIgnored private var pageURLCache: [UUID: [URL]] = [:]
     @ObservationIgnored private var pendingDuplicateBooks: [Book] = []
     let libraryURL: URL
@@ -422,9 +429,13 @@ final class LibraryStore {
     func updateProgress(bookID: UUID, page: Int) {
         guard let index = books.firstIndex(where: { $0.id == bookID }) else { return }
         let clamped = min(max(0, page), max(0, books[index].pageCount - 1))
-        guard books[index].currentPage != clamped else { return }
-        books[index].currentPage = clamped
-        books[index].lastOpenedAt = .now
+        let effectivePage = pendingReadingProgress[bookID]?.page ?? books[index].currentPage
+        guard effectivePage != clamped else { return }
+        pendingReadingProgress[bookID] = PendingReadingProgress(
+            page: clamped,
+            ebookProgress: nil,
+            openedAt: .now
+        )
         scheduleSave()
     }
 
@@ -433,6 +444,10 @@ final class LibraryStore {
         guard books[index].pageCount != pageCount else { return }
         books[index].pageCount = pageCount
         books[index].currentPage = min(books[index].currentPage, pageCount - 1)
+        if var pending = pendingReadingProgress[bookID] {
+            pending.page = min(pending.page, pageCount - 1)
+            pendingReadingProgress[bookID] = pending
+        }
         scheduleSave()
     }
 
@@ -440,10 +455,15 @@ final class LibraryStore {
         guard let index = books.firstIndex(where: { $0.id == bookID }), books[index].kind == .ebook else { return }
         let chapterIndex = min(max(0, chapter), max(0, books[index].pageCount - 1))
         let chapterProgress = min(max(0, progression), 1)
-        guard books[index].currentPage != chapterIndex || books[index].ebookChapterProgress != chapterProgress else { return }
-        books[index].currentPage = chapterIndex
-        books[index].ebookChapterProgress = chapterProgress
-        books[index].lastOpenedAt = .now
+        let pending = pendingReadingProgress[bookID]
+        let effectivePage = pending?.page ?? books[index].currentPage
+        let effectiveProgress = pending?.ebookProgress ?? books[index].ebookChapterProgress
+        guard effectivePage != chapterIndex || effectiveProgress != chapterProgress else { return }
+        pendingReadingProgress[bookID] = PendingReadingProgress(
+            page: chapterIndex,
+            ebookProgress: chapterProgress,
+            openedAt: .now
+        )
         scheduleSave()
     }
 
@@ -785,6 +805,7 @@ final class LibraryStore {
                 try fileManager.removeItem(at: folder)
             }
             books.removeAll { $0.id == book.id }
+            pendingReadingProgress.removeValue(forKey: book.id)
             duplicateGroups = duplicateGroups.compactMap { group in
                 let remaining = group.books.filter { $0.id != book.id }
                 return remaining.count > 1
@@ -814,9 +835,10 @@ final class LibraryStore {
 
     func previewURLs(for book: Book) -> [URL] {
         let paths = book.previewRelativePaths ?? book.coverRelativePath.map { [$0] } ?? []
-        return paths
-            .map { libraryURL.appendingPathComponent($0) }
-            .filter { fileManager.fileExists(atPath: $0.path) }
+        // File existence checks inside every visible SwiftUI card turn a shelf
+        // refresh into dozens of synchronous disk reads. The thumbnail pipeline
+        // already handles a missing source by showing the book placeholder.
+        return paths.map { libraryURL.appendingPathComponent($0) }
     }
 
     func ebookPackage(for book: Book) -> EBookPackage? {
@@ -826,25 +848,49 @@ final class LibraryStore {
         return try? JSONDecoder().decode(EBookPackage.self, from: data)
     }
 
+    func loadEBookPackage(for book: Book) async -> EBookPackage? {
+        guard book.kind == .ebook else { return nil }
+        let url = contentURL(for: book)
+        return await Task.detached(priority: .userInitiated) {
+            guard let data = try? Data(contentsOf: url) else { return nil }
+            return try? JSONDecoder().decode(EBookPackage.self, from: data)
+        }.value
+    }
+
     func pageURLs(for book: Book) -> [URL] {
         guard book.kind == .archive || book.kind == .imageCollection else { return [] }
         if let cached = pageURLCache[book.id] { return cached }
         let folder = contentURL(for: book)
-        let urls = (try? fileManager.contentsOfDirectory(
-            at: folder,
-            includingPropertiesForKeys: [.isRegularFileKey],
-            options: [.skipsHiddenFiles]
-        )) ?? []
-        let sorted = NaturalSort.urls(urls.filter { url in
-            let isFile = (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) ?? false
-            return isFile
-        })
+        let sorted = Self.scanPageURLs(in: folder)
         pageURLCache[book.id] = sorted
         return sorted
     }
 
+    func loadPageURLs(for book: Book) async -> [URL] {
+        guard book.kind == .archive || book.kind == .imageCollection else { return [] }
+        if let cached = pageURLCache[book.id] { return cached }
+        let folder = contentURL(for: book)
+        let sorted = await Task.detached(priority: .userInitiated) {
+            Self.scanPageURLs(in: folder)
+        }.value
+        pageURLCache[book.id] = sorted
+        return sorted
+    }
+
+    nonisolated private static func scanPageURLs(in folder: URL) -> [URL] {
+        let urls = (try? FileManager.default.contentsOfDirectory(
+            at: folder,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        )) ?? []
+        return NaturalSort.urls(urls.filter { url in
+            (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) ?? false
+        })
+    }
+
     func flushProgress() {
         saveTask?.cancel()
+        applyPendingReadingProgress()
         saveImmediately()
     }
 
@@ -907,15 +953,39 @@ final class LibraryStore {
         saveTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(450))
             guard !Task.isCancelled, let self else { return }
-            metadataWriter.save(books)
+            metadataWriter.save(booksApplyingPendingReadingProgress())
         }
     }
 
     private func saveImmediately() {
         saveTask?.cancel()
+        applyPendingReadingProgress()
         if let message = metadataWriter.saveAndWait(books) {
             alert = LibraryAlert(title: "无法保存书架", message: message)
         }
+    }
+
+    private func booksApplyingPendingReadingProgress() -> [Book] {
+        guard !pendingReadingProgress.isEmpty else { return books }
+        var snapshot = books
+        for index in snapshot.indices {
+            guard let pending = pendingReadingProgress[snapshot[index].id] else { continue }
+            snapshot[index].currentPage = pending.page
+            snapshot[index].ebookChapterProgress = pending.ebookProgress
+            snapshot[index].lastOpenedAt = pending.openedAt
+        }
+        return snapshot
+    }
+
+    private func applyPendingReadingProgress() {
+        guard !pendingReadingProgress.isEmpty else { return }
+        for index in books.indices {
+            guard let pending = pendingReadingProgress[books[index].id] else { continue }
+            books[index].currentPage = pending.page
+            books[index].ebookChapterProgress = pending.ebookProgress
+            books[index].lastOpenedAt = pending.openedAt
+        }
+        pendingReadingProgress.removeAll(keepingCapacity: true)
     }
 
     private func pruneUpdateBackups(in root: URL, keeping limit: Int) {

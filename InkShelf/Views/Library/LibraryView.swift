@@ -391,9 +391,7 @@ struct LibraryView: View {
             case .create:
                 ShelfGroupEditorView(navigationTitle: "新建分组") { title in
                     if let group = library.createShelfGroup(title: title) {
-                        withAnimation(reduceMotion ? nil : AppMotion.panel) {
-                            shelfFilter = .group(group.id)
-                        }
+                        shelfFilter = .group(group.id)
                     }
                 }
             case .rename(let group):

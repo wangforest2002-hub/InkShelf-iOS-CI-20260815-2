@@ -81,12 +81,7 @@ private struct FavoritePageCard: View {
 
     private func loadThumbnail() async {
         if let imageURL {
-            await withCheckedContinuation { continuation in
-                ReaderImagePipeline.shared.load(imageURL, maxPixelSize: 640) { loaded in
-                    image = loaded
-                    continuation.resume()
-                }
-            }
+            image = await CoverImagePipeline.shared.image(for: imageURL, maxPixelSize: 640)
         } else if let pdfURL {
             image = await Task.detached(priority: .utility) {
                 guard let document = PDFDocument(url: pdfURL),

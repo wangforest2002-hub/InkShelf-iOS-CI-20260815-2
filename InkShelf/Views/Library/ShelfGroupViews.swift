@@ -79,7 +79,7 @@ struct ShelfGroupStrip: View {
     ) -> some View {
         let selected = selection == filter
         return Button {
-            withAnimation(reduceMotion ? nil : AppMotion.panel) { selection = filter }
+            selection = filter
         } label: {
             HStack(spacing: 7) {
                 Image(systemName: symbol)
@@ -94,6 +94,7 @@ struct ShelfGroupStrip: View {
             .frame(height: 42)
             .background(selected ? tint : Color.clear, in: Capsule())
             .inkGlass(cornerRadius: 21, interactive: true)
+            .animation(reduceMotion ? nil : AppMotion.value, value: selected)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(title)，\(count) 本")

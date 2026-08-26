@@ -220,24 +220,34 @@ struct ReaderView: View {
         .preferredColorScheme(book.kind == .ebook ? (ebookTheme == .night ? .dark : .light) : .dark)
         .sensoryFeedback(.selection, trigger: currentPage)
         .sensoryFeedback(.selection, trigger: aiEnabled)
-        .sensoryFeedback(.success, trigger: achievements.unlockedCount)
+        .sensoryFeedback(.success, trigger: achievements.latestUnlock?.id)
         .sensoryFeedback(.success, trigger: readerNotice)
         .onAppear {
             library.beginReading(book.id)
             achievements.recordOpened(bookID: book.id)
             activeReadingStartedAt = .now
-            if book.kind == .ebook {
-                ebookPackage = library.ebookPackage(for: book)
-                pageCount = max(1, ebookPackage?.chapters.count ?? book.pageCount)
-            } else if book.kind != .pdf {
-                imageURLs = library.pageURLs(for: book)
-                pageCount = max(1, imageURLs.count)
-                normalizeComicPageForLayout()
-                schedulePrefetchPages(around: currentPage)
-            }
             UIApplication.shared.isIdleTimerDisabled = keepAwake
             scheduleControlsHide()
-            if book.kind != .pdf { prepareAIPage() }
+        }
+        .task(id: book.id) {
+            switch book.kind {
+            case .archive, .imageCollection:
+                let urls = await library.loadPageURLs(for: book)
+                guard !Task.isCancelled else { return }
+                imageURLs = urls
+                pageCount = max(1, urls.count)
+                normalizeComicPageForLayout()
+                schedulePrefetchPages(around: currentPage)
+                prepareAIPage()
+            case .ebook:
+                let package = await library.loadEBookPackage(for: book)
+                guard !Task.isCancelled else { return }
+                ebookPackage = package
+                pageCount = max(1, package?.chapters.count ?? book.pageCount)
+                prepareAIPage()
+            case .pdf:
+                break
+            }
         }
         .onChange(of: currentPage) { _, newPage in
             if book.kind != .ebook {

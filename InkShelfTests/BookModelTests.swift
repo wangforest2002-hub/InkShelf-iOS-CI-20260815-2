@@ -1082,6 +1082,43 @@ final class BookModelTests: XCTestCase {
     }
 
     @MainActor
+    func testReaderProgressStagesWithoutRefreshingShelfAndFlushesDurably() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("InkShelfStagedProgress-\(UUID().uuidString)", isDirectory: true)
+        let library = root.appendingPathComponent("InkShelf Library", isDirectory: true)
+        let id = UUID()
+        let suiteName = "InkShelfStagedProgressTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        let bookFolder = library.appendingPathComponent(id.uuidString.lowercased(), isDirectory: true)
+        try FileManager.default.createDirectory(at: bookFolder, withIntermediateDirectories: true)
+        defer {
+            try? FileManager.default.removeItem(at: root)
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let source = bookFolder.appendingPathComponent("source.pdf")
+        try Data("pdf-smoke".utf8).write(to: source)
+        let book = Book(
+            id: id,
+            title: "静默进度",
+            kind: .pdf,
+            sourceFileName: "source.pdf",
+            contentRelativePath: "\(id.uuidString.lowercased())/source.pdf",
+            pageCount: 20,
+            fileSize: 9
+        )
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        try encoder.encode([book]).write(to: library.appendingPathComponent("library.json"))
+
+        let store = LibraryStore(defaults: defaults, documentsURL: root)
+        store.updateProgress(bookID: id, page: 12)
+        XCTAssertEqual(store.books.first?.currentPage, 0, "A page turn must not invalidate the hidden shelf")
+        store.flushProgress()
+        XCTAssertEqual(store.books.first?.currentPage, 12)
+        XCTAssertEqual(LibraryStore(defaults: defaults, documentsURL: root).books.first?.currentPage, 12)
+    }
+
+    @MainActor
     func testCoverPipelineDownsamplesAwayFromMainInteractionPath() async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("InkShelfCoverDecode-\(UUID().uuidString)", isDirectory: true)

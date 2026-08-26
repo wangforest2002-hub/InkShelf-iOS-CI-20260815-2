@@ -259,7 +259,7 @@ final class CoverImagePipeline: @unchecked Sendable {
                     options as CFDictionary
                 ) else { return nil }
                 let decoded = UIImage(cgImage: cgImage)
-                cache.setObject(
+                self.cache.setObject(
                     decoded,
                     forKey: key,
                     cost: cgImage.bytesPerRow * cgImage.height
@@ -267,8 +267,8 @@ final class CoverImagePipeline: @unchecked Sendable {
                 return decoded
             }
 
-            let completions = stateQueue.sync {
-                callbacks.removeValue(forKey: keyString) ?? []
+            let completions = self.stateQueue.sync {
+                self.callbacks.removeValue(forKey: keyString) ?? []
             }
             DispatchQueue.main.async {
                 completions.forEach { $0(image) }
