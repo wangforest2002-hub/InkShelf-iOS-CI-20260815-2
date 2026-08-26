@@ -131,7 +131,7 @@ struct ImageGalleryHubView: View {
             SocialPostImportView(shelfGroupID: nil, favoriteOnImport: false)
         }
         .sheet(item: $previewingBook) { book in
-            GalleryOverviewView(book: book, imageURLs: library.pageURLs(for: book))
+            GalleryOverviewView(book: book)
         }
         .sheet(item: $profileEditingBook) { book in
             BookProfileEditorView(book: book) { profile in

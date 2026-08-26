@@ -25,7 +25,6 @@ struct FavoritePageGrid: View {
                     Button { onOpen(item) } label: {
                         FavoritePageCard(
                             item: item,
-                            imageURL: imageURL(for: item),
                             pdfURL: item.book.kind == .pdf ? library.contentURL(for: item.book) : nil
                         )
                     }
@@ -36,15 +35,12 @@ struct FavoritePageGrid: View {
         }
     }
 
-    private func imageURL(for item: FavoritePageItem) -> URL? {
-        let pages = library.pageURLs(for: item.book)
-        return pages.indices.contains(item.page) ? pages[item.page] : nil
-    }
 }
 
 private struct FavoritePageCard: View {
+    @Environment(LibraryStore.self) private var library
+    @Environment(\.colorScheme) private var colorScheme
     let item: FavoritePageItem
-    let imageURL: URL?
     let pdfURL: URL?
     @State private var image: UIImage?
 
@@ -73,14 +69,26 @@ private struct FavoritePageCard: View {
                 .foregroundStyle(.secondary)
         }
         .padding(8)
-        .inkGlass(cornerRadius: 20, interactive: true)
+        .background(
+            colorScheme == .dark
+                ? Color(red: 0.105, green: 0.095, blue: 0.17).opacity(0.96)
+                : Color.white.opacity(0.88),
+            in: RoundedRectangle(cornerRadius: 20, style: .continuous)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(.white.opacity(0.22), lineWidth: 0.8)
+        }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(item.book.title)，第 \(item.page + 1) 页")
         .task(id: item.id) { await loadThumbnail() }
     }
 
     private func loadThumbnail() async {
-        if let imageURL {
+        if item.book.kind == .archive || item.book.kind == .imageCollection {
+            let pages = await library.loadPageURLs(for: item.book)
+            guard !Task.isCancelled, pages.indices.contains(item.page) else { return }
+            let imageURL = pages[item.page]
             image = await CoverImagePipeline.shared.image(for: imageURL, maxPixelSize: 640)
         } else if let pdfURL {
             image = await Task.detached(priority: .utility) {

@@ -27,6 +27,8 @@ struct ReaderView: View {
     @State private var didTryPassword = false
     @State private var hideControlsTask: Task<Void, Never>?
     @State private var readerAlert: ReaderAlert?
+    @State private var contentLoadError: ReaderAlert?
+    @State private var pdfLoading: Bool
     @State private var readerNotice: String?
     @State private var isSavingPage = false
     @State private var isEnhancingPage = false
@@ -63,6 +65,7 @@ struct ReaderView: View {
         _currentPage = State(initialValue: min(max(0, book.currentPage), max(0, book.pageCount - 1)))
         _pageCount = State(initialValue: max(1, book.pageCount))
         _ebookProgress = State(initialValue: book.ebookChapterProgress ?? 0)
+        _pdfLoading = State(initialValue: book.kind == .pdf)
         _layoutRaw = State(initialValue: profile?.layoutRaw
             ?? defaults.string(forKey: "reader.layout")
             ?? ReaderLayout.single.rawValue)
@@ -233,6 +236,15 @@ struct ReaderView: View {
             case .archive, .imageCollection:
                 let urls = await library.loadPageURLs(for: book)
                 guard !Task.isCancelled else { return }
+                guard !urls.isEmpty else {
+                    let error = ReaderAlert(
+                        title: "没有可读页面",
+                        message: "这本画集的页面目录为空或已经损坏，请重新导入原文件。"
+                    )
+                    contentLoadError = error
+                    readerAlert = error
+                    return
+                }
                 imageURLs = urls
                 pageCount = max(1, urls.count)
                 normalizeComicPageForLayout()
@@ -240,8 +252,17 @@ struct ReaderView: View {
             case .ebook:
                 let package = await library.loadEBookPackage(for: book)
                 guard !Task.isCancelled else { return }
+                guard let package, !package.chapters.isEmpty else {
+                    let error = ReaderAlert(
+                        title: "电子书索引损坏",
+                        message: "无法读取章节内容，请重新导入原电子书。"
+                    )
+                    contentLoadError = error
+                    readerAlert = error
+                    return
+                }
                 ebookPackage = package
-                pageCount = max(1, package?.chapters.count ?? book.pageCount)
+                pageCount = max(1, package.chapters.count)
                 prepareAIPage()
             case .pdf:
                 break
@@ -422,7 +443,17 @@ struct ReaderView: View {
 
     @ViewBuilder
     private var readerContent: some View {
-        if book.kind == .ebook, let ebookPackage {
+        if let contentLoadError {
+            ContentUnavailableView {
+                Label(contentLoadError.title, systemImage: "exclamationmark.triangle.fill")
+            } description: {
+                Text(contentLoadError.message)
+            } actions: {
+                Button("返回书架", action: closeReader)
+                    .buttonStyle(.borderedProminent)
+            }
+            .foregroundStyle(.white)
+        } else if book.kind == .ebook, let ebookPackage {
             EBookReaderView(
                 packageURL: library.contentURL(for: book),
                 package: ebookPackage,
@@ -449,6 +480,13 @@ struct ReaderView: View {
                 onTap: toggleControls,
                 onDocumentState: handlePDFState
             )
+            .overlay {
+                if pdfLoading {
+                    ProgressView("正在打开 PDF…")
+                        .tint(.white)
+                        .foregroundStyle(.white)
+                }
+            }
         } else if imageURLs.isEmpty {
             ProgressView("正在准备页面…")
                 .tint(.white)
@@ -477,6 +515,17 @@ struct ReaderView: View {
     }
 
     private func handlePDFState(_ count: Int, _ locked: Bool) {
+        pdfLoading = false
+        if count == 0, !locked {
+            let error = ReaderAlert(
+                title: "无法打开 PDF",
+                message: "文件内容无法读取或已经损坏，请重新导入原文件。"
+            )
+            contentLoadError = error
+            readerAlert = error
+            return
+        }
+        contentLoadError = nil
         if count > 0 {
             pageCount = count
             currentPage = min(currentPage, count - 1)

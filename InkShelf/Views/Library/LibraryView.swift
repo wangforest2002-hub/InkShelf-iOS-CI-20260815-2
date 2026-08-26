@@ -412,7 +412,7 @@ struct LibraryView: View {
             .presentationDetents([.medium])
         }
         .sheet(item: $previewingBook) { book in
-            GalleryOverviewView(book: book, imageURLs: library.pageURLs(for: book))
+            GalleryOverviewView(book: book)
         }
         .sheet(item: $aiWritingBook) { book in
             NavigationStack {

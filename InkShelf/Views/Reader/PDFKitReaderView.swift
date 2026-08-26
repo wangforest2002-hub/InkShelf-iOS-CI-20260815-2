@@ -65,6 +65,7 @@ struct PDFKitReaderView: UIViewRepresentable {
         private var attemptedPassword = ""
         private var navigationGeneration = 0
         private var pendingTargetPage: Int?
+        private var loadGeneration = 0
 
         init(parent: PDFKitReaderView) {
             self.parent = parent
@@ -81,6 +82,7 @@ struct PDFKitReaderView: UIViewRepresentable {
         }
 
         func detach() {
+            loadGeneration += 1
             cancelPendingNavigation()
             NotificationCenter.default.removeObserver(self, name: .PDFViewPageChanged, object: observedPDFView)
             observedPDFView = nil
@@ -106,8 +108,30 @@ struct PDFKitReaderView: UIViewRepresentable {
             loadedURL = parent.url
             attemptedPassword = ""
             lastConfiguration = ""
-            let document = PDFDocument(url: parent.url)
+            loadGeneration += 1
+            let generation = loadGeneration
+            let url = parent.url
             cancelPendingNavigation()
+            pdfView.document = nil
+            applyConfiguration(to: pdfView)
+
+            // PDFDocument(url:) may parse a large cross-reference table and
+            // page tree. Doing that work in makeUIView stalls the very tap and
+            // navigation animation that opened the reader.
+            DispatchQueue.global(qos: .userInitiated).async { [weak self, weak pdfView] in
+                let document = PDFDocument(url: url)
+                DispatchQueue.main.async {
+                    guard let self,
+                          let pdfView,
+                          self.loadGeneration == generation,
+                          self.loadedURL == url
+                    else { return }
+                    self.finishLoading(document, in: pdfView)
+                }
+            }
+        }
+
+        private func finishLoading(_ document: PDFDocument?, in pdfView: PDFView) {
             if let document, !document.isLocked {
                 beginPendingNavigation(
                     to: normalizedAnchor(for: parent.currentPage, pageCount: document.pageCount),

@@ -19,50 +19,52 @@ struct ShelfGroupStrip: View {
 
     var body: some View {
         ScrollView(.horizontal) {
-            HStack(spacing: 10) {
-                filterChip(
-                    title: "全部",
-                    symbol: "books.vertical.fill",
-                    count: totalCount,
-                    filter: .all,
-                    tint: AppTheme.accent
-                )
-
-                ForEach(groups) { group in
+            AdaptiveGlassContainer(spacing: 10) {
+                HStack(spacing: 10) {
                     filterChip(
-                        title: group.title,
-                        symbol: group.systemImage,
-                        count: countForGroup(group.id),
-                        filter: .group(group.id),
-                        tint: tint(for: group.styleIndex)
+                        title: "全部",
+                        symbol: "books.vertical.fill",
+                        count: totalCount,
+                        filter: .all,
+                        tint: AppTheme.accent
                     )
-                    .contextMenu {
-                        Button { rename(group) } label: {
-                            Label("重命名分组", systemImage: "pencil")
-                        }
-                        Button(role: .destructive) { delete(group) } label: {
-                            Label("删除分组", systemImage: "trash")
+
+                    ForEach(groups) { group in
+                        filterChip(
+                            title: group.title,
+                            symbol: group.systemImage,
+                            count: countForGroup(group.id),
+                            filter: .group(group.id),
+                            tint: tint(for: group.styleIndex)
+                        )
+                        .contextMenu {
+                            Button { rename(group) } label: {
+                                Label("重命名分组", systemImage: "pencil")
+                            }
+                            Button(role: .destructive) { delete(group) } label: {
+                                Label("删除分组", systemImage: "trash")
+                            }
                         }
                     }
-                }
 
-                filterChip(
-                    title: "未分组",
-                    symbol: "tray.fill",
-                    count: ungroupedCount,
-                    filter: .ungrouped,
-                    tint: AppTheme.wood
-                )
+                    filterChip(
+                        title: "未分组",
+                        symbol: "tray.fill",
+                        count: ungroupedCount,
+                        filter: .ungrouped,
+                        tint: AppTheme.wood
+                    )
 
-                Button(action: create) {
-                    Image(systemName: "plus")
-                        .font(.subheadline.bold())
-                        .frame(width: 42, height: 42)
-                        .inkGlass(cornerRadius: 21, interactive: true)
+                    Button(action: create) {
+                        Image(systemName: "plus")
+                            .font(.subheadline.bold())
+                            .frame(width: 42, height: 42)
+                            .inkGlass(cornerRadius: 21, interactive: true)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("shelf-new-group")
+                    .accessibilityLabel("新建书架分组")
                 }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("shelf-new-group")
-                .accessibilityLabel("新建书架分组")
             }
             .padding(.vertical, 2)
             .padding(.horizontal, 1)

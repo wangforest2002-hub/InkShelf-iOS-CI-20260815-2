@@ -350,18 +350,9 @@ final class LibraryStore {
             )
         }
 
-        switch book.kind {
-        case .archive, .imageCollection:
-            guard !pageURLs(for: book).isEmpty else {
-                return LibraryAlert(title: "没有可读页面", message: "这本画集的页面目录为空，请重新导入原文件。")
-            }
-        case .ebook:
-            guard ebookPackage(for: book) != nil else {
-                return LibraryAlert(title: "电子书索引损坏", message: "无法读取章节索引，请重新导入原电子书。")
-            }
-        case .pdf:
-            break
-        }
+        // Deep validation belongs to the reader's asynchronous loading task.
+        // Scanning every page filename or decoding an ebook package here makes
+        // a tap on a large album block the shelf's interaction thread.
         return nil
     }
 

@@ -1,12 +1,13 @@
-import ImageIO
 import QuickLook
 import SwiftUI
 import UIKit
 
 struct GalleryOverviewView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(LibraryStore.self) private var library
     let book: Book
-    let imageURLs: [URL]
+    @State private var imageURLs: [URL] = []
+    @State private var didLoad = false
     @State private var previewSelection: ImagePreviewSelection?
 
     private let columns = [GridItem(.adaptive(minimum: 104, maximum: 180), spacing: 8)]
@@ -14,31 +15,43 @@ struct GalleryOverviewView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                LazyVGrid(columns: columns, spacing: 8) {
-                    ForEach(imageURLs.indices, id: \.self) { index in
-                        Button {
-                            previewSelection = ImagePreviewSelection(index: index)
-                        } label: {
-                            ZStack(alignment: .bottomTrailing) {
-                                ImageFileThumbnail(url: imageURLs[index], maxPixelSize: 520)
-                                    .aspectRatio(0.72, contentMode: .fit)
-                                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                if !didLoad {
+                    ProgressView("正在整理预览…")
+                        .frame(maxWidth: .infinity, minHeight: 320)
+                } else if imageURLs.isEmpty {
+                    ContentUnavailableView(
+                        "没有可预览的图片",
+                        systemImage: "photo.badge.exclamationmark",
+                        description: Text("画册页面可能已经损坏，请重新导入原文件。")
+                    )
+                    .frame(maxWidth: .infinity, minHeight: 320)
+                } else {
+                    LazyVGrid(columns: columns, spacing: 8) {
+                        ForEach(imageURLs.indices, id: \.self) { index in
+                            Button {
+                                previewSelection = ImagePreviewSelection(index: index)
+                            } label: {
+                                ZStack(alignment: .bottomTrailing) {
+                                    ImageFileThumbnail(url: imageURLs[index], maxPixelSize: 520)
+                                        .aspectRatio(0.72, contentMode: .fit)
+                                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
 
-                                Text("\(index + 1)")
-                                    .font(.caption2.monospacedDigit().weight(.bold))
-                                    .foregroundStyle(.white)
-                                    .padding(.horizontal, 7)
-                                    .padding(.vertical, 4)
-                                    .background(.black.opacity(0.52), in: Capsule())
-                                    .padding(6)
+                                    Text("\(index + 1)")
+                                        .font(.caption2.monospacedDigit().weight(.bold))
+                                        .foregroundStyle(.white)
+                                        .padding(.horizontal, 7)
+                                        .padding(.vertical, 4)
+                                        .background(.black.opacity(0.52), in: Capsule())
+                                        .padding(6)
+                                }
                             }
+                            .buttonStyle(PressableCardStyle())
+                            .accessibilityLabel("预览第 \(index + 1) 页")
                         }
-                        .buttonStyle(PressableCardStyle())
-                        .accessibilityLabel("预览第 \(index + 1) 页")
                     }
                 }
-                .padding(12)
             }
+            .contentMargins(12, for: .scrollContent)
             .background(AuroraBackground())
             .navigationTitle(book.title)
             .adaptiveNavigationSubtitle("\(imageURLs.count) 张图片 · 点击可全屏预览")
@@ -51,6 +64,11 @@ struct GalleryOverviewView: View {
         }
         .sheet(item: $previewSelection) { selection in
             ImageQuickLookSheet(urls: imageURLs, initialIndex: selection.index)
+        }
+        .task(id: book.id) {
+            imageURLs = await library.loadPageURLs(for: book)
+            guard !Task.isCancelled else { return }
+            didLoad = true
         }
     }
 }
@@ -74,15 +92,7 @@ struct ImageFileThumbnail: View {
         }
         .clipped()
         .task(id: "\(url.path)-\(maxPixelSize)") {
-            guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return }
-            let options: [CFString: Any] = [
-                kCGImageSourceCreateThumbnailFromImageAlways: true,
-                kCGImageSourceCreateThumbnailWithTransform: true,
-                kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
-                kCGImageSourceShouldCacheImmediately: true
-            ]
-            guard let thumbnail = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return }
-            image = UIImage(cgImage: thumbnail)
+            image = await CoverImagePipeline.shared.image(for: url, maxPixelSize: maxPixelSize)
         }
     }
 }

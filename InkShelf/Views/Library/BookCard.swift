@@ -35,7 +35,8 @@ struct BookCard: View {
                         .font(.caption.bold())
                         .foregroundStyle(.yellow)
                         .padding(8)
-                        .inkGlass(cornerRadius: 14)
+                        .background(.black.opacity(0.42), in: Circle())
+                        .overlay { Circle().stroke(.white.opacity(0.18), lineWidth: 0.7) }
                         .padding(7)
                         .accessibilityLabel("已收藏")
                 }
