@@ -55,7 +55,10 @@ struct ImageGalleryHubView: View {
                             bookCount: library.favoriteBooks.count
                         )
 
-                        galleryContent
+                        Group { galleryContent }
+                            .id(section)
+                            .transition(.opacity)
+                            .animation(reduceMotion ? nil : AppMotion.value, value: section)
                     }
                     .padding(.horizontal, 18)
                     .padding(.top, 12)
@@ -162,7 +165,6 @@ struct ImageGalleryHubView: View {
         } message: { book in
             Text("会删除这项内容的本地副本；其他画集、单页珍藏和收藏读物不会受到影响。")
         }
-        .animation(reduceMotion ? nil : AppMotion.panel, value: section)
     }
 
     @ViewBuilder

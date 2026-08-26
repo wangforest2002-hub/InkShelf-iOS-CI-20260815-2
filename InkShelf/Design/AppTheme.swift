@@ -229,7 +229,6 @@ struct PressableCardStyle: ButtonStyle {
 struct AppearanceModeButton: View {
     @AppStorage("appearance") private var appearance = AppAppearance.light.rawValue
     @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var isNight: Bool { colorScheme == .dark }
 
@@ -247,8 +246,9 @@ struct AppearanceModeButton: View {
     }
 
     private func toggle() {
-        withAnimation(reduceMotion ? nil : AppMotion.panel) {
-            appearance = isNight ? AppAppearance.light.rawValue : AppAppearance.dark.rawValue
-        }
+        // A spring transaction around preferredColorScheme forces every card,
+        // material and navigation surface to interpolate at once. Let the
+        // system perform its optimized appearance hand-off instead.
+        appearance = isNight ? AppAppearance.light.rawValue : AppAppearance.dark.rawValue
     }
 }
