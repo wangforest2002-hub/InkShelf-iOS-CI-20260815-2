@@ -28,7 +28,7 @@ struct BookCard: View {
     private var sourceAspectRatio: CGFloat? {
         let ratio = knownCoverAspectRatio
             ?? detectedCoverAspectRatio
-            ?? book.coverAspectRatio.map(CGFloat.init)
+            ?? book.coverAspectRatio.map { CGFloat($0) }
         guard let ratio, ratio.isFinite, ratio >= 0.2, ratio <= 5 else { return nil }
         return ratio
     }
