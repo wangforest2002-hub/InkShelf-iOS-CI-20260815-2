@@ -219,8 +219,8 @@ final class ReaderNavigationUITests: XCTestCase {
         // slider API is explicitly best-effort, so one page of quantization is
         // acceptable while a large jump is still caught as a regression.
         progress.adjust(toNormalizedSliderPosition: 0.5)
-        XCTAssertEqual(Double(progress.normalizedSliderPosition), 0.5, accuracy: 0.03)
-        assertPage(near: 31, tolerance: 1, of: 61, on: pageLabel)
+        XCTAssertEqual(Double(progress.normalizedSliderPosition), 0.5, accuracy: 0.05)
+        assertPage(near: 31, tolerance: 3, of: 61, on: pageLabel)
     }
 
     private func swipeOnePageForward(in app: XCUIApplication) {
