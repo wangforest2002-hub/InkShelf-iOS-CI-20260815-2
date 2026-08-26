@@ -940,18 +940,14 @@ private struct ReaderControls: View {
                         .accessibilityIdentifier("reader-progress-percent")
                 }
 
-                Slider(
+                ReaderProgressSlider(
                     value: progressBinding,
-                    in: 0...position.sliderUpperBound,
-                    step: isEBook ? 0.01 : 1
+                    range: 0...position.sliderUpperBound,
+                    step: isEBook ? 0.01 : 1,
+                    isEnabled: isEBook || pageCount > 1,
+                    tintColor: UIColor(nightMood == nil ? AppTheme.accent : AppTheme.coral)
                 )
-                    .disabled(!isEBook && pageCount <= 1)
-                    .tint(nightMood == nil ? AppTheme.accent : AppTheme.coral)
-                    .accessibilityIdentifier("reader-progress")
-                    // Keep Slider's native numeric accessibility value intact.
-                    // Assistive scrubbing and XCUITest both depend on it to
-                    // map a normalized position to the real slider range.
-                    .accessibilityLabel("阅读进度，\(position.accessibilityValue)")
+                .frame(height: 30)
 
                 HStack(spacing: 8) {
                     Button { perform(showThumbnails) } label: {
@@ -1034,6 +1030,68 @@ private struct ReaderControls: View {
     private func perform(_ action: () -> Void) {
         action()
         onInteraction()
+    }
+}
+
+/// SwiftUI's Slider currently exposes an imprecise normalized adjustment on
+/// iOS 26 for long, stepped ranges. UISlider keeps the accessibility position,
+/// touch location and bound numeric value on the same 0...N scale.
+private struct ReaderProgressSlider: UIViewRepresentable {
+    @Binding var value: Double
+    let range: ClosedRange<Double>
+    let step: Double
+    let isEnabled: Bool
+    let tintColor: UIColor
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(parent: self)
+    }
+
+    func makeUIView(context: Context) -> UISlider {
+        let slider = UISlider(frame: .zero)
+        slider.isContinuous = true
+        slider.accessibilityIdentifier = "reader-progress"
+        slider.accessibilityLabel = "阅读进度"
+        slider.addTarget(context.coordinator, action: #selector(Coordinator.valueChanged(_:)), for: .valueChanged)
+        return slider
+    }
+
+    func updateUIView(_ slider: UISlider, context: Context) {
+        context.coordinator.parent = self
+        slider.minimumValue = Float(range.lowerBound)
+        slider.maximumValue = Float(range.upperBound)
+        slider.isEnabled = isEnabled
+        slider.minimumTrackTintColor = tintColor
+        slider.thumbTintColor = tintColor
+        slider.maximumTrackTintColor = tintColor.withAlphaComponent(0.24)
+
+        let target = Float(snapped(value))
+        if !slider.isTracking, abs(slider.value - target) > 0.0001 {
+            slider.setValue(target, animated: false)
+        }
+    }
+
+    fileprivate func snapped(_ proposed: Double) -> Double {
+        let bounded = min(max(proposed, range.lowerBound), range.upperBound)
+        guard step > 0 else { return bounded }
+        let steps = ((bounded - range.lowerBound) / step).rounded()
+        return min(max(range.lowerBound + steps * step, range.lowerBound), range.upperBound)
+    }
+
+    final class Coordinator: NSObject {
+        var parent: ReaderProgressSlider
+
+        init(parent: ReaderProgressSlider) {
+            self.parent = parent
+        }
+
+        @objc func valueChanged(_ sender: UISlider) {
+            let value = parent.snapped(Double(sender.value))
+            sender.value = Float(value)
+            if parent.value != value {
+                parent.value = value
+            }
+        }
     }
 }
 
