@@ -730,6 +730,7 @@ final class BookModelTests: XCTestCase {
         XCTAssertTrue(store.footprint.unlockedAt.keys.contains("page-spark"))
         XCTAssertTrue(store.footprint.unlockedAt.keys.contains("first-finale"))
 
+        store.flush()
         let restored = AchievementStore(defaults: defaults)
         XCTAssertEqual(restored.footprint.openedBookIDs, Set([bookID]))
         XCTAssertEqual(restored.footprint.pagesTurned, 1)
@@ -1062,6 +1063,40 @@ final class BookModelTests: XCTestCase {
         let repaired = try repository.load()
         XCTAssertFalse(repaired.recoveredFromBackup)
         XCTAssertEqual(repaired.books.map(\.id), [book.id])
+    }
+
+    func testBackgroundMetadataWriterCannotRestoreAnOlderPage() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("InkShelfMetadataWriter-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let repository = LibraryMetadataRepository(primaryURL: root.appendingPathComponent("library.json"))
+        let writer = LibraryMetadataWriter(repository: repository)
+        var older = makeBook(pageCount: 20, currentPage: 3)
+        writer.save([older])
+        older.currentPage = 11
+        XCTAssertNil(writer.saveAndWait([older]))
+
+        XCTAssertEqual(try repository.load().books.first?.currentPage, 11)
+    }
+
+    @MainActor
+    func testCoverPipelineDownsamplesAwayFromMainInteractionPath() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("InkShelfCoverDecode-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let url = root.appendingPathComponent("landscape-cover.jpg")
+        let source = UIGraphicsImageRenderer(size: CGSize(width: 1_600, height: 900)).image { context in
+            UIColor.systemTeal.setFill()
+            context.cgContext.fill(CGRect(x: 0, y: 0, width: 1_600, height: 900))
+        }
+        try XCTUnwrap(source.jpegData(compressionQuality: 0.9)).write(to: url)
+
+        let decoded = try XCTUnwrap(await CoverImagePipeline.shared.image(for: url, maxPixelSize: 512))
+        XCTAssertLessThanOrEqual(max(decoded.size.width, decoded.size.height), 512)
+        XCTAssertEqual(decoded.size.width / decoded.size.height, 16.0 / 9.0, accuracy: 0.02)
     }
 
     @MainActor

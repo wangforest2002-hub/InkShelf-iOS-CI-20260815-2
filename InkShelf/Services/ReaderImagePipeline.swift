@@ -186,3 +186,93 @@ final class ReaderImagePipeline: @unchecked Sendable {
         return CGSize(width: width.doubleValue, height: height.doubleValue)
     }
 }
+
+/// Shelf covers have a very different working set from full reader pages.
+/// Keeping their thumbnails in a dedicated cache prevents a long shelf from
+/// evicting the adjacent high-resolution pages that make swiping feel instant.
+final class CoverImagePipeline: @unchecked Sendable {
+    static let shared = CoverImagePipeline()
+
+    private let cache = NSCache<NSString, UIImage>()
+    private let decodeQueue: OperationQueue = {
+        let queue = OperationQueue()
+        queue.name = "com.inkshelf.cover-decode"
+        queue.qualityOfService = .userInitiated
+        queue.maxConcurrentOperationCount = 2
+        return queue
+    }()
+    private let stateQueue = DispatchQueue(label: "com.inkshelf.cover-state")
+    private var callbacks: [String: [(UIImage?) -> Void]] = [:]
+
+    private init() {
+        cache.countLimit = 160
+        cache.totalCostLimit = 72 * 1_024 * 1_024
+    }
+
+    func image(for url: URL, maxPixelSize: Int = 768) async -> UIImage? {
+        await withCheckedContinuation { continuation in
+            load(url, maxPixelSize: maxPixelSize) { image in
+                continuation.resume(returning: image)
+            }
+        }
+    }
+
+    func load(
+        _ url: URL,
+        maxPixelSize: Int = 768,
+        completion: @escaping (UIImage?) -> Void
+    ) {
+        let size = min(max(maxPixelSize, 256), 1_024)
+        let key = "\(url.standardizedFileURL.path)|\(size)" as NSString
+        if let cached = cache.object(forKey: key) {
+            DispatchQueue.main.async { completion(cached) }
+            return
+        }
+
+        let keyString = key as String
+        let shouldDecode = stateQueue.sync { () -> Bool in
+            if callbacks[keyString] != nil {
+                callbacks[keyString, default: []].append(completion)
+                return false
+            }
+            callbacks[keyString] = [completion]
+            return true
+        }
+        guard shouldDecode else { return }
+
+        decodeQueue.addOperation { [weak self] in
+            guard let self else { return }
+            let image: UIImage? = autoreleasepool {
+                guard let source = CGImageSourceCreateWithURL(
+                    url as CFURL,
+                    [kCGImageSourceShouldCache: false] as CFDictionary
+                ) else { return nil }
+                let options: [CFString: Any] = [
+                    kCGImageSourceCreateThumbnailFromImageAlways: true,
+                    kCGImageSourceCreateThumbnailWithTransform: true,
+                    kCGImageSourceThumbnailMaxPixelSize: size,
+                    kCGImageSourceShouldCacheImmediately: true
+                ]
+                guard let cgImage = CGImageSourceCreateThumbnailAtIndex(
+                    source,
+                    0,
+                    options as CFDictionary
+                ) else { return nil }
+                let decoded = UIImage(cgImage: cgImage)
+                cache.setObject(
+                    decoded,
+                    forKey: key,
+                    cost: cgImage.bytesPerRow * cgImage.height
+                )
+                return decoded
+            }
+
+            let completions = stateQueue.sync {
+                callbacks.removeValue(forKey: keyString) ?? []
+            }
+            DispatchQueue.main.async {
+                completions.forEach { $0(image) }
+            }
+        }
+    }
+}

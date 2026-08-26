@@ -22,10 +22,10 @@ enum AppTheme {
 
 /// Shared motion timing keeps cards, panels and reader chrome feeling like one app.
 enum AppMotion {
-    static let press = Animation.snappy(duration: 0.20)
-    static let value = Animation.smooth(duration: 0.24)
-    static let panel = Animation.spring(response: 0.46, dampingFraction: 0.88)
-    static let reveal = Animation.spring(response: 0.58, dampingFraction: 0.86)
+    static let press = Animation.snappy(duration: 0.15)
+    static let value = Animation.smooth(duration: 0.18)
+    static let panel = Animation.spring(response: 0.34, dampingFraction: 0.92)
+    static let reveal = Animation.spring(response: 0.42, dampingFraction: 0.90)
 }
 
 struct AuroraBackground: View {
@@ -43,29 +43,41 @@ struct AuroraBackground: View {
                 endPoint: .bottomTrailing
             )
 
-            Ellipse()
-                .fill(AppTheme.honey.opacity(colorScheme == .dark ? 0.12 : 0.20))
-                .frame(width: 440, height: 260)
-                .blur(radius: 78)
-                .offset(x: animate ? -80 : 70, y: animate ? -310 : -240)
+            Circle()
+                .fill(
+                    RadialGradient(
+                        colors: [AppTheme.honey.opacity(colorScheme == .dark ? 0.13 : 0.20), .clear],
+                        center: .center,
+                        startRadius: 0,
+                        endRadius: 250
+                    )
+                )
+                .frame(width: 520, height: 520)
+                .offset(x: animate ? -90 : 80, y: animate ? -330 : -250)
 
             Circle()
-                .fill(AppTheme.lilac.opacity(colorScheme == .dark ? 0.24 : 0.13))
-                .frame(width: 360, height: 360)
-                .blur(radius: 80)
+                .fill(
+                    RadialGradient(
+                        colors: [AppTheme.lilac.opacity(colorScheme == .dark ? 0.22 : 0.14), .clear],
+                        center: .center,
+                        startRadius: 0,
+                        endRadius: 220
+                    )
+                )
+                .frame(width: 460, height: 460)
                 .offset(x: animate ? 130 : -120, y: animate ? -230 : -110)
 
             Circle()
-                .fill(AppTheme.cyan.opacity(colorScheme == .dark ? 0.18 : 0.16))
-                .frame(width: 310, height: 310)
-                .blur(radius: 95)
+                .fill(
+                    RadialGradient(
+                        colors: [AppTheme.cyan.opacity(colorScheme == .dark ? 0.17 : 0.15), .clear],
+                        center: .center,
+                        startRadius: 0,
+                        endRadius: 210
+                    )
+                )
+                .frame(width: 440, height: 440)
                 .offset(x: animate ? -150 : 110, y: animate ? 260 : 170)
-
-            Circle()
-                .fill(AppTheme.mint.opacity(colorScheme == .dark ? 0.13 : 0.13))
-                .frame(width: 220, height: 220)
-                .blur(radius: 75)
-                .offset(x: animate ? 90 : -90, y: 40)
 
             LinearGradient(
                 colors: [.clear, AppTheme.peach.opacity(colorScheme == .dark ? 0.05 : 0.10), .clear],
@@ -180,13 +192,20 @@ struct WarmLightSweep: View {
             .frame(width: max(100, proxy.size.width * 0.52))
             .rotationEffect(.degrees(-16))
             .offset(x: reduceMotion ? -proxy.size.width : (moving ? proxy.size.width * 1.35 : -proxy.size.width))
+            .opacity(reduceMotion ? 0 : 1)
         }
         .clipped()
         .allowsHitTesting(false)
-        .onAppear {
+        .task(id: reduceMotion) {
             guard !reduceMotion else { return }
-            withAnimation(.linear(duration: 6.5).repeatForever(autoreverses: false)) {
-                moving = true
+            while !Task.isCancelled {
+                var reset = Transaction()
+                reset.disablesAnimations = true
+                withTransaction(reset) { moving = false }
+                try? await Task.sleep(for: .milliseconds(140))
+                guard !Task.isCancelled else { return }
+                withAnimation(.easeOut(duration: 1.15)) { moving = true }
+                try? await Task.sleep(for: .seconds(7.5))
             }
         }
         .accessibilityHidden(true)

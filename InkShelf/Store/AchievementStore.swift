@@ -8,6 +8,7 @@ final class AchievementStore {
     private(set) var latestUnlock: ReadingAchievement?
 
     @ObservationIgnored private let defaults: UserDefaults
+    @ObservationIgnored private var saveTask: Task<Void, Never>?
     @ObservationIgnored private static let storageKey = "reading.footprint.v1"
 
     init(defaults: UserDefaults = .standard) {
@@ -121,9 +122,15 @@ final class AchievementStore {
     }
 
     func resetProgress() {
+        saveTask?.cancel()
         latestUnlock = nil
         footprint = ReadingFootprint()
         defaults.removeObject(forKey: Self.storageKey)
+    }
+
+    func flush() {
+        saveTask?.cancel()
+        persistImmediately()
     }
 
     func dailyQuests(on date: Date = .now) -> [DailyReadingQuest] {
@@ -165,6 +172,19 @@ final class AchievementStore {
             footprint.unlockedAt[achievement.id] = .now
             latestUnlock = achievement
         }
+        schedulePersistence()
+    }
+
+    private func schedulePersistence() {
+        saveTask?.cancel()
+        saveTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(3))
+            guard !Task.isCancelled else { return }
+            self?.persistImmediately()
+        }
+    }
+
+    private func persistImmediately() {
         if let data = try? JSONEncoder().encode(footprint) {
             defaults.set(data, forKey: Self.storageKey)
         }

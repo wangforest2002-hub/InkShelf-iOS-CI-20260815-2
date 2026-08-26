@@ -5,8 +5,7 @@ struct BookCard: View {
     let book: Book
     let coverURL: URL?
     let previewURLs: [URL]
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var settled = false
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -104,7 +103,11 @@ struct BookCard: View {
         .padding(9)
         .background {
             RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(.thinMaterial)
+                .fill(
+                    colorScheme == .dark
+                        ? Color(red: 0.105, green: 0.095, blue: 0.17).opacity(0.96)
+                        : Color.white.opacity(0.88)
+                )
         }
         .overlay {
             RoundedRectangle(cornerRadius: 22, style: .continuous)
@@ -115,23 +118,6 @@ struct BookCard: View {
         .accessibilityIdentifier("book-\(book.id.uuidString.lowercased())")
         .accessibilityLabel("\(book.title)，\(book.kind.label)，\(book.progressLabel)")
         .hoverEffect(.lift)
-        .opacity(settled ? 1 : 0)
-        .scaleEffect(settled ? 1 : 0.96)
-        .offset(y: settled ? 0 : 14)
-        .onAppear {
-            withAnimation(
-                reduceMotion
-                    ? nil
-                    : AppMotion.reveal.delay(entranceDelay)
-            ) {
-                settled = true
-            }
-        }
-    }
-
-    private var entranceDelay: Double {
-        let seed = book.id.uuidString.utf8.reduce(0) { ($0 + Int($1)) % 7 }
-        return Double(seed) * 0.045
     }
 }
 
@@ -139,17 +125,26 @@ struct CoverArtwork: View {
     let book: Book
     let coverURL: URL?
     let previewURLs: [URL]
+    @State private var decodedImage: UIImage?
+
+    private var sourceURL: URL? { coverURL ?? previewURLs.first }
 
     var body: some View {
         Group {
-            if let firstImageURL = coverURL ?? previewURLs.first,
-               let image = UIImage(contentsOfFile: firstImageURL.path) {
-                AdaptiveCoverImage(image: Image(uiImage: image))
+            if let decodedImage {
+                AdaptiveCoverImage(image: Image(uiImage: decodedImage))
             } else {
                 PlaceholderCover(book: book)
             }
         }
         .background(Color(.secondarySystemBackground))
+        .task(id: sourceURL?.standardizedFileURL.path) {
+            decodedImage = nil
+            guard let sourceURL else { return }
+            let image = await CoverImagePipeline.shared.image(for: sourceURL)
+            guard !Task.isCancelled else { return }
+            decodedImage = image
+        }
     }
 }
 
@@ -158,19 +153,18 @@ struct CoverArtwork: View {
 /// of itself, so it never gets stretched or aggressively cropped.
 struct AdaptiveCoverImage: View {
     let image: Image
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         GeometryReader { proxy in
             ZStack {
-                image
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: proxy.size.width, height: proxy.size.height)
-                    .scaleEffect(1.12)
-                    .saturation(0.82)
-                    .blur(radius: 18)
-                    .overlay(Color.black.opacity(0.10))
-                    .accessibilityHidden(true)
+                LinearGradient(
+                    colors: colorScheme == .dark
+                        ? [Color(red: 0.13, green: 0.12, blue: 0.22), Color(red: 0.08, green: 0.10, blue: 0.16)]
+                        : [AppTheme.cream, AppTheme.lilac.opacity(0.24), AppTheme.cyan.opacity(0.16)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
 
                 image
                     .resizable()

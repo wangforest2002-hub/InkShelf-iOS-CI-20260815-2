@@ -112,8 +112,8 @@ private struct DuplicateBookRow: View {
     var body: some View {
         HStack(spacing: 12) {
             Group {
-                if let coverURL, let image = UIImage(contentsOfFile: coverURL.path) {
-                    AdaptiveCoverImage(image: Image(uiImage: image))
+                if let coverURL {
+                    CoverArtwork(book: book, coverURL: coverURL, previewURLs: [])
                 } else {
                     Image(systemName: book.kind.systemImage)
                         .foregroundStyle(AppTheme.accent)

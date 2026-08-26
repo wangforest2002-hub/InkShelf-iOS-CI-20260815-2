@@ -1019,7 +1019,11 @@ private final class ZoomingSpreadScrollView: UIScrollView, UIScrollViewDelegate 
         requestedPixelSize = 0
         readyImageSlots = []
         imageViews.forEach { $0.removeFromSuperview() }
-        naturalSizes = urls.map { ReaderImagePipeline.pixelSize(of: $0) }
+        // Reading image metadata from disk while UIPageViewController is
+        // beginning a gesture can stall that gesture. Start with a neutral
+        // portrait ratio and replace it with the decoded preview's exact ratio
+        // a moment later, entirely off the interaction path.
+        naturalSizes = urls.map { _ in CGSize(width: 2, height: 3) }
         imageViews = urls.map { _ in
             let view = UIImageView()
             view.contentMode = .scaleAspectFit

@@ -331,6 +331,7 @@ struct ReaderView: View {
             } else {
                 recordReadingPause()
                 library.flushProgress()
+                achievements.flush()
             }
         }
         .onDisappear {
@@ -338,6 +339,7 @@ struct ReaderView: View {
             prefetchTask?.cancel()
             companion.cancelAll()
             library.flushProgress()
+            achievements.flush()
             recordReadingPause()
             UIApplication.shared.isIdleTimerDisabled = false
             if scenePhase == .active {
@@ -628,15 +630,15 @@ struct ReaderView: View {
 
     private func toggleLayout() {
         if book.kind == .ebook {
-            withAnimation(reduceMotion ? nil : AppMotion.panel) {
-                ebookFlowRaw = ebookFlow == .paged ? EBookFlow.scroll.rawValue : EBookFlow.paged.rawValue
-            }
+            ebookFlowRaw = ebookFlow == .paged ? EBookFlow.scroll.rawValue : EBookFlow.paged.rawValue
             showControlsTemporarily()
             return
         }
-        withAnimation(reduceMotion ? nil : AppMotion.panel) {
-            layoutRaw = layout == .single ? ReaderLayout.spread.rawValue : ReaderLayout.single.rawValue
-        }
+        // Rebuilding the page controller inside a spring transaction makes the
+        // old and new layouts briefly compete for geometry. The system pager
+        // already supplies the visual transition, so configuration changes are
+        // intentionally atomic.
+        layoutRaw = layout == .single ? ReaderLayout.spread.rawValue : ReaderLayout.single.rawValue
         showControlsTemporarily()
     }
 
@@ -796,7 +798,6 @@ private struct AICompactTranslationCard: View {
 
 private struct ReaderControls: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var appeared = false
     let title: String
     let kind: BookKind
     let nightMood: String?
@@ -917,8 +918,6 @@ private struct ReaderControls: View {
             }
             .padding(.horizontal, 14)
             .safeAreaPadding(.top, 8)
-            .offset(y: appeared ? 0 : -14)
-            .opacity(appeared ? 1 : 0)
 
             Spacer()
 
@@ -1016,15 +1015,8 @@ private struct ReaderControls: View {
             }
             .padding(.horizontal, 14)
             .safeAreaPadding(.bottom, 8)
-            .offset(y: appeared ? 0 : 18)
-            .opacity(appeared ? 1 : 0)
         }
         .foregroundStyle(.primary)
-        .onAppear {
-            withAnimation(reduceMotion ? nil : AppMotion.panel) {
-                appeared = true
-            }
-        }
     }
 
     private func perform(_ action: () -> Void) {

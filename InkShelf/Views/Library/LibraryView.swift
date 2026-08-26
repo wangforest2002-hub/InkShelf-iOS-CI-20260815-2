@@ -190,10 +190,10 @@ struct LibraryView: View {
                                                 .matchedTransitionSource(id: book.id, in: coverTransition)
                                         }
                                         .buttonStyle(PressableCardStyle())
-                                        .scrollTransition(.animated.threshold(.visible(0.22))) { content, phase in
+                                        .scrollTransition(.interactive.threshold(.visible(0.14))) { content, phase in
                                             content
-                                                .opacity(phase.isIdentity ? 1 : 0.72)
-                                                .scaleEffect(phase.isIdentity ? 1 : 0.975)
+                                                .opacity(phase.isIdentity ? 1 : 0.88)
+                                                .offset(y: phase.isIdentity ? 0 : 5)
                                         }
                                         .contextMenu {
                                             bookContextMenu(book)
@@ -705,8 +705,8 @@ private struct ContinueReadingCard: View {
     var body: some View {
         HStack(spacing: 16) {
             Group {
-                if let coverURL, let image = UIImage(contentsOfFile: coverURL.path) {
-                    AdaptiveCoverImage(image: Image(uiImage: image))
+                if coverURL != nil {
+                    CoverArtwork(book: book, coverURL: coverURL, previewURLs: [])
                 } else {
                     LinearGradient(
                         colors: [AppTheme.accent.opacity(0.75), .cyan.opacity(0.5)],

@@ -223,15 +223,27 @@ private struct AfterDarkBackground: View {
             )
 
             Circle()
-                .fill(AppTheme.coral.opacity(0.26))
-                .frame(width: 360, height: 360)
-                .blur(radius: 92)
+                .fill(
+                    RadialGradient(
+                        colors: [AppTheme.coral.opacity(0.27), .clear],
+                        center: .center,
+                        startRadius: 0,
+                        endRadius: 220
+                    )
+                )
+                .frame(width: 460, height: 460)
                 .offset(x: drifting ? 170 : 80, y: drifting ? -260 : -180)
 
             Circle()
-                .fill(AppTheme.lilac.opacity(0.22))
-                .frame(width: 420, height: 420)
-                .blur(radius: 110)
+                .fill(
+                    RadialGradient(
+                        colors: [AppTheme.lilac.opacity(0.23), .clear],
+                        center: .center,
+                        startRadius: 0,
+                        endRadius: 250
+                    )
+                )
+                .frame(width: 520, height: 520)
                 .offset(x: drifting ? -170 : -80, y: drifting ? 300 : 210)
 
             LinearGradient(
@@ -280,8 +292,9 @@ private struct AfterDarkHero: View {
                     .symbolRenderingMode(.palette)
                     .foregroundStyle(AppTheme.peach, AppTheme.lilac)
                     .padding(16)
-                    .background(.white.opacity(0.08), in: Circle())
-                    .shadow(color: AppTheme.coral.opacity(breathing ? 0.58 : 0.20), radius: breathing ? 28 : 12)
+                    .background(.white.opacity(breathing ? 0.12 : 0.07), in: Circle())
+                    .scaleEffect(breathing ? 1.035 : 0.985)
+                    .shadow(color: AppTheme.coral.opacity(0.26), radius: 14)
             }
 
             HStack(spacing: 10) {

@@ -60,3 +60,32 @@ struct LibraryMetadataRepository: Sendable {
         return try encoder.encode(books)
     }
 }
+
+/// Serializes metadata writes away from the UI thread. Page turns only enqueue
+/// a snapshot; explicit saves and lifecycle flushes wait behind older writes so
+/// an outdated page can never overwrite a newer one.
+final class LibraryMetadataWriter: @unchecked Sendable {
+    private let repository: LibraryMetadataRepository
+    private let queue = DispatchQueue(label: "com.inkshelf.library-metadata", qos: .utility)
+
+    init(repository: LibraryMetadataRepository) {
+        self.repository = repository
+    }
+
+    func save(_ books: [Book]) {
+        queue.async { [repository] in
+            try? repository.save(books)
+        }
+    }
+
+    func saveAndWait(_ books: [Book]) -> String? {
+        queue.sync { [repository] in
+            do {
+                try repository.save(books)
+                return nil
+            } catch {
+                return error.localizedDescription
+            }
+        }
+    }
+}

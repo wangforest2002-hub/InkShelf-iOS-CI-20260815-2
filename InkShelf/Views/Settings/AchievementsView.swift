@@ -39,10 +39,10 @@ struct AchievementsView: View {
                                     unlockedAt: achievements.unlockedDate(achievement),
                                     appeared: appeared
                                 )
-                                .scrollTransition(.animated.threshold(.visible(0.24))) { content, phase in
+                                .scrollTransition(.interactive.threshold(.visible(0.14))) { content, phase in
                                     content
-                                        .opacity(phase.isIdentity ? 1 : 0.55)
-                                        .scaleEffect(phase.isIdentity ? 1 : 0.965)
+                                        .opacity(phase.isIdentity ? 1 : 0.84)
+                                        .offset(y: phase.isIdentity ? 0 : 5)
                                 }
                             }
                         }
@@ -301,11 +301,8 @@ private struct AchievementConstellation: View {
                         x: proxy.size.width * CGFloat((index * 37) % 91) / 100,
                         y: proxy.size.height * CGFloat((index * 23 + 11) % 97) / 100
                     )
-                    .offset(y: animate ? -8 : 8)
-                    .animation(
-                        .easeInOut(duration: Double(2.8 + Double(index % 4))).repeatForever(autoreverses: true).delay(Double(index) * 0.12),
-                        value: animate
-                    )
+                    .offset(y: animate ? -4 : 4)
+                    .animation(.easeOut(duration: 0.8).delay(Double(index) * 0.035), value: animate)
             }
         }
         .allowsHitTesting(false)

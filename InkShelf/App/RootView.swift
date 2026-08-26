@@ -166,9 +166,8 @@ private struct DuplicateImportDecisionView: View {
                     ForEach(prompt.matches) { match in
                         HStack(spacing: 12) {
                             Group {
-                                if let coverURL = library.coverURL(for: match.existingBook),
-                                   let image = UIImage(contentsOfFile: coverURL.path) {
-                                    AdaptiveCoverImage(image: Image(uiImage: image))
+                                if let coverURL = library.coverURL(for: match.existingBook) {
+                                    CoverArtwork(book: match.existingBook, coverURL: coverURL, previewURLs: [])
                                 } else {
                                     Image(systemName: match.existingBook.kind.systemImage)
                                         .foregroundStyle(AppTheme.accent)

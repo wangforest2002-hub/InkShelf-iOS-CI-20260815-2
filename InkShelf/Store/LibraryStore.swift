@@ -50,6 +50,7 @@ final class LibraryStore {
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let metadataURL: URL
     @ObservationIgnored private let metadataRepository: LibraryMetadataRepository
+    @ObservationIgnored private let metadataWriter: LibraryMetadataWriter
     @ObservationIgnored private let groupsURL: URL
     @ObservationIgnored private var saveTask: Task<Void, Never>?
     @ObservationIgnored private var pageURLCache: [UUID: [URL]] = [:]
@@ -68,7 +69,9 @@ final class LibraryStore {
         let metadata = root.appendingPathComponent("library.json")
         libraryURL = root
         metadataURL = metadata
-        metadataRepository = LibraryMetadataRepository(primaryURL: metadata)
+        let repository = LibraryMetadataRepository(primaryURL: metadata)
+        metadataRepository = repository
+        metadataWriter = LibraryMetadataWriter(repository: repository)
         groupsURL = root.appendingPathComponent("shelf-groups.json")
 #if DEBUG
         let launchArguments = ProcessInfo.processInfo.arguments
@@ -903,16 +906,15 @@ final class LibraryStore {
         saveTask?.cancel()
         saveTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(450))
-            guard !Task.isCancelled else { return }
-            self?.saveImmediately()
+            guard !Task.isCancelled, let self else { return }
+            metadataWriter.save(books)
         }
     }
 
     private func saveImmediately() {
-        do {
-            try metadataRepository.save(books)
-        } catch {
-            alert = LibraryAlert(title: "无法保存书架", message: error.localizedDescription)
+        saveTask?.cancel()
+        if let message = metadataWriter.saveAndWait(books) {
+            alert = LibraryAlert(title: "无法保存书架", message: message)
         }
     }
 
