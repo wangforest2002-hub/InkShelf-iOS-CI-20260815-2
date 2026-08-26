@@ -41,7 +41,7 @@ final class ReaderNavigationUITests: XCTestCase {
         )
         let progress = app.sliders["reader-progress"]
         XCTAssertTrue(progress.exists, "Reader controls did not finish loading")
-        let pageLabel = app.descendants(matching: .any)["reader-page-label"]
+        let pageLabel = app.staticTexts["reader-page-label"]
         XCTAssertTrue(pageLabel.exists, "The page counter did not appear")
         XCTAssertTrue(
             pageLabel.label.contains("第 1 页 · 共 3 页"),
@@ -197,7 +197,7 @@ final class ReaderNavigationUITests: XCTestCase {
 
         let progress = app.sliders["reader-progress"]
         XCTAssertTrue(progress.waitForExistence(timeout: 12), "The long album did not open")
-        let pageLabel = app.descendants(matching: .any)["reader-page-label"]
+        let pageLabel = app.staticTexts["reader-page-label"]
         XCTAssertTrue(pageLabel.waitForExistence(timeout: 3), "The long album page counter did not appear")
         assertPage(1, of: 61, on: pageLabel)
 
