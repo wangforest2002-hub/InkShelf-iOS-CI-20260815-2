@@ -74,6 +74,10 @@ struct RootView: View {
                 if phase != .active {
                     library.flushProgress()
                 }
+                if phase == .background {
+                    ReaderImagePipeline.shared.removeAllCachedImages()
+                    CoverImagePipeline.shared.removeAllCachedImages()
+                }
             }
             .sheet(item: duplicateImportBinding) { prompt in
                 DuplicateImportDecisionView(prompt: prompt)

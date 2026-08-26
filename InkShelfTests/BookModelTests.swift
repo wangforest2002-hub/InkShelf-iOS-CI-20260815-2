@@ -346,8 +346,6 @@ final class BookModelTests: XCTestCase {
 
         let cbz = root.appendingPathComponent("冒烟漫画.cbz")
         try fileManager.zipItem(at: archivePages, to: cbz, shouldKeepParent: false)
-        let originalArchiveBytes = try Data(contentsOf: cbz)
-
         let pdf = root.appendingPathComponent("冒烟 PDF.pdf")
         let pdfData = UIGraphicsPDFRenderer(bounds: CGRect(x: 0, y: 0, width: 320, height: 480)).pdfData { context in
             context.beginPage()
@@ -383,8 +381,8 @@ final class BookModelTests: XCTestCase {
         XCTAssertEqual(store.imageCollectionBooks.count, 1)
         XCTAssertTrue(store.favoritePageItems.isEmpty, "Imported images must not be mixed with pages favorited in the reader")
         let archiveBook = try XCTUnwrap(imported.first(where: { $0.kind == .archive }))
-        let importedSource = try XCTUnwrap(store.sourceURL(for: archiveBook))
-        XCTAssertEqual(try Data(contentsOf: importedSource), originalArchiveBytes)
+        XCTAssertNil(store.sourceURL(for: archiveBook), "An extracted CBZ must not retain a redundant archive copy")
+        XCTAssertEqual(try fileManager.contentsOfDirectory(atPath: store.contentURL(for: archiveBook).path).count, 2)
         XCTAssertNil(store.openingError(for: archiveBook))
         XCTAssertNotNil(store.importNotice)
 
@@ -681,6 +679,52 @@ final class BookModelTests: XCTestCase {
             try fileManager.contentsOfDirectory(atPath: root.appendingPathComponent(optimized.contentRelativePath).path).count,
             2
         )
+    }
+
+    @MainActor
+    func testStorageManagerReclaimsOnlyRedundantArchiveContainer() async throws {
+        let fileManager = FileManager.default
+        let root = fileManager.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let suiteName = "InkShelfRedundantStorageTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer {
+            try? fileManager.removeItem(at: root)
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let id = UUID()
+        let library = root.appendingPathComponent("InkShelf Library", isDirectory: true)
+        let folder = library.appendingPathComponent(id.uuidString.lowercased(), isDirectory: true)
+        let pages = folder.appendingPathComponent("pages", isDirectory: true)
+        try fileManager.createDirectory(at: pages, withIntermediateDirectories: true)
+        let page = pages.appendingPathComponent("001.png")
+        let source = folder.appendingPathComponent("source.cbz")
+        try testPNG(color: .systemPink).write(to: page)
+        try Data(repeating: 0x42, count: 16_384).write(to: source)
+        let book = Book(
+            id: id,
+            title: "旧版重复封装",
+            kind: .archive,
+            sourceFileName: "source.cbz",
+            contentRelativePath: "\(id.uuidString.lowercased())/pages",
+            sourceRelativePath: "\(id.uuidString.lowercased())/source.cbz",
+            pageCount: 1,
+            fileSize: 16_384
+        )
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        try encoder.encode([book]).write(to: library.appendingPathComponent("library.json"))
+
+        let store = LibraryStore(fileManager: fileManager, defaults: defaults, documentsURL: root)
+        await store.refreshStorageMeasurements()
+        XCTAssertGreaterThan(store.redundantSourceCopiesSize, 0)
+
+        await store.reclaimRedundantSourceCopies()
+        XCTAssertFalse(fileManager.fileExists(atPath: source.path))
+        XCTAssertTrue(fileManager.fileExists(atPath: page.path))
+        XCTAssertNil(store.books.first?.sourceRelativePath)
+        XCTAssertEqual(store.books.first?.storageState, .full)
+        XCTAssertEqual(store.redundantSourceCopiesSize, 0)
     }
 
     @MainActor
@@ -1066,6 +1110,24 @@ final class BookModelTests: XCTestCase {
         let repaired = try repository.load()
         XCTAssertFalse(repaired.recoveredFromBackup)
         XCTAssertEqual(repaired.books.map(\.id), [book.id])
+    }
+
+    func testImportStorageEstimateProtectsSafetyReserve() {
+        let enough = ImportStorageEstimate(
+            requiredBytes: 400,
+            availableBytes: 1_000,
+            safetyReserveBytes: 500
+        )
+        XCTAssertTrue(enough.hasEnoughSpace)
+        XCTAssertEqual(enough.shortfallBytes, 0)
+
+        let insufficient = ImportStorageEstimate(
+            requiredBytes: 600,
+            availableBytes: 1_000,
+            safetyReserveBytes: 500
+        )
+        XCTAssertFalse(insufficient.hasEnoughSpace)
+        XCTAssertEqual(insufficient.shortfallBytes, 100)
     }
 
     func testBackgroundMetadataWriterCannotRestoreAnOlderPage() throws {

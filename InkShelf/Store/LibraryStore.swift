@@ -44,6 +44,9 @@ final class LibraryStore {
     private(set) var optimizingBookID: UUID?
     private(set) var storageOptimizationProgress: Double?
     private(set) var measuredStorageSizes: [UUID: Int64] = [:]
+    private(set) var availableStorageCapacity: Int64?
+    private(set) var redundantSourceCopiesSize: Int64 = 0
+    private(set) var isReclaimingRedundantSources = false
     private(set) var duplicateImportPrompt: DuplicateImportPrompt?
     private(set) var duplicateGroups: [DuplicateBookGroup] = []
     private(set) var isScanningDuplicates = false
@@ -118,25 +121,141 @@ final class LibraryStore {
 
     func refreshStorageMeasurements() async {
         let rootURL = libraryURL
-        let snapshot = books.map { ($0.id, $0.folderName) }
+        let snapshot = books.map {
+            (
+                id: $0.id,
+                folderName: $0.folderName,
+                kind: $0.kind,
+                contentRelativePath: $0.contentRelativePath,
+                sourceRelativePath: $0.sourceRelativePath
+            )
+        }
         let measured = await Task.detached(priority: .utility) {
             var result: [UUID: Int64] = [:]
-            for (id, folderName) in snapshot {
+            var redundantBytes: Int64 = 0
+            for item in snapshot {
+                let id = item.id
+                let folderName = item.folderName
                 let folder = rootURL.appendingPathComponent(folderName, isDirectory: true)
                 let enumerator = FileManager.default.enumerator(
                     at: folder,
-                    includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey]
+                    includingPropertiesForKeys: [.isRegularFileKey, .totalFileAllocatedSizeKey, .fileAllocatedSizeKey, .fileSizeKey]
                 )
                 var total: Int64 = 0
                 while let url = enumerator?.nextObject() as? URL {
-                    let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
-                    if values?.isRegularFile == true { total += Int64(values?.fileSize ?? 0) }
+                    let values = try? url.resourceValues(
+                        forKeys: [.isRegularFileKey, .totalFileAllocatedSizeKey, .fileAllocatedSizeKey, .fileSizeKey]
+                    )
+                    if values?.isRegularFile == true {
+                        total += Int64(values?.totalFileAllocatedSize ?? values?.fileAllocatedSize ?? values?.fileSize ?? 0)
+                    }
                 }
                 result[id] = total
+
+                if (item.kind == .archive || item.kind == .ebook),
+                   let sourceRelativePath = item.sourceRelativePath {
+                    let source = rootURL.appendingPathComponent(sourceRelativePath).standardizedFileURL
+                    let content = rootURL.appendingPathComponent(item.contentRelativePath).standardizedFileURL
+                    if source != content,
+                       FileManager.default.fileExists(atPath: source.path),
+                       FileManager.default.fileExists(atPath: content.path) {
+                        let values = try? source.resourceValues(
+                            forKeys: [.totalFileAllocatedSizeKey, .fileAllocatedSizeKey, .fileSizeKey]
+                        )
+                        redundantBytes += Int64(
+                            values?.totalFileAllocatedSize ?? values?.fileAllocatedSize ?? values?.fileSize ?? 0
+                        )
+                    }
+                }
             }
-            return result
+            return (sizes: result, redundantBytes: redundantBytes)
         }.value
-        measuredStorageSizes = measured
+        measuredStorageSizes = measured.sizes
+        redundantSourceCopiesSize = measured.redundantBytes
+        availableStorageCapacity = ImportStorageGuard.availableCapacity(at: rootURL)
+    }
+
+    /// Removes legacy CBZ/ebook containers only when their complete reader
+    /// representation is already present. Full-resolution pages and all
+    /// reading metadata remain untouched.
+    func reclaimRedundantSourceCopies() async {
+        guard !isReclaimingRedundantSources, redundantSourceCopiesSize > 0 else { return }
+        isReclaimingRedundantSources = true
+        let rootURL = libraryURL
+        let candidates = books.compactMap { book -> (UUID, BookKind, String, String)? in
+            guard (book.kind == .archive || book.kind == .ebook),
+                  let source = book.sourceRelativePath,
+                  source != book.contentRelativePath
+            else { return nil }
+            return (book.id, book.kind, source, book.contentRelativePath)
+        }
+
+        let removed = await Task.detached(priority: .utility) {
+            var removedIDs: [UUID] = []
+            var releasedBytes: Int64 = 0
+            for (id, kind, sourcePath, contentPath) in candidates {
+                let source = rootURL.appendingPathComponent(sourcePath).standardizedFileURL
+                let content = rootURL.appendingPathComponent(contentPath).standardizedFileURL
+                guard source != content,
+                      FileManager.default.fileExists(atPath: source.path),
+                      FileManager.default.fileExists(atPath: content.path),
+                      Self.hasCompleteReaderContent(kind: kind, contentURL: content)
+                else { continue }
+                let values = try? source.resourceValues(
+                    forKeys: [.totalFileAllocatedSizeKey, .fileAllocatedSizeKey, .fileSizeKey]
+                )
+                let bytes = Int64(values?.totalFileAllocatedSize ?? values?.fileAllocatedSize ?? values?.fileSize ?? 0)
+                do {
+                    try FileManager.default.removeItem(at: source)
+                    releasedBytes += bytes
+                    removedIDs.append(id)
+                } catch {
+                    continue
+                }
+            }
+            return (ids: removedIDs, bytes: releasedBytes)
+        }.value
+
+        let removedSet = Set(removed.ids)
+        for index in books.indices where removedSet.contains(books[index].id) {
+            books[index].sourceRelativePath = nil
+        }
+        if !removed.ids.isEmpty {
+            saveImmediately()
+            importNotice = "已释放 \(AppFormatters.fileSize(removed.bytes))，高清阅读内容保持不变"
+            Task { [weak self] in
+                try? await Task.sleep(for: .seconds(3))
+                self?.importNotice = nil
+            }
+        }
+        await refreshStorageMeasurements()
+        isReclaimingRedundantSources = false
+    }
+
+    nonisolated private static func hasCompleteReaderContent(kind: BookKind, contentURL: URL) -> Bool {
+        switch kind {
+        case .archive:
+            guard let enumerator = FileManager.default.enumerator(
+                at: contentURL,
+                includingPropertiesForKeys: [.isRegularFileKey],
+                options: [.skipsHiddenFiles]
+            ) else { return false }
+            for case let url as URL in enumerator {
+                if (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true {
+                    return true
+                }
+            }
+            return false
+        case .ebook:
+            let publication = contentURL.deletingLastPathComponent()
+                .appendingPathComponent("publication", isDirectory: true)
+            var isDirectory: ObjCBool = false
+            return FileManager.default.fileExists(atPath: contentURL.path)
+                && FileManager.default.fileExists(atPath: publication.path, isDirectory: &isDirectory)
+                && isDirectory.boolValue
+        case .pdf, .imageCollection:
+            return false
+        }
     }
 
     var continueReadingBook: Book? {

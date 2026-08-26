@@ -4,6 +4,7 @@ import UIKit
 struct StorageManagerView: View {
     @Environment(LibraryStore.self) private var library
     @State private var pendingAction: StorageAction?
+    @State private var showsRedundantCleanupConfirmation = false
 
     var body: some View {
         List {
@@ -12,9 +13,35 @@ struct StorageManagerView: View {
                     Text(AppFormatters.fileSize(library.storageUsage))
                         .font(.headline.monospacedDigit())
                 }
-                Text("“低清预览”会保留完整页数并删除本机原稿；“仅保留封面”只留下书架记忆。以后想恢复原画，需要重新导入原文件。")
+                if let available = library.availableStorageCapacity {
+                    LabeledContent("设备当前可用") {
+                        Text(AppFormatters.fileSize(available))
+                            .font(.headline.monospacedDigit())
+                    }
+                }
+                Text("高清页面按屏幕所需尺寸即时解码，缩略图和阅读页只在内存中短暂缓存，不会再生成一套磁盘页面缓存。")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+            }
+
+            if library.redundantSourceCopiesSize > 0 {
+                Section("可安全清理") {
+                    Button {
+                        showsRedundantCleanupConfirmation = true
+                    } label: {
+                        LabeledContent {
+                            Text(AppFormatters.fileSize(library.redundantSourceCopiesSize))
+                                .foregroundStyle(AppTheme.accent)
+                        } label: {
+                            Label("旧版压缩包副本", systemImage: "archivebox.fill")
+                        }
+                    }
+                    .disabled(library.isReclaimingRedundantSources)
+
+                    Text("这些旧版 CBZ/电子书已拥有完整可读内容。清理只移除应用内部重复保留的封装文件，不降低图片画质，也不删除“文件”或 iCloud 中的原文件。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Section("每本读物") {
@@ -41,6 +68,18 @@ struct StorageManagerView: View {
         .background(AuroraBackground())
         .navigationTitle("本地存储管家")
         .task { await library.refreshStorageMeasurements() }
+        .confirmationDialog(
+            "清理旧版重复副本？",
+            isPresented: $showsRedundantCleanupConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("释放 \(AppFormatters.fileSize(library.redundantSourceCopiesSize))", role: .destructive) {
+                Task { await library.reclaimRedundantSourceCopies() }
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("完整高清页面会继续保留；清理后应用内将不能导出原 CBZ/电子书封装，需要时请从原来的“文件”或 iCloud 位置取用。")
+        }
         .confirmationDialog(
             pendingAction?.title ?? "整理本地空间",
             isPresented: Binding(

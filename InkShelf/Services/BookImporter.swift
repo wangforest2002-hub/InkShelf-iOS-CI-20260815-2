@@ -10,6 +10,7 @@ enum BookImportError: LocalizedError, Sendable {
     case unreadablePDF(String)
     case emptyArchive(String)
     case archiveTooLarge
+    case insufficientStorage(requiredBytes: Int64, availableBytes: Int64)
     case noImages
 
     var errorDescription: String? {
@@ -19,6 +20,12 @@ enum BookImportError: LocalizedError, Sendable {
         case .unreadablePDF(let name): return "无法读取 PDF“\(name)”。文件可能已损坏。"
         case .emptyArchive(let name): return "压缩包“\(name)”中没有可读取的图片。"
         case .archiveTooLarge: return "压缩包展开后过大或页面过多，已停止导入以保护设备存储空间。"
+        case .insufficientStorage(let requiredBytes, let availableBytes):
+            let formatter = ByteCountFormatter()
+            formatter.countStyle = .file
+            let required = formatter.string(fromByteCount: requiredBytes)
+            let available = formatter.string(fromByteCount: availableBytes)
+            return "本机空间不足：这次导入预计至少需要 \(required)，当前约可用 \(available)。请先在“本地存储管家”中整理空间后再试。"
         case .noImages: return "没有选择可读取的图片。"
         }
     }
@@ -45,6 +52,8 @@ enum BookImporter {
     private static func importSynchronously(from urls: [URL], into libraryURL: URL) throws -> [Book] {
         let fileManager = FileManager.default
         try fileManager.createDirectory(at: libraryURL, withIntermediateDirectories: true)
+
+        try ImportStorageGuard.ensureSufficientCapacity(for: urls, destinationRoot: libraryURL)
 
         let sortedURLs = NaturalSort.urls(urls)
         let folderURLs = sortedURLs.filter { isDirectory($0) }
@@ -88,6 +97,16 @@ enum BookImporter {
         } catch {
             for folder in createdFolders {
                 try? fileManager.removeItem(at: folder)
+            }
+            if let importError = error as? BookImportError,
+               case .insufficientStorage = importError {
+                throw importError
+            }
+            if ImportStorageGuard.isOutOfSpace(error) {
+                throw BookImportError.insufficientStorage(
+                    requiredBytes: ImportStorageGuard.safetyReserveBytes,
+                    availableBytes: ImportStorageGuard.availableCapacity(at: libraryURL) ?? 0
+                )
             }
             throw error
         }
@@ -167,6 +186,16 @@ enum BookImporter {
             guard !entries.isEmpty else { throw BookImportError.emptyArchive(sourceURL.lastPathComponent) }
             guard entries.count <= maxArchiveEntries else { throw BookImportError.archiveTooLarge }
 
+            let expectedExpandedBytes = entries.reduce(into: UInt64(0)) { total, entry in
+                let (value, overflow) = total.addingReportingOverflow(UInt64(entry.uncompressedSize))
+                total = overflow ? UInt64.max : value
+            }
+            guard expectedExpandedBytes <= maxExpandedArchiveBytes else { throw BookImportError.archiveTooLarge }
+            try ImportStorageGuard.ensureSufficientCapacity(
+                additionalBytes: Int64(clamping: expectedExpandedBytes),
+                destinationRoot: libraryURL
+            )
+
             var expandedBytes: UInt64 = 0
             var pageURLs: [URL] = []
             for (index, entry) in entries.enumerated() {
@@ -188,17 +217,21 @@ enum BookImporter {
 
             let previewNames = CoverService.createImagePreviews(sourceURLs: Array(pageURLs.prefix(1)), in: folder)
             let previewPaths = previewNames.map { relativePath(id: id, component: $0) }
+            // The extracted pages are already the complete, original-quality
+            // reading source. Keeping the archive beside them nearly doubles
+            // local usage without improving image quality.
+            try fileManager.removeItem(at: copiedArchive)
             let book = Book(
                 id: id,
                 title: cleanTitle(sourceURL.deletingPathExtension().lastPathComponent),
                 kind: .archive,
                 sourceFileName: sourceURL.lastPathComponent,
                 contentRelativePath: relativePath(id: id, component: "pages"),
-                sourceRelativePath: relativePath(id: id, component: "source.\(sourceExtension)"),
+                sourceRelativePath: nil,
                 coverRelativePath: previewPaths.first,
                 previewRelativePaths: previewPaths,
                 pageCount: pageURLs.count,
-                fileSize: fileSize(of: copiedArchive)
+                fileSize: folderSize(of: folder)
             )
             return (book, folder)
         } catch {
@@ -294,6 +327,7 @@ enum BookImporter {
             do {
                 results.append(try importDocument(sourceURL, into: libraryURL))
             } catch {
+                if ImportStorageGuard.isOutOfSpace(error) { throw error }
                 if firstError == nil { firstError = error }
             }
         }
@@ -311,6 +345,7 @@ enum BookImporter {
                         into: libraryURL
                     ))
                 } catch {
+                    if ImportStorageGuard.isOutOfSpace(error) { throw error }
                     if firstError == nil { firstError = error }
                 }
             }
@@ -332,6 +367,7 @@ enum BookImporter {
                         into: libraryURL
                     ))
                 } catch {
+                    if ImportStorageGuard.isOutOfSpace(error) { throw error }
                     if firstError == nil { firstError = error }
                 }
             }
@@ -406,6 +442,21 @@ enum BookImporter {
     private static func fileSize(of url: URL) -> Int64 {
         let values = try? url.resourceValues(forKeys: [.fileSizeKey])
         return Int64(values?.fileSize ?? 0)
+    }
+
+    private static func folderSize(of folder: URL) -> Int64 {
+        let keys: Set<URLResourceKey> = [.isRegularFileKey, .totalFileAllocatedSizeKey, .fileAllocatedSizeKey, .fileSizeKey]
+        guard let enumerator = FileManager.default.enumerator(
+            at: folder,
+            includingPropertiesForKeys: Array(keys),
+            options: [.skipsHiddenFiles]
+        ) else { return 0 }
+        var total: Int64 = 0
+        for case let url as URL in enumerator {
+            guard let values = try? url.resourceValues(forKeys: keys), values.isRegularFile == true else { continue }
+            total += Int64(values.totalFileAllocatedSize ?? values.fileAllocatedSize ?? values.fileSize ?? 0)
+        }
+        return total
     }
 
     private static func isDirectory(_ url: URL) -> Bool {

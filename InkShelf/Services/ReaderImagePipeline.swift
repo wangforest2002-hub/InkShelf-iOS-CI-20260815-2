@@ -30,17 +30,27 @@ final class ReaderImagePipeline: @unchecked Sendable {
         let queue = OperationQueue()
         queue.name = "com.inkshelf.reader.image-full-decode"
         queue.qualityOfService = .userInitiated
-        queue.maxConcurrentOperationCount = 2
+        // One large decode at a time avoids a short-lived memory spike when
+        // two 3K pages finish together during a fast swipe.
+        queue.maxConcurrentOperationCount = 1
         return queue
     }()
     private let stateQueue = DispatchQueue(label: "com.inkshelf.reader.image-state")
     private var callbacks: [String: [(UIImage?) -> Void]] = [:]
     private var operations: [String: Operation] = [:]
+    private var memoryWarningObserver: NSObjectProtocol?
 
     private init() {
-        cache.countLimit = 10
+        cache.countLimit = 6
         let physicalMemory = Int(ProcessInfo.processInfo.physicalMemory)
-        cache.totalCostLimit = min(256 * 1_024 * 1_024, max(96 * 1_024 * 1_024, physicalMemory / 24))
+        cache.totalCostLimit = min(192 * 1_024 * 1_024, max(72 * 1_024 * 1_024, physicalMemory / 32))
+        memoryWarningObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.didReceiveMemoryWarningNotification,
+            object: nil,
+            queue: nil
+        ) { [weak self] _ in
+            self?.removeAllCachedImages()
+        }
     }
 
     func load(
@@ -106,9 +116,17 @@ final class ReaderImagePipeline: @unchecked Sendable {
             completion(preview, !needsFullDecode)
             guard needsFullDecode, let self else { return }
             self.load(url, maxPixelSize: fullPixelSize, priority: .display) { fullImage in
+                // Once the reading-quality page is ready, keeping its preview
+                // is pure duplication. The visible UIImageView retains the
+                // preview until this replacement is delivered.
+                self.cache.removeObject(forKey: self.cacheKey(for: url, pixelSize: previewPixelSize))
                 completion(fullImage ?? preview, true)
             }
         }
+    }
+
+    func removeAllCachedImages() {
+        cache.removeAllObjects()
     }
 
     func prefetch(_ urls: [URL], maxPixelSize: Int) {
@@ -203,10 +221,18 @@ final class CoverImagePipeline: @unchecked Sendable {
     }()
     private let stateQueue = DispatchQueue(label: "com.inkshelf.cover-state")
     private var callbacks: [String: [(UIImage?) -> Void]] = [:]
+    private var memoryWarningObserver: NSObjectProtocol?
 
     private init() {
-        cache.countLimit = 160
-        cache.totalCostLimit = 72 * 1_024 * 1_024
+        cache.countLimit = 96
+        cache.totalCostLimit = 48 * 1_024 * 1_024
+        memoryWarningObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.didReceiveMemoryWarningNotification,
+            object: nil,
+            queue: nil
+        ) { [weak self] _ in
+            self?.removeAllCachedImages()
+        }
     }
 
     func image(for url: URL, maxPixelSize: Int = 768) async -> UIImage? {
@@ -274,5 +300,9 @@ final class CoverImagePipeline: @unchecked Sendable {
                 completions.forEach { $0(image) }
             }
         }
+    }
+
+    func removeAllCachedImages() {
+        cache.removeAllObjects()
     }
 }

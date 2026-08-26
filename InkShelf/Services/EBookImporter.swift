@@ -64,17 +64,21 @@ enum EBookImporter {
             } ?? []
             let previewPaths = previewNames.map { "\(id.uuidString.lowercased())/\($0)" }
             let title = generated.package.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            // ebook.json and publication contain everything the reader needs.
+            // The selected source remains in Files/iCloud, so the copied
+            // container is redundant once conversion has succeeded.
+            try fileManager.removeItem(at: copiedSource)
             let book = Book(
                 id: id,
                 title: title.isEmpty ? sourceURL.deletingPathExtension().lastPathComponent : title,
                 kind: .ebook,
                 sourceFileName: sourceURL.lastPathComponent,
                 contentRelativePath: "\(id.uuidString.lowercased())/ebook.json",
-                sourceRelativePath: "\(id.uuidString.lowercased())/\(sourceName)",
+                sourceRelativePath: nil,
                 coverRelativePath: previewPaths.first,
                 previewRelativePaths: previewPaths,
                 pageCount: generated.package.chapters.count,
-                fileSize: fileSize(of: copiedSource),
+                fileSize: folderSize(of: folder),
                 ebookChapterProgress: 0
             )
             return (book, folder)
@@ -210,6 +214,21 @@ enum EBookImporter {
 
     private static func fileSize(of url: URL) -> Int64 {
         Int64((try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+    }
+
+    private static func folderSize(of folder: URL) -> Int64 {
+        let keys: Set<URLResourceKey> = [.isRegularFileKey, .totalFileAllocatedSizeKey, .fileAllocatedSizeKey, .fileSizeKey]
+        guard let enumerator = FileManager.default.enumerator(
+            at: folder,
+            includingPropertiesForKeys: Array(keys),
+            options: [.skipsHiddenFiles]
+        ) else { return 0 }
+        var total: Int64 = 0
+        for case let url as URL in enumerator {
+            guard let values = try? url.resourceValues(forKeys: keys), values.isRegularFile == true else { continue }
+            total += Int64(values.totalFileAllocatedSize ?? values.fileAllocatedSize ?? values.fileSize ?? 0)
+        }
+        return total
     }
 }
 

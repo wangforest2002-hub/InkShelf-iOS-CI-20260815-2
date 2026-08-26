@@ -6,6 +6,9 @@ actor AIResponseCache {
     private let folder: URL
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
+    private var writesSincePrune = 0
+    private let maximumBytes: Int64 = 24 * 1_024 * 1_024
+    private let maximumFileCount = 2_000
 
     init() {
         let root = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
@@ -54,5 +57,36 @@ actor AIResponseCache {
     private func save<T: Encodable>(_ value: T, to url: URL) {
         guard let data = try? encoder.encode(value) else { return }
         try? data.write(to: url, options: .atomic)
+        writesSincePrune += 1
+        if writesSincePrune >= 40 {
+            writesSincePrune = 0
+            pruneIfNeeded()
+        }
+    }
+
+    private func pruneIfNeeded() {
+        let keys: Set<URLResourceKey> = [.isRegularFileKey, .fileSizeKey, .contentAccessDateKey, .contentModificationDateKey]
+        guard let urls = try? FileManager.default.contentsOfDirectory(
+            at: folder,
+            includingPropertiesForKeys: Array(keys),
+            options: [.skipsHiddenFiles]
+        ) else { return }
+        var items = urls.compactMap { url -> (URL, Int64, Date)? in
+            guard let values = try? url.resourceValues(forKeys: keys), values.isRegularFile == true else { return nil }
+            return (
+                url,
+                Int64(values.fileSize ?? 0),
+                values.contentAccessDate ?? values.contentModificationDate ?? .distantPast
+            )
+        }
+        var bytes = items.reduce(Int64(0)) { $0 + $1.1 }
+        guard items.count > maximumFileCount || bytes > maximumBytes else { return }
+        items.sort { $0.2 < $1.2 }
+        while (items.count > maximumFileCount || bytes > maximumBytes), !items.isEmpty {
+            let item = items.removeFirst()
+            if (try? FileManager.default.removeItem(at: item.0)) != nil {
+                bytes -= item.1
+            }
+        }
     }
 }

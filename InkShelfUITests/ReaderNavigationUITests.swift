@@ -388,18 +388,30 @@ final class ReaderNavigationUITests: XCTestCase {
         // Multiple selection keeps the picker open until its confirmation
         // button is tapped. Files localizes this independently from the app,
         // and the title also varies slightly between iOS releases.
-        if !tapFirstVisible(
+        let confirmedSelection = tapFirstVisible(
             app,
             labels: ["打开", "Open", "选取", "Choose", "完成", "Done", "添加", "Add"],
             timeout: 4
-        ) {
+        )
+        if !confirmedSelection {
             print("FILES PICKER HIERARCHY AFTER SELECTION:\n\(app.debugDescription)")
         }
+        XCTAssertTrue(confirmedSelection, "The system picker never exposed a confirmation action")
 
-        let imported = app.buttons.matching(
-            NSPredicate(format: "label BEGINSWITH 'picker-fixture'")
+        // On a compact phone the taller welcome card can legitimately place
+        // the first lazy-grid book below the fold. Search every accessibility
+        // element and scroll the real shelf instead of treating off-screen as
+        // an import failure.
+        let imported = app.descendants(matching: .any).matching(
+            NSPredicate(format: "label BEGINSWITH[c] 'picker-fixture'")
         ).firstMatch
-        XCTAssertTrue(imported.waitForExistence(timeout: 12), "Selecting a valid image never added it to the shelf")
+        for _ in 0..<5 where !imported.waitForExistence(timeout: 3) {
+            app.swipeUp()
+        }
+        if !imported.exists {
+            print("SHELF HIERARCHY AFTER IMPORT:\n\(app.debugDescription)")
+        }
+        XCTAssertTrue(imported.waitForExistence(timeout: 3), "Selecting a valid image never added it to the shelf")
         imported.tap()
 
         XCTAssertTrue(

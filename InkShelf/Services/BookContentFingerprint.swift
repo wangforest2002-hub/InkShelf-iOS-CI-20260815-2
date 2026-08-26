@@ -17,6 +17,14 @@ enum BookContentFingerprint {
                     return try fingerprint(ofFile: sourceURL)
                 }
             }
+            if book.kind == .ebook {
+                let publicationURL = libraryURL
+                    .appendingPathComponent(book.folderName, isDirectory: true)
+                    .appendingPathComponent("publication", isDirectory: true)
+                if let publicationFingerprint = try fingerprint(ofOrderedFilesIn: publicationURL) {
+                    return publicationFingerprint
+                }
+            }
             let contentURL = libraryURL.appendingPathComponent(book.contentRelativePath)
             var isDirectory: ObjCBool = false
             guard FileManager.default.fileExists(atPath: contentURL.path, isDirectory: &isDirectory) else {

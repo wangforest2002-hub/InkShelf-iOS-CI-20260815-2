@@ -227,7 +227,7 @@ final class AICompanionStore {
             }
             if let cached = memoryReaction ?? diskReaction {
                 guard currentBookID == context.book.id, currentPage == context.page else { return }
-                reactions[memoryKey] = cached
+                remember(cached, key: memoryKey)
                 currentReaction = cached
                 currentInsight = AIPageInsight(
                     page: context.page,
@@ -287,7 +287,7 @@ final class AICompanionStore {
                   currentPage == context.page
             else { return }
 
-            reactions[memoryKey] = reaction
+            remember(reaction, key: memoryKey)
             currentInsight = insight
             currentReaction = reaction
             await AIResponseCache.shared.save(reaction, bookID: context.book.id, variant: settings.cacheVariant)
@@ -367,6 +367,17 @@ final class AICompanionStore {
 
     private func reactionKey(bookID: UUID, page: Int, variant: String) -> String {
         "\(bookID.uuidString)-\(page)-\(variant)"
+    }
+
+    private func remember(_ reaction: AIPageReaction, key: String) {
+        reactions[key] = reaction
+        guard reactions.count > 80 else { return }
+        let victim = reactions
+            .filter { $0.key != key }
+            .max { lhs, rhs in
+                abs(lhs.value.page - currentPage) < abs(rhs.value.page - currentPage)
+            }?.key
+        if let victim { reactions.removeValue(forKey: victim) }
     }
 }
 
