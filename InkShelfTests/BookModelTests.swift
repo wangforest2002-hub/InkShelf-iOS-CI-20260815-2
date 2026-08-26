@@ -158,6 +158,7 @@ final class BookModelTests: XCTestCase {
         )
         XCTAssertEqual(store?.afterDarkBooks.map(\.id), [id])
         XCTAssertEqual(store?.books.first?.normalizedTags, ["御姐", "魅惑"])
+        store?.flushProgress()
         store = nil
 
         let restored = LibraryStore(fileManager: fileManager, defaults: defaults, documentsURL: root)
@@ -524,6 +525,7 @@ final class BookModelTests: XCTestCase {
         let group = try XCTUnwrap(store?.createShelfGroup(title: "温暖收藏"))
         store?.assignBook(bookID, toShelfGroup: group.id)
         XCTAssertEqual(store?.bookCount(inShelfGroup: group.id), 1)
+        store?.flushProgress()
         store = nil
 
         store = LibraryStore(fileManager: fileManager, defaults: defaults, documentsURL: root)
@@ -597,6 +599,7 @@ final class BookModelTests: XCTestCase {
         store?.togglePageFavorite(bookID: id, page: 1)
         XCTAssertTrue(store?.isPageFavorite(bookID: id, page: 1) == true)
         XCTAssertEqual(store?.favoritePageItems.first?.page, 1)
+        store?.flushProgress()
         store = nil
 
         let restored = LibraryStore(fileManager: fileManager, defaults: defaults, documentsURL: root)
