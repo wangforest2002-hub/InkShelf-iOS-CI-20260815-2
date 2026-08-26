@@ -461,13 +461,13 @@ final class LibraryStore {
     func toggleFavorite(_ id: UUID) {
         guard let index = books.firstIndex(where: { $0.id == id }) else { return }
         books[index].isFavorite.toggle()
-        saveImmediately()
+        saveAsynchronously()
     }
 
     func toggleAfterDark(_ id: UUID) {
         guard let index = books.firstIndex(where: { $0.id == id }) else { return }
         books[index].isAfterDark = !books[index].belongsToAfterDark
-        saveImmediately()
+        saveAsynchronously()
         importNotice = books[index].belongsToAfterDark ? "已加入成年向档案" : "已移出成年向档案"
         Task { [weak self] in
             try? await Task.sleep(for: .seconds(2.2))
@@ -609,7 +609,7 @@ final class LibraryStore {
         books[index].personalNote = note.isEmpty ? nil : note
         books[index].heartRating = min(max(heartRating, 0), 5)
         books[index].spiceRating = min(max(spiceRating, 0), 5)
-        saveImmediately()
+        saveAsynchronously()
         importNotice = "“\(books[index].title)”的心动档案已保存"
         Task { [weak self] in
             try? await Task.sleep(for: .seconds(2.2))
@@ -637,7 +637,7 @@ final class LibraryStore {
         var pages = Set(books[index].favoritePages ?? [])
         if !pages.insert(page).inserted { pages.remove(page) }
         books[index].favoritePages = pages.sorted()
-        saveImmediately()
+        saveAsynchronously()
     }
 
     @discardableResult
@@ -663,7 +663,7 @@ final class LibraryStore {
             books[index].shelfGroupID = nil
         }
         saveShelfGroups()
-        saveImmediately()
+        saveAsynchronously()
     }
 
     func assignBook(_ bookID: UUID, toShelfGroup groupID: UUID?) {
@@ -671,7 +671,7 @@ final class LibraryStore {
               let index = books.firstIndex(where: { $0.id == bookID })
         else { return }
         books[index].shelfGroupID = groupID
-        saveImmediately()
+        saveAsynchronously()
         importNotice = groupID.flatMap { id in shelfGroups.first(where: { $0.id == id })?.title }
             .map { "已放进“\($0)”" } ?? "已移到未分组"
         Task { [weak self] in
@@ -786,7 +786,7 @@ final class LibraryStore {
         let title = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !title.isEmpty, let index = books.firstIndex(where: { $0.id == id }) else { return }
         books[index].title = title
-        saveImmediately()
+        saveAsynchronously()
     }
 
     func delete(_ book: Book) {
@@ -946,6 +946,15 @@ final class LibraryStore {
             guard !Task.isCancelled, let self else { return }
             metadataWriter.save(booksApplyingPendingReadingProgress())
         }
+    }
+
+    /// User-facing metadata actions update the observable shelf immediately,
+    /// then serialize the durable snapshot on the metadata queue. Waiting for
+    /// two atomic JSON writes here makes favorite and group button animations
+    /// hitch for large libraries.
+    private func saveAsynchronously() {
+        saveTask?.cancel()
+        metadataWriter.save(booksApplyingPendingReadingProgress())
     }
 
     private func saveImmediately() {

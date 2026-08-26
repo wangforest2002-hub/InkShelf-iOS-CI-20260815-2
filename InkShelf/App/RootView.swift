@@ -5,6 +5,7 @@ struct RootView: View {
     @Environment(LibraryStore.self) private var library
     @Environment(AppUpdateStore.self) private var updates
     @Environment(SocialImportStore.self) private var socialImports
+    @Environment(\.scenePhase) private var scenePhase
     @AppStorage("hasSeenWelcome") private var hasSeenWelcome = false
     @State private var launchDestination: LaunchDestination?
     @State private var updatePrompt: AppUpdateRelease?
@@ -68,6 +69,11 @@ struct RootView: View {
                     favoriteOnImport: false,
                     initialURL: request.postURL
                 )
+            }
+            .onChange(of: scenePhase) { _, phase in
+                if phase != .active {
+                    library.flushProgress()
+                }
             }
             .sheet(item: duplicateImportBinding) { prompt in
                 DuplicateImportDecisionView(prompt: prompt)
