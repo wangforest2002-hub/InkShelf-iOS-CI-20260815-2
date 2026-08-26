@@ -208,11 +208,13 @@ final class ReaderNavigationUITests: XCTestCase {
         XCTAssertTrue(welcomeTour.waitForExistence(timeout: 3), "The 2.5 welcome tour is missing from Settings")
         welcomeTour.tap()
         XCTAssertTrue(app.descendants(matching: .any)["welcome-2-5"].waitForExistence(timeout: 3))
-        let welcomeContinue = app.buttons["welcome-continue"]
+        let welcomeContinue = app.descendants(matching: .any)["welcome-continue"]
         XCTAssertTrue(welcomeContinue.waitForExistence(timeout: 3))
+        XCTAssertTrue(welcomeContinue.isHittable)
         welcomeContinue.tap()
-        let welcomeSkip = app.buttons["welcome-skip"]
+        let welcomeSkip = app.descendants(matching: .any)["welcome-skip"]
         XCTAssertTrue(welcomeSkip.waitForExistence(timeout: 3))
+        XCTAssertTrue(welcomeSkip.isHittable)
         welcomeSkip.tap()
         XCTAssertTrue(app.navigationBars["小家设置"].waitForExistence(timeout: 3))
 

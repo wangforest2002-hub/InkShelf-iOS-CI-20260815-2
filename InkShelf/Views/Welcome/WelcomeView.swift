@@ -106,9 +106,12 @@ struct WelcomeView: View {
             Spacer()
 
             Button("稍后", action: onFinish)
-                .accessibilityIdentifier("welcome-skip")
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("稍后")
+                .accessibilityAddTraits(.isButton)
+                .accessibilityIdentifier("welcome-skip")
         }
         .padding(.horizontal, 22)
         .padding(.top, 14)
@@ -141,8 +144,11 @@ struct WelcomeView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 4)
             }
-            .accessibilityIdentifier("welcome-continue")
             .adaptiveProminentButton()
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(Text(page == features.count - 1 ? "进入二次元小家" : "继续了解"))
+            .accessibilityAddTraits(.isButton)
+            .accessibilityIdentifier("welcome-continue")
         }
         .padding(.horizontal, 26)
         .padding(.top, 12)
