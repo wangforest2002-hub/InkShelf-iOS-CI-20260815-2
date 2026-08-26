@@ -1091,15 +1091,14 @@ private struct ReaderProgressSlider: UIViewRepresentable {
         }
 
         @objc func valueChanged(_ sender: UISlider) {
+            // Preserve the exact finger position while tracking. Moving the
+            // thumb to an integer on every event makes it drift away from the
+            // touch point across a long slider range.
+            if sender.isTracking { return }
             let value = parent.snapped(Double(sender.value))
             sender.value = Float(value)
-            // During a finger drag, changing the bound page on every tiny
-            // movement makes the pager rebuild underneath the active touch.
-            // Keep the thumb fluid and commit once when the finger lifts.
             // Accessibility adjustments are non-tracking and commit here.
-            if !sender.isTracking {
-                commit(value)
-            }
+            commit(value)
         }
 
         @objc func commitValue(_ sender: UISlider) {
