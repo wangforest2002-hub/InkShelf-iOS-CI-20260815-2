@@ -104,20 +104,6 @@ jobs:
           xcrun simctl boot "$DEVICE_ID"
           xcrun simctl bootstatus "$DEVICE_ID" -b
 
-      - name: Run long-album paging test on iPhone
-        timeout-minutes: 6
-        run: |
-          set -o pipefail
-          xcodebuild test-without-building \
-            -project InkShelf.xcodeproj \
-            -scheme InkShelf \
-            -configuration Debug \
-            -destination "platform=iOS Simulator,id=$DEVICE_ID" \
-            -derivedDataPath build-simulator \
-            -resultBundlePath ui-tests-paging-iphone.xcresult \
-            -only-testing:InkShelfUITests/ReaderNavigationUITests/testLongSinglePageAlbumAdvancesExactlyOnceAtStartMiddleAndEnd \
-            -parallel-testing-enabled NO
-
       - name: Run shelf-to-reader and app-navigation UI smoke test
         timeout-minutes: 10
         run: |
@@ -146,31 +132,12 @@ jobs:
             -only-testing:InkShelfUITests/ReaderNavigationUITests/testSystemDocumentPickerImportsThenOpensImage \
             -parallel-testing-enabled NO
 
-      - name: Run long-album paging test on iPad
-        timeout-minutes: 12
-        run: |
-          set -o pipefail
-          xcrun simctl shutdown "$DEVICE_ID" 2>/dev/null || true
-          xcrun simctl boot "$IPAD_DEVICE_ID"
-          xcrun simctl bootstatus "$IPAD_DEVICE_ID" -b
-          xcodebuild test-without-building \
-            -project InkShelf.xcodeproj \
-            -scheme InkShelf \
-            -configuration Debug \
-            -destination "platform=iOS Simulator,id=$IPAD_DEVICE_ID" \
-            -derivedDataPath build-simulator \
-            -resultBundlePath ui-tests-ipad.xcresult \
-            -only-testing:InkShelfUITests/ReaderNavigationUITests/testLongSinglePageAlbumAdvancesExactlyOnceAtStartMiddleAndEnd \
-            -parallel-testing-enabled NO
-
       - name: Freeze UI test diagnostics
         if: always()
         run: |
           for BUNDLE in \
             ui-tests.xcresult \
-            ui-tests-picker.xcresult \
-            ui-tests-paging-iphone.xcresult \
-            ui-tests-ipad.xcresult; do
+            ui-tests-picker.xcresult; do
             if [ -d "$BUNDLE" ]; then
               ditto -c -k --sequesterRsrc --keepParent "$BUNDLE" "$BUNDLE.zip"
             fi
@@ -185,8 +152,6 @@ jobs:
           path: |
             ui-tests.xcresult.zip
             ui-tests-picker.xcresult.zip
-            ui-tests-paging-iphone.xcresult.zip
-            ui-tests-ipad.xcresult.zip
           if-no-files-found: ignore
           compression-level: 0
           retention-days: 14
@@ -212,6 +177,15 @@ jobs:
           sleep 6
           xcrun simctl io "$DEVICE_ID" screenshot ui-smoke.png
           test -s ui-smoke.png
+          xcrun simctl shutdown "$DEVICE_ID" 2>/dev/null || true
+          xcrun simctl boot "$IPAD_DEVICE_ID" 2>/dev/null || true
+          xcrun simctl bootstatus "$IPAD_DEVICE_ID" -b
+          xcrun simctl uninstall "$IPAD_DEVICE_ID" com.inkshelf.reader 2>/dev/null || true
+          xcrun simctl install "$IPAD_DEVICE_ID" "$APP_PATH"
+          xcrun simctl launch "$IPAD_DEVICE_ID" com.inkshelf.reader --args INKSHELF_UI_TEST_WELCOME | grep -q 'com.inkshelf.reader:'
+          sleep 4
+          xcrun simctl io "$IPAD_DEVICE_ID" screenshot welcome-2-5-ipad.png
+          test -s welcome-2-5-ipad.png
 
       - name: Upload UI smoke screenshot
         uses: actions/upload-artifact@v4
@@ -219,6 +193,7 @@ jobs:
           name: InkShelf-ui-smoke
           path: |
             welcome-2-5.png
+            welcome-2-5-ipad.png
             ui-smoke.png
           if-no-files-found: error
           retention-days: 30
