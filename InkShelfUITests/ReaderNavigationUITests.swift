@@ -26,6 +26,16 @@ final class ReaderNavigationUITests: XCTestCase {
 
         let book = app.descendants(matching: .any)["book-a11ce000-0000-4000-8000-000000000001"]
         XCTAssertTrue(book.waitForExistence(timeout: 8), "The seeded local book never appeared on the shelf")
+        XCTAssertGreaterThanOrEqual(
+            book.frame.minX,
+            app.frame.minX - 1,
+            "The shelf grid starts outside the visible viewport"
+        )
+        XCTAssertLessThanOrEqual(
+            book.frame.maxX,
+            app.frame.maxX + 1,
+            "The shelf grid extends outside the visible viewport"
+        )
         if book.isHittable {
             book.tap()
         } else {

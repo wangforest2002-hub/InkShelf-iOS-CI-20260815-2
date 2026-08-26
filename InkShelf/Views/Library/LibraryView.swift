@@ -214,6 +214,11 @@ struct LibraryView: View {
                         .padding(.horizontal, 18)
                         .padding(.top, 12)
                         .padding(.bottom, 110)
+                        // A horizontally scrolling group strip and a wide
+                        // welcome card must never define the width of the
+                        // vertical shelf. Otherwise compact devices can lay
+                        // out extra grid columns beyond the visible viewport.
+                        .containerRelativeFrame(.horizontal, alignment: .leading)
                     }
                     .scrollIndicators(.hidden)
                 }
@@ -912,9 +917,10 @@ private struct HomeWelcomeHeader: View {
             }
 
             VStack(alignment: .leading, spacing: 14) {
-                HStack(alignment: .top, spacing: 12) {
-                    greetingCopy
-                    Spacer(minLength: 4)
+                greetingCopy
+
+                HStack {
+                    Spacer(minLength: 0)
                     CozyWindowView()
                         .frame(width: 82, height: 64)
                 }
@@ -957,6 +963,8 @@ private struct HomeWelcomeHeader: View {
         VStack(alignment: .leading, spacing: 9) {
             Label(greeting, systemImage: "books.vertical.fill")
                 .font(.title2.bold())
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
                 .foregroundStyle(
                     LinearGradient(
                         colors: [AppTheme.wood, AppTheme.coral, AppTheme.accent],
@@ -968,6 +976,7 @@ private struct HomeWelcomeHeader: View {
             Text(message)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
 
             HStack(spacing: 8) {
                 HomeStatChip(symbol: "books.vertical.fill", text: "\(bookCount) 本")
