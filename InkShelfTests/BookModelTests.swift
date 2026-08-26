@@ -6,6 +6,39 @@ import ZIPFoundation
 @testable import InkShelf
 
 final class BookModelTests: XCTestCase {
+    func testVersionedWelcomeAppearsForNewAndMajorUpdateUsers() {
+        XCTAssertTrue(
+            WelcomePresentationPolicy.shouldPresent(
+                hasSeenLegacyWelcome: false,
+                lastSeenRelease: "",
+                showOnMajorUpdate: false
+            ),
+            "A brand-new user must always see the welcome experience"
+        )
+        XCTAssertTrue(
+            WelcomePresentationPolicy.shouldPresent(
+                hasSeenLegacyWelcome: true,
+                lastSeenRelease: "2.4",
+                showOnMajorUpdate: true
+            ),
+            "An existing user should see the 2.5 major-version tour once"
+        )
+        XCTAssertFalse(
+            WelcomePresentationPolicy.shouldPresent(
+                hasSeenLegacyWelcome: true,
+                lastSeenRelease: WelcomeRelease.current,
+                showOnMajorUpdate: true
+            )
+        )
+        XCTAssertFalse(
+            WelcomePresentationPolicy.shouldPresent(
+                hasSeenLegacyWelcome: true,
+                lastSeenRelease: "2.4",
+                showOnMajorUpdate: false
+            )
+        )
+    }
+
     func testProgressUsesLastPageAsCompletion() {
         let book = makeBook(pageCount: 11, currentPage: 5)
         XCTAssertEqual(book.progress, 0.5, accuracy: 0.0001)

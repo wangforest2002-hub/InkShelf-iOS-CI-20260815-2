@@ -7,6 +7,8 @@ struct RootView: View {
     @Environment(SocialImportStore.self) private var socialImports
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage("hasSeenWelcome") private var hasSeenWelcome = false
+    @AppStorage("welcome.lastSeenRelease") private var lastSeenWelcomeRelease = ""
+    @AppStorage("welcome.showOnMajorUpdate") private var showWelcomeOnMajorUpdate = true
     @State private var launchDestination: LaunchDestination?
     @State private var updatePrompt: AppUpdateRelease?
 
@@ -24,13 +26,21 @@ struct RootView: View {
                     || launchArguments.contains("INKSHELF_UI_TEST_PICKER")
                     || launchArguments.contains("INKSHELF_UI_TEST_LONG_READER") {
                     hasSeenWelcome = true
+                    lastSeenWelcomeRelease = WelcomeRelease.current
                     launchDestination = nil
                     return
                 }
-                if !hasSeenWelcome {
+                if WelcomePresentationPolicy.shouldPresent(
+                    hasSeenLegacyWelcome: hasSeenWelcome,
+                    lastSeenRelease: lastSeenWelcomeRelease,
+                    showOnMajorUpdate: showWelcomeOnMajorUpdate
+                ) {
                     launchDestination = .welcome
                 } else if let book = library.interruptedReadingBook {
+                    lastSeenWelcomeRelease = WelcomeRelease.current
                     launchDestination = .reader(book)
+                } else {
+                    lastSeenWelcomeRelease = WelcomeRelease.current
                 }
             }
             .onChange(of: hasSeenWelcome) { _, hasSeen in
@@ -44,8 +54,7 @@ struct RootView: View {
                 switch destination {
                 case .welcome:
                     WelcomeView {
-                        hasSeenWelcome = true
-                        launchDestination = nil
+                        completeWelcome()
                     }
                 case .reader(let book):
                     NavigationStack {
@@ -97,6 +106,12 @@ struct RootView: View {
             get: { library.duplicateImportPrompt },
             set: { _ in }
         )
+    }
+
+    private func completeWelcome() {
+        hasSeenWelcome = true
+        lastSeenWelcomeRelease = WelcomeRelease.current
+        launchDestination = nil
     }
 
     @MainActor

@@ -17,6 +17,9 @@ struct SettingsView: View {
     @AppStorage("ebook.font") private var ebookFont = EBookFont.serif.rawValue
     @AppStorage("duplicates.warnOnImport") private var warnOnDuplicateImport = true
     @AppStorage("hasSeenWelcome") private var hasSeenWelcome = true
+    @AppStorage("welcome.lastSeenRelease") private var lastSeenWelcomeRelease = ""
+    @AppStorage("welcome.showOnMajorUpdate") private var showWelcomeOnMajorUpdate = true
+    @State private var showingWelcome = false
 
     var body: some View {
         NavigationStack {
@@ -213,16 +216,33 @@ struct SettingsView: View {
                     }
                 }
 
-                Section("关于") {
-                    LabeledContent("二次元小家", value: "2.4.4 · 书架焕新版")
-                    Button("重新查看欢迎页") {
-                        hasSeenWelcome = false
+                Section("欢迎与版本") {
+                    LabeledContent("二次元小家", value: "2.5.0 · 正式版")
+
+                    Button {
+                        showingWelcome = true
+                    } label: {
+                        Label("查看 2.5 正式版欢迎页", systemImage: "sparkles.rectangle.stack.fill")
                     }
+                    .accessibilityIdentifier("settings-welcome-tour")
+
+                    Toggle("大版本更新时展示欢迎页", isOn: $showWelcomeOnMajorUpdate)
+
+                    Text("只在 2.5 这类大版本首次启动时展示；普通修复更新不会反复打扰。也可以随时从这里重新查看。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                 }
             }
             .scrollContentBackground(.hidden)
             .background(AuroraBackground())
             .navigationTitle("小家设置")
+        }
+        .fullScreenCover(isPresented: $showingWelcome) {
+            WelcomeView {
+                hasSeenWelcome = true
+                lastSeenWelcomeRelease = WelcomeRelease.current
+                showingWelcome = false
+            }
         }
     }
 

@@ -176,13 +176,20 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
-      - name: Launch app and capture UI smoke screenshot
+      - name: Launch app and capture formal welcome and UI smoke screenshots
         run: |
           APP_PATH="build-simulator/Build/Products/Debug-iphonesimulator/InkShelf.app"
           test -d "$APP_PATH"
           xcrun simctl shutdown "$IPAD_DEVICE_ID" 2>/dev/null || true
           xcrun simctl boot "$DEVICE_ID" 2>/dev/null || true
           xcrun simctl bootstatus "$DEVICE_ID" -b
+          xcrun simctl terminate "$DEVICE_ID" com.inkshelf.reader 2>/dev/null || true
+          xcrun simctl uninstall "$DEVICE_ID" com.inkshelf.reader 2>/dev/null || true
+          xcrun simctl install "$DEVICE_ID" "$APP_PATH"
+          xcrun simctl launch "$DEVICE_ID" com.inkshelf.reader --args INKSHELF_UI_TEST_WELCOME | grep -q 'com.inkshelf.reader:'
+          sleep 4
+          xcrun simctl io "$DEVICE_ID" screenshot welcome-2-5.png
+          test -s welcome-2-5.png
           xcrun simctl terminate "$DEVICE_ID" com.inkshelf.reader 2>/dev/null || true
           xcrun simctl uninstall "$DEVICE_ID" com.inkshelf.reader 2>/dev/null || true
           xcrun simctl install "$DEVICE_ID" "$APP_PATH"
@@ -195,7 +202,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: InkShelf-ui-smoke
-          path: ui-smoke.png
+          path: |
+            welcome-2-5.png
+            ui-smoke.png
           if-no-files-found: error
           retention-days: 30
 
@@ -216,7 +225,7 @@ jobs:
         run: |
           APP_PATH="build/Build/Products/Release-iphoneos/InkShelf.app"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$APP_PATH/Info.plist")" = "二次元小家"
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Info.plist")" = "2.4.4"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Info.plist")" = "2.5.0"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_PATH/Info.plist")" = "28"
           /usr/libexec/PlistBuddy -c 'Print :CFBundleIcons' "$APP_PATH/Info.plist" >/dev/null
           find "$APP_PATH" -maxdepth 1 -type f \( -name 'AppIcon*.png' -o -name 'Assets.car' \) | grep -q .
@@ -302,7 +311,7 @@ jobs:
           SIGNED_VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Info.plist")
           SIGNED_BUILD=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_PATH/Info.plist")
           test "$SIGNED_BUNDLE_ID" = "com.inkshelf.reader"
-          test "$SIGNED_VERSION" = "2.4.4"
+          test "$SIGNED_VERSION" = "2.5.0"
           test "$SIGNED_BUILD" = "28"
           mkdir -p SignedPackage/Payload
           cp -R "$APP_PATH" SignedPackage/Payload/

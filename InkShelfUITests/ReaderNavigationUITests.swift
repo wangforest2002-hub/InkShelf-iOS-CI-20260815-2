@@ -201,6 +201,17 @@ final class ReaderNavigationUITests: XCTestCase {
         XCTAssertTrue(app.buttons["duplicate-scan-start"].waitForExistence(timeout: 3))
         app.navigationBars["重复内容检测"].buttons.element(boundBy: 0).tap()
 
+        let welcomeTour = app.buttons["settings-welcome-tour"]
+        for _ in 0..<6 where !welcomeTour.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(welcomeTour.waitForExistence(timeout: 3), "The 2.5 welcome tour is missing from Settings")
+        welcomeTour.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["welcome-2-5"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["welcome-continue"].exists)
+        app.buttons["welcome-skip"].tap()
+        XCTAssertTrue(app.navigationBars["小家设置"].waitForExistence(timeout: 3))
+
         let onlineUpdate = app.buttons["settings-online-update"]
         for _ in 0..<5 where !onlineUpdate.isHittable {
             app.swipeUp()
