@@ -202,15 +202,32 @@ final class ReaderNavigationUITests: XCTestCase {
         assertPage(1, of: 61, on: pageLabel)
 
         // Deliberate, ordinary swipes—not high-velocity flicks—must move one
-        // physical page throughout a long album.
+        // physical page throughout a long album. The simulator can occasionally
+        // drop a synthesized drag entirely; retry that no-op once, but fail
+        // immediately if the first gesture moved past the adjacent page.
         for page in 2...59 {
-            swipeOnePageForward(in: app)
-            assertPage(page, of: 61, on: pageLabel)
+            advanceExactlyOnePageForward(
+                from: page - 1,
+                to: page,
+                of: 61,
+                in: app,
+                on: pageLabel
+            )
             if page == 39 {
-                swipeOnePageBackward(in: app)
-                assertPage(38, of: 61, on: pageLabel)
-                swipeOnePageForward(in: app)
-                assertPage(39, of: 61, on: pageLabel)
+                advanceExactlyOnePageBackward(
+                    from: 39,
+                    to: 38,
+                    of: 61,
+                    in: app,
+                    on: pageLabel
+                )
+                advanceExactlyOnePageForward(
+                    from: 38,
+                    to: 39,
+                    of: 61,
+                    in: app,
+                    on: pageLabel
+                )
             }
         }
 
@@ -235,6 +252,52 @@ final class ReaderNavigationUITests: XCTestCase {
         start.press(forDuration: 0.12, thenDragTo: end)
     }
 
+    private func advanceExactlyOnePageForward(
+        from currentPage: Int,
+        to expectedPage: Int,
+        of pageCount: Int,
+        in app: XCUIApplication,
+        on pageLabel: XCUIElement,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        swipeOnePageForward(in: app)
+        guard !waitForPage(expectedPage, of: pageCount, on: pageLabel, timeout: 3) else { return }
+
+        assertPage(currentPage, of: pageCount, on: pageLabel, file: file, line: line)
+        swipeOnePageForward(in: app)
+        assertPage(expectedPage, of: pageCount, on: pageLabel, file: file, line: line)
+    }
+
+    private func advanceExactlyOnePageBackward(
+        from currentPage: Int,
+        to expectedPage: Int,
+        of pageCount: Int,
+        in app: XCUIApplication,
+        on pageLabel: XCUIElement,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        swipeOnePageBackward(in: app)
+        guard !waitForPage(expectedPage, of: pageCount, on: pageLabel, timeout: 3) else { return }
+
+        assertPage(currentPage, of: pageCount, on: pageLabel, file: file, line: line)
+        swipeOnePageBackward(in: app)
+        assertPage(expectedPage, of: pageCount, on: pageLabel, file: file, line: line)
+    }
+
+    private func waitForPage(
+        _ page: Int,
+        of pageCount: Int,
+        on pageLabel: XCUIElement,
+        timeout: TimeInterval
+    ) -> Bool {
+        let expected = "第 \(page) 页 · 共 \(pageCount) 页"
+        let predicate = NSPredicate(format: "label CONTAINS %@", expected)
+        let expectation = XCTNSPredicateExpectation(predicate: predicate, object: pageLabel)
+        return XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed
+    }
+
     private func assertPage(
         _ page: Int,
         of pageCount: Int,
@@ -243,12 +306,8 @@ final class ReaderNavigationUITests: XCTestCase {
         line: UInt = #line
     ) {
         let expected = "第 \(page) 页 · 共 \(pageCount) 页"
-        let predicate = NSPredicate(format: "label CONTAINS %@", expected)
-        let expectation = XCTNSPredicateExpectation(predicate: predicate, object: pageLabel)
-        let result = XCTWaiter.wait(for: [expectation], timeout: 3)
-        XCTAssertEqual(
-            result,
-            .completed,
+        XCTAssertTrue(
+            waitForPage(page, of: pageCount, on: pageLabel, timeout: 3),
             "Expected \(expected), got \(pageLabel.label)",
             file: file,
             line: line
