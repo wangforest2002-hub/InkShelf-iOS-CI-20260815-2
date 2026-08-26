@@ -214,7 +214,7 @@ struct SettingsView: View {
                 }
 
                 Section("关于") {
-                    LabeledContent("二次元小家", value: "2.4.2 · 阅读体验回退版")
+                    LabeledContent("二次元小家", value: "2.4.3 · 稳定翻页版")
                     Button("重新查看欢迎页") {
                         hasSeenWelcome = false
                     }
