@@ -106,9 +106,9 @@ struct WelcomeView: View {
             Spacer()
 
             Button("稍后", action: onFinish)
+                .accessibilityIdentifier("welcome-skip")
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
-                .accessibilityIdentifier("welcome-skip")
         }
         .padding(.horizontal, 22)
         .padding(.top, 14)
@@ -141,8 +141,8 @@ struct WelcomeView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 4)
             }
-            .adaptiveProminentButton()
             .accessibilityIdentifier("welcome-continue")
+            .adaptiveProminentButton()
         }
         .padding(.horizontal, 26)
         .padding(.top, 12)
