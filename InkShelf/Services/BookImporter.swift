@@ -142,6 +142,9 @@ enum BookImporter {
 
             let coverName = CoverService.createPDFCover(document: document, in: folder)
             let coverPath = coverName.map { relativePath(id: id, component: $0) }
+            let coverAspectRatio = coverName.flatMap {
+                CoverService.aspectRatio(at: folder.appendingPathComponent($0))
+            }
             let pageCount = max(document.pageCount, 1)
             let book = Book(
                 id: id,
@@ -151,6 +154,7 @@ enum BookImporter {
                 contentRelativePath: relativePath(id: id, component: "source.pdf"),
                 sourceRelativePath: relativePath(id: id, component: "source.pdf"),
                 coverRelativePath: coverPath,
+                coverAspectRatio: coverAspectRatio,
                 previewRelativePaths: coverPath.map { [$0] },
                 pageCount: pageCount,
                 fileSize: fileSize(of: destination)
@@ -217,6 +221,9 @@ enum BookImporter {
 
             let previewNames = CoverService.createImagePreviews(sourceURLs: Array(pageURLs.prefix(1)), in: folder)
             let previewPaths = previewNames.map { relativePath(id: id, component: $0) }
+            let coverAspectRatio = previewNames.first.flatMap {
+                CoverService.aspectRatio(at: folder.appendingPathComponent($0))
+            }
             // The extracted pages are already the complete, original-quality
             // reading source. Keeping the archive beside them nearly doubles
             // local usage without improving image quality.
@@ -229,6 +236,7 @@ enum BookImporter {
                 contentRelativePath: relativePath(id: id, component: "pages"),
                 sourceRelativePath: nil,
                 coverRelativePath: previewPaths.first,
+                coverAspectRatio: coverAspectRatio,
                 previewRelativePaths: previewPaths,
                 pageCount: pageURLs.count,
                 fileSize: folderSize(of: folder)
@@ -290,6 +298,9 @@ enum BookImporter {
 
             let previewNames = CoverService.createImagePreviews(sourceURLs: Array(copiedURLs.prefix(1)), in: folder)
             let previewPaths = previewNames.map { relativePath(id: id, component: $0) }
+            let coverAspectRatio = previewNames.first.flatMap {
+                CoverService.aspectRatio(at: folder.appendingPathComponent($0))
+            }
             let book = Book(
                 id: id,
                 title: title,
@@ -297,6 +308,7 @@ enum BookImporter {
                 sourceFileName: sourceLabel ?? (sourceURLs.count == 1 ? sourceURLs[0].lastPathComponent : "\(sourceURLs.count) 张图片"),
                 contentRelativePath: relativePath(id: id, component: "pages"),
                 coverRelativePath: previewPaths.first,
+                coverAspectRatio: coverAspectRatio,
                 previewRelativePaths: previewPaths,
                 pageCount: copiedURLs.count,
                 fileSize: totalSize

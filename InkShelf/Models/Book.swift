@@ -48,6 +48,9 @@ struct Book: Identifiable, Codable, Hashable, Sendable {
     var contentRelativePath: String
     var sourceRelativePath: String?
     var coverRelativePath: String?
+    /// Width divided by height for the generated shelf cover. Keeping this in
+    /// metadata lets the shelf choose its layout before decoding any pixels.
+    var coverAspectRatio: Double?
     var previewRelativePaths: [String]?
     var pageCount: Int
     var currentPage: Int
@@ -78,6 +81,7 @@ struct Book: Identifiable, Codable, Hashable, Sendable {
         contentRelativePath: String,
         sourceRelativePath: String? = nil,
         coverRelativePath: String? = nil,
+        coverAspectRatio: Double? = nil,
         previewRelativePaths: [String]? = nil,
         pageCount: Int,
         currentPage: Int = 0,
@@ -107,6 +111,9 @@ struct Book: Identifiable, Codable, Hashable, Sendable {
         self.contentRelativePath = contentRelativePath
         self.sourceRelativePath = sourceRelativePath
         self.coverRelativePath = coverRelativePath
+        self.coverAspectRatio = coverAspectRatio.flatMap { ratio in
+            ratio.isFinite && ratio >= 0.2 && ratio <= 5 ? ratio : nil
+        }
         self.previewRelativePaths = previewRelativePaths
         self.pageCount = pageCount
         self.currentPage = min(max(0, currentPage), max(0, pageCount - 1))

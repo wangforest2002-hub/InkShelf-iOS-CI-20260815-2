@@ -16,6 +16,46 @@ final class BookModelTests: XCTestCase {
         XCTAssertEqual(book.currentPage, 2)
     }
 
+    func testCoverAspectRatioIsStoredAndInvalidValuesAreDiscarded() throws {
+        let landscape = Book(
+            title: "横版",
+            kind: .imageCollection,
+            sourceFileName: "landscape",
+            contentRelativePath: "landscape/pages",
+            coverAspectRatio: 1.6,
+            pageCount: 1,
+            fileSize: 1
+        )
+        let invalid = Book(
+            title: "异常",
+            kind: .imageCollection,
+            sourceFileName: "invalid",
+            contentRelativePath: "invalid/pages",
+            coverAspectRatio: .infinity,
+            pageCount: 1,
+            fileSize: 1
+        )
+        XCTAssertEqual(try XCTUnwrap(landscape.coverAspectRatio), 1.6, accuracy: 0.0001)
+        XCTAssertNil(invalid.coverAspectRatio)
+    }
+
+    func testCoverServiceReadsLandscapeDimensionsWithoutFullDecode() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("inkshelf-cover-ratio-\(UUID().uuidString).jpg")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        let image = UIGraphicsImageRenderer(
+            size: CGSize(width: 1_600, height: 1_000),
+            format: format
+        ).image { context in
+            UIColor.systemPink.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 1_600, height: 1_000))
+        }
+        try XCTUnwrap(image.jpegData(compressionQuality: 0.9)).write(to: url, options: .atomic)
+        XCTAssertEqual(try XCTUnwrap(CoverService.aspectRatio(at: url)), 1.6, accuracy: 0.001)
+    }
+
     func testNaturalSortKeepsComicPageOrder() {
         let urls = ["10.jpg", "2.jpg", "1.jpg"].map { URL(fileURLWithPath: "/tmp/\($0)") }
         XCTAssertEqual(NaturalSort.urls(urls).map(\.lastPathComponent), ["1.jpg", "2.jpg", "10.jpg"])

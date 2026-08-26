@@ -98,9 +98,18 @@ struct ShelfGroupStrip: View {
             .inkGlass(cornerRadius: 21, interactive: true)
             .animation(reduceMotion ? nil : AppMotion.value, value: selected)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressableCardStyle())
+        .accessibilityIdentifier(accessibilityIdentifier(for: filter))
         .accessibilityLabel("\(title)，\(count) 本")
         .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+    private func accessibilityIdentifier(for filter: ShelfFilter) -> String {
+        switch filter {
+        case .all: "shelf-filter-all"
+        case .ungrouped: "shelf-filter-ungrouped"
+        case .group(let id): "shelf-filter-group-\(id.uuidString.lowercased())"
+        }
     }
 
     private func tint(for index: Int) -> Color {

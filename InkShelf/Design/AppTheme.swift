@@ -38,6 +38,7 @@ enum AppTheme {
 enum AppMotion {
     static let press = Animation.snappy(duration: 0.15)
     static let value = Animation.smooth(duration: 0.18)
+    static let shelfReveal = Animation.easeOut(duration: 0.16)
     static let chrome = Animation.smooth(duration: 0.22)
     static let panel = Animation.spring(response: 0.34, dampingFraction: 0.92)
     static let reveal = Animation.spring(response: 0.42, dampingFraction: 0.90)

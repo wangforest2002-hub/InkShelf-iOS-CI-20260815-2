@@ -36,6 +36,26 @@ final class ReaderNavigationUITests: XCTestCase {
             app.frame.maxX + 1,
             "The shelf grid extends outside the visible viewport"
         )
+        XCTAssertGreaterThan(
+            book.frame.width,
+            app.frame.width * 0.82,
+            "A landscape cover should span both compact shelf columns"
+        )
+
+        let landscapeGroup = app.buttons["shelf-filter-group-a11ce000-0000-4000-8000-000000000101"]
+        XCTAssertTrue(landscapeGroup.waitForExistence(timeout: 3), "The seeded landscape shelf group is missing")
+        landscapeGroup.tap()
+        let groupedBook = app.descendants(matching: .any)["book-a11ce000-0000-4000-8000-000000000001"]
+        XCTAssertTrue(groupedBook.waitForExistence(timeout: 3), "The category switch lost its matching book")
+        XCTAssertEqual(
+            app.descendants(matching: .any)
+                .matching(identifier: "book-a11ce000-0000-4000-8000-000000000001").count,
+            1,
+            "A category switch left a duplicate accessibility card behind"
+        )
+        app.buttons["shelf-filter-all"].tap()
+        XCTAssertTrue(book.waitForExistence(timeout: 3), "Returning to the full shelf lost the landscape book")
+
         if book.isHittable {
             book.tap()
         } else {

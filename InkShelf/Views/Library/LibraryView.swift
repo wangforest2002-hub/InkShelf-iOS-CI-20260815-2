@@ -28,6 +28,8 @@ struct LibraryView: View {
     @State private var didAutoPresentPickerForUITest = false
     @State private var showAchievements = false
     @State private var shelfFilter: ShelfFilter = .all
+    @State private var transientCoverAspectRatios: [UUID: CGFloat] = [:]
+    @State private var shelfContentVisible = false
     @State private var groupEditor: ShelfGroupEditorTarget?
     @State private var pendingGroupDeletion: ShelfGroup?
     @Namespace private var coverTransition
@@ -66,22 +68,36 @@ struct LibraryView: View {
         scope == .all && query.isEmpty && shelfFilter != .all && !library.books.isEmpty
     }
 
-    private var gridColumns: [GridItem] {
-        let sizes: (minimum: CGFloat, maximum: CGFloat)
-        switch (horizontalSizeClass, gridDensity) {
-        case (.compact, .comfortable):
-            sizes = (142, 230)
-        case (.compact, .compact):
-            sizes = (112, 176)
-        case (_, .comfortable):
-            sizes = (176, 230)
-        case (_, .compact):
-            sizes = (138, 190)
-        }
-        return [GridItem(
-            .adaptive(minimum: sizes.minimum, maximum: sizes.maximum),
-            spacing: gridDensity == .compact ? 14 : 18
-        )]
+    private var shelfColumnCount: Int {
+        if horizontalSizeClass == .compact { return 2 }
+        return gridDensity == .compact ? 5 : 4
+    }
+
+    private var shelfGridSpacing: CGFloat {
+        gridDensity == .compact ? 14 : 18
+    }
+
+    private var shelfRows: [ShelfBookRow] {
+        ShelfBookRow.make(
+            books: books,
+            columns: shelfColumnCount,
+            aspectRatio: coverAspectRatio(for:)
+        )
+    }
+
+    private var shelfFilterSelection: Binding<ShelfFilter> {
+        Binding(
+            get: { shelfFilter },
+            set: selectShelfFilter
+        )
+    }
+
+    private var shelfPresentationID: ShelfPresentationID {
+        ShelfPresentationID(
+            filter: shelfFilter,
+            queryIsEmpty: query.isEmpty,
+            bookIDs: books.map(\.id)
+        )
     }
 
     var body: some View {
@@ -102,7 +118,7 @@ struct LibraryView: View {
                         VStack(alignment: .leading, spacing: 22) {
                             if query.isEmpty, scope == .all {
                                 ShelfGroupStrip(
-                                    selection: $shelfFilter,
+                                    selection: shelfFilterSelection,
                                     groups: library.shelfGroups,
                                     totalCount: library.books.count,
                                     ungroupedCount: library.books.filter { $0.shelfGroupID == nil }.count,
@@ -111,105 +127,98 @@ struct LibraryView: View {
                                     rename: { groupEditor = .rename($0) },
                                     delete: { pendingGroupDeletion = $0 }
                                 )
+                            }
 
-                                if shelfFilter == .all {
-                                    HomeWelcomeHeader(
-                                        bookCount: library.books.count,
-                                        favoriteCount: library.books.filter(\.isFavorite).count
-                                    )
-
-                                    if colorScheme == .dark {
-                                        NightModeShelfCard(
-                                            allBookCount: library.books.count,
-                                            adultBookCount: library.afterDarkBooks.count,
-                                            favoritePageCount: library.favoritePageItems.count,
-                                            featuredBook: library.afterDarkBooks.first
-                                                ?? library.continueReadingBook
-                                                ?? library.books.first,
-                                            openFeatured: open
+                            VStack(alignment: .leading, spacing: 22) {
+                                if query.isEmpty, scope == .all {
+                                    if shelfFilter == .all {
+                                        HomeWelcomeHeader(
+                                            bookCount: library.books.count,
+                                            favoriteCount: library.books.filter(\.isFavorite).count
                                         )
-                                    }
 
-                                    if let continueBook = library.continueReadingBook {
-                                        Button { open(continueBook) } label: {
-                                            ContinueReadingCard(
-                                                book: continueBook,
-                                                coverURL: library.coverURL(for: continueBook)
+                                        if colorScheme == .dark {
+                                            NightModeShelfCard(
+                                                allBookCount: library.books.count,
+                                                adultBookCount: library.afterDarkBooks.count,
+                                                favoritePageCount: library.favoritePageItems.count,
+                                                featuredBook: library.afterDarkBooks.first
+                                                    ?? library.continueReadingBook
+                                                    ?? library.books.first,
+                                                openFeatured: open
                                             )
                                         }
-                                        .buttonStyle(PressableCardStyle())
-                                    }
 
-                                    if !achievements.footprint.openedBookIDs.isEmpty {
-                                        Button { showAchievements = true } label: {
-                                            FootprintHomeCard(
-                                                unlocked: achievements.unlockedCount,
-                                                total: achievements.achievements.count,
-                                                pages: achievements.footprint.pagesTurned,
-                                                minutes: achievements.readingMinutes,
-                                                level: achievements.homeLevel,
-                                                levelTitle: achievements.homeLevelTitle,
-                                                levelProgress: achievements.homeLevelProgress,
-                                                streak: achievements.currentStreak,
-                                                dailyCompleted: achievements.dailyQuests().filter(\.isCompleted).count
-                                            )
+                                        if let continueBook = library.continueReadingBook {
+                                            Button { open(continueBook) } label: {
+                                                ContinueReadingCard(
+                                                    book: continueBook,
+                                                    coverURL: library.coverURL(for: continueBook)
+                                                )
+                                            }
+                                            .buttonStyle(PressableCardStyle())
                                         }
-                                        .buttonStyle(PressableCardStyle())
+
+                                        if !achievements.footprint.openedBookIDs.isEmpty {
+                                            Button { showAchievements = true } label: {
+                                                FootprintHomeCard(
+                                                    unlocked: achievements.unlockedCount,
+                                                    total: achievements.achievements.count,
+                                                    pages: achievements.footprint.pagesTurned,
+                                                    minutes: achievements.readingMinutes,
+                                                    level: achievements.homeLevel,
+                                                    levelTitle: achievements.homeLevelTitle,
+                                                    levelProgress: achievements.homeLevelProgress,
+                                                    streak: achievements.currentStreak,
+                                                    dailyCompleted: achievements.dailyQuests().filter(\.isCompleted).count
+                                                )
+                                            }
+                                            .buttonStyle(PressableCardStyle())
+                                        }
                                     }
-                                }
-                            } else if query.isEmpty, scope == .favorites {
+                                } else if query.isEmpty, scope == .favorites {
                                     LibrarySectionHeading(
                                         title: "珍藏角落",
                                         subtitle: "整本与单页，都替你安静收在这里",
                                         symbol: "star.fill"
                                     )
-                            }
-
-                            if scope == .favorites && !library.favoritePageItems.isEmpty && query.isEmpty {
-                                FavoritePageGrid(items: library.favoritePageItems) { item in
-                                    var target = item.book
-                                    target.currentPage = item.page
-                                    open(target)
                                 }
-                            }
 
-                            if !books.isEmpty {
-                                LibrarySectionHeading(
-                                    title: sectionTitle,
-                                    subtitle: sectionSubtitle,
-                                    symbol: sectionSymbol
-                                )
-
-                                LazyVGrid(columns: gridColumns, spacing: gridDensity == .compact ? 18 : 24) {
-                                    ForEach(books) { book in
-                                        Button { open(book) } label: {
-                                            BookCard(
-                                                book: book,
-                                                coverURL: library.coverURL(for: book),
-                                                previewURLs: library.previewURLs(for: book)
-                                            )
-                                                .matchedTransitionSource(id: book.id, in: coverTransition)
-                                        }
-                                        .buttonStyle(PressableCardStyle())
-                                        .scrollTransition(.interactive.threshold(.visible(0.14))) { content, phase in
-                                            content
-                                                .opacity(phase.isIdentity ? 1 : 0.88)
-                                                .offset(y: phase.isIdentity ? 0 : 5)
-                                        }
-                                        .contextMenu {
-                                            bookContextMenu(book)
-                                        } preview: {
-                                            BookPreview(
-                                                book: book,
-                                                coverURL: library.coverURL(for: book),
-                                                previewURLs: library.previewURLs(for: book)
-                                            )
-                                        }
+                                if scope == .favorites && !library.favoritePageItems.isEmpty && query.isEmpty {
+                                    FavoritePageGrid(items: library.favoritePageItems) { item in
+                                        var target = item.book
+                                        target.currentPage = item.page
+                                        open(target)
                                     }
                                 }
-                            } else if keepsShelfVisibleWhenEmpty {
-                                EmptyShelfGroupCard(createGroup: false)
+
+                                if !books.isEmpty {
+                                    LibrarySectionHeading(
+                                        title: sectionTitle,
+                                        subtitle: sectionSubtitle,
+                                        symbol: sectionSymbol
+                                    )
+
+                                    LazyVStack(spacing: gridDensity == .compact ? 18 : 24) {
+                                        ForEach(shelfRows) { row in
+                                            ShelfBookRowLayout(
+                                                columns: shelfColumnCount,
+                                                spacing: shelfGridSpacing
+                                            ) {
+                                                ForEach(row.items) { item in
+                                                    shelfBookButton(item.book)
+                                                        .shelfColumnSpan(item.span)
+                                                }
+                                            }
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                        }
+                                    }
+                                } else if keepsShelfVisibleWhenEmpty {
+                                    EmptyShelfGroupCard(createGroup: false)
+                                }
                             }
+                            .opacity(shelfContentOpacity)
+                            .offset(y: shelfContentVisible ? 0 : 3)
                         }
                         .padding(.horizontal, 18)
                         .padding(.top, 12)
@@ -221,6 +230,9 @@ struct LibraryView: View {
                         .containerRelativeFrame(.horizontal, alignment: .leading)
                     }
                     .scrollIndicators(.hidden)
+                    .task(id: shelfPresentationID) {
+                        await prepareShelfPresentation()
+                    }
                 }
 
                 if library.isImporting {
@@ -385,7 +397,7 @@ struct LibraryView: View {
             presenting: pendingGroupDeletion
         ) { group in
             Button("删除“\(group.title)”", role: .destructive) {
-                if shelfFilter == .group(group.id) { shelfFilter = .all }
+                if shelfFilter == .group(group.id) { selectShelfFilter(.all) }
                 library.deleteShelfGroup(group.id)
                 pendingGroupDeletion = nil
             }
@@ -398,7 +410,7 @@ struct LibraryView: View {
             case .create:
                 ShelfGroupEditorView(navigationTitle: "新建分组") { title in
                     if let group = library.createShelfGroup(title: title) {
-                        shelfFilter = .group(group.id)
+                        selectShelfFilter(.group(group.id))
                     }
                 }
             case .rename(let group):
@@ -446,6 +458,103 @@ struct LibraryView: View {
                         }
                     }
             }
+        }
+    }
+
+    private var shelfContentOpacity: Double {
+        guard scope == .all, query.isEmpty else { return 1 }
+        return shelfContentVisible ? 1 : 0.88
+    }
+
+    private func coverAspectRatio(for book: Book) -> CGFloat? {
+        let ratio = transientCoverAspectRatios[book.id]
+            ?? book.coverAspectRatio.map(CGFloat.init)
+        guard let ratio, ratio.isFinite, ratio >= 0.2, ratio <= 5 else { return nil }
+        return ratio
+    }
+
+    private func selectShelfFilter(_ next: ShelfFilter) {
+        guard next != shelfFilter else { return }
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            shelfContentVisible = reduceMotion
+            shelfFilter = next
+        }
+    }
+
+    @MainActor
+    private func prepareShelfPresentation() async {
+        guard scope == .all, query.isEmpty else {
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) { shelfContentVisible = true }
+            return
+        }
+
+        let requests = books.prefix(240).compactMap { book -> CoverRatioRequest? in
+            guard coverAspectRatio(for: book) == nil,
+                  let url = library.coverURL(for: book)
+            else { return nil }
+            return CoverRatioRequest(id: book.id, url: url)
+        }
+        let detected = await Task.detached(priority: .userInitiated) {
+            var result: [UUID: CGFloat] = [:]
+            for request in requests where !Task.isCancelled {
+                if let ratio = CoverService.aspectRatio(at: request.url) {
+                    result[request.id] = CGFloat(ratio)
+                }
+            }
+            return result
+        }.value
+        guard !Task.isCancelled else { return }
+
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            transientCoverAspectRatios.merge(detected) { _, new in new }
+            shelfContentVisible = reduceMotion
+        }
+        guard !reduceMotion else { return }
+
+        await Task.yield()
+        guard !Task.isCancelled else { return }
+        withAnimation(AppMotion.shelfReveal) {
+            shelfContentVisible = true
+        }
+    }
+
+    private func rememberCoverAspectRatio(_ ratio: CGFloat, for bookID: UUID) {
+        guard ratio.isFinite, ratio >= 0.2, ratio <= 5,
+              abs((transientCoverAspectRatios[bookID] ?? 0) - ratio) > 0.001
+        else { return }
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            transientCoverAspectRatios[bookID] = ratio
+        }
+    }
+
+    private func shelfBookButton(_ book: Book) -> some View {
+        Button { open(book) } label: {
+            BookCard(
+                book: book,
+                coverURL: library.coverURL(for: book),
+                previewURLs: library.previewURLs(for: book),
+                knownCoverAspectRatio: coverAspectRatio(for: book),
+                onCoverAspectRatio: { rememberCoverAspectRatio($0, for: book.id) }
+            )
+            .matchedTransitionSource(id: book.id, in: coverTransition)
+        }
+        .buttonStyle(PressableCardStyle())
+        .contextMenu {
+            bookContextMenu(book)
+        } preview: {
+            BookPreview(
+                book: book,
+                coverURL: library.coverURL(for: book),
+                previewURLs: library.previewURLs(for: book)
+            )
         }
     }
 
@@ -682,6 +791,118 @@ struct LibraryView: View {
                 message: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
             )
         }
+    }
+}
+
+private struct ShelfPresentationID: Hashable {
+    let filter: ShelfFilter
+    let queryIsEmpty: Bool
+    let bookIDs: [UUID]
+}
+
+private struct CoverRatioRequest: Sendable {
+    let id: UUID
+    let url: URL
+}
+
+private struct ShelfBookRow: Identifiable {
+    let items: [ShelfBookItem]
+
+    var id: String {
+        items.map { $0.book.id.uuidString }.joined(separator: "|")
+    }
+
+    static func make(
+        books: [Book],
+        columns: Int,
+        aspectRatio: (Book) -> CGFloat?
+    ) -> [ShelfBookRow] {
+        let safeColumns = max(1, columns)
+        var rows: [ShelfBookRow] = []
+        var current: [ShelfBookItem] = []
+        var remaining = safeColumns
+
+        for book in books {
+            let isLandscape = ShelfCoverLayout.isLandscape(aspectRatio(book))
+            let span = isLandscape && safeColumns > 1 ? 2 : 1
+            if span > remaining, !current.isEmpty {
+                rows.append(ShelfBookRow(items: current))
+                current = []
+                remaining = safeColumns
+            }
+            current.append(ShelfBookItem(book: book, span: min(span, safeColumns)))
+            remaining -= min(span, safeColumns)
+        }
+        if !current.isEmpty {
+            rows.append(ShelfBookRow(items: current))
+        }
+        return rows
+    }
+}
+
+private struct ShelfBookItem: Identifiable {
+    let book: Book
+    let span: Int
+    var id: UUID { book.id }
+}
+
+private struct ShelfColumnSpanKey: LayoutValueKey {
+    static let defaultValue = 1
+}
+
+private extension View {
+    func shelfColumnSpan(_ span: Int) -> some View {
+        layoutValue(key: ShelfColumnSpanKey.self, value: max(1, span))
+    }
+}
+
+/// Each row is still created lazily by the surrounding LazyVStack. Landscape
+/// covers consume two columns, while portrait covers keep the familiar dense
+/// shelf. This avoids the eager cost of SwiftUI's non-lazy Grid.
+private struct ShelfBookRowLayout: Layout {
+    let columns: Int
+    let spacing: CGFloat
+
+    func sizeThatFits(
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout ()
+    ) -> CGSize {
+        let width = max(0, proposal.width ?? 320)
+        let columnWidth = self.columnWidth(for: width)
+        let height = subviews.reduce(CGFloat.zero) { result, subview in
+            let span = min(max(1, subview[ShelfColumnSpanKey.self]), max(1, columns))
+            let itemWidth = columnWidth * CGFloat(span) + spacing * CGFloat(span - 1)
+            let size = subview.sizeThatFits(ProposedViewSize(width: itemWidth, height: nil))
+            return max(result, size.height)
+        }
+        return CGSize(width: width, height: height)
+    }
+
+    func placeSubviews(
+        in bounds: CGRect,
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout ()
+    ) {
+        let columnWidth = self.columnWidth(for: bounds.width)
+        var x = bounds.minX
+        for subview in subviews {
+            let span = min(max(1, subview[ShelfColumnSpanKey.self]), max(1, columns))
+            let itemWidth = columnWidth * CGFloat(span) + spacing * CGFloat(span - 1)
+            subview.place(
+                at: CGPoint(x: x, y: bounds.minY),
+                anchor: .topLeading,
+                proposal: ProposedViewSize(width: itemWidth, height: nil)
+            )
+            x += itemWidth + spacing
+        }
+    }
+
+    private func columnWidth(for availableWidth: CGFloat) -> CGFloat {
+        let safeColumns = max(1, columns)
+        let gaps = spacing * CGFloat(safeColumns - 1)
+        return max(0, (availableWidth - gaps) / CGFloat(safeColumns))
     }
 }
 

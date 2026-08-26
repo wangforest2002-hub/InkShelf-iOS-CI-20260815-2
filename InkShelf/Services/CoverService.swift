@@ -34,6 +34,27 @@ enum CoverService {
         return names
     }
 
+    /// Reads only the image header. This is cheap enough for import metadata
+    /// and avoids decoding a full cover merely to decide its shelf shape.
+    static func aspectRatio(at url: URL) -> Double? {
+        guard let source = CGImageSourceCreateWithURL(
+            url as CFURL,
+            [kCGImageSourceShouldCache: false] as CFDictionary
+        ), let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+           let width = properties[kCGImagePropertyPixelWidth] as? NSNumber,
+           let height = properties[kCGImagePropertyPixelHeight] as? NSNumber,
+           width.doubleValue > 0,
+           height.doubleValue > 0
+        else { return nil }
+
+        let orientation = (properties[kCGImagePropertyOrientation] as? NSNumber)?.intValue ?? 1
+        let rotated = (5...8).contains(orientation)
+        let displayWidth = rotated ? height.doubleValue : width.doubleValue
+        let displayHeight = rotated ? width.doubleValue : height.doubleValue
+        let ratio = displayWidth / displayHeight
+        return ratio.isFinite && ratio >= 0.2 && ratio <= 5 ? ratio : nil
+    }
+
     private static func downsampledImage(from sourceURL: URL, maxPixelSize: Int) -> UIImage? {
         guard let source = CGImageSourceCreateWithURL(sourceURL as CFURL, nil) else { return nil }
         let options: [CFString: Any] = [

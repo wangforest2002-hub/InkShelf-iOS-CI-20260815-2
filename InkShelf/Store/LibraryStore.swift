@@ -1129,15 +1129,25 @@ final class LibraryStore {
 #if DEBUG
     private func installReaderNavigationSmokeBook() {
         let id = UUID(uuidString: "A11CE000-0000-4000-8000-000000000001")!
-        guard !books.contains(where: { $0.id == id }) else { return }
+        let groupID = UUID(uuidString: "A11CE000-0000-4000-8000-000000000101")!
+        if !shelfGroups.contains(where: { $0.id == groupID }) {
+            shelfGroups.append(ShelfGroup(id: groupID, title: "横版画集", styleIndex: 1))
+            saveShelfGroups()
+        }
+        if let index = books.firstIndex(where: { $0.id == id }) {
+            books[index].shelfGroupID = groupID
+            books[index].coverAspectRatio = 1.6
+            saveImmediately()
+            return
+        }
         let folder = libraryURL.appendingPathComponent(id.uuidString.lowercased(), isDirectory: true)
         let pages = folder.appendingPathComponent("pages", isDirectory: true)
-        let png = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLxVQAAAABJRU5ErkJggg==")!
+        let pageData = makeShelfLandscapeDiagnosticPage()
         do {
             try fileManager.createDirectory(at: pages, withIntermediateDirectories: true)
             for page in 1...3 {
-                try png.write(
-                    to: pages.appendingPathComponent(String(format: "%06d.png", page)),
+                try pageData.write(
+                    to: pages.appendingPathComponent(String(format: "%06d.jpg", page)),
                     options: .atomic
                 )
             }
@@ -1147,9 +1157,11 @@ final class LibraryStore {
                 kind: .imageCollection,
                 sourceFileName: "UI 冒烟读物",
                 contentRelativePath: "\(id.uuidString.lowercased())/pages",
-                coverRelativePath: "\(id.uuidString.lowercased())/pages/000001.png",
+                coverRelativePath: "\(id.uuidString.lowercased())/pages/000001.jpg",
+                coverAspectRatio: 1.6,
                 pageCount: 3,
-                fileSize: Int64(png.count * 3),
+                fileSize: Int64(pageData.count * 3),
+                shelfGroupID: groupID,
                 isAfterDark: true,
                 mood: .teasing,
                 tags: ["御姐", "暧昧"],
@@ -1161,6 +1173,64 @@ final class LibraryStore {
         } catch {
             alert = LibraryAlert(title: "UI 冒烟数据失败", message: error.localizedDescription)
         }
+    }
+
+    private func makeShelfLandscapeDiagnosticPage() -> Data {
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        format.opaque = true
+        let size = CGSize(width: 1_600, height: 1_000)
+        let image = UIGraphicsImageRenderer(size: size, format: format).image { context in
+            let colors = [
+                UIColor(red: 0.48, green: 0.82, blue: 0.98, alpha: 1).cgColor,
+                UIColor(red: 0.78, green: 0.66, blue: 0.98, alpha: 1).cgColor,
+                UIColor(red: 1.00, green: 0.68, blue: 0.72, alpha: 1).cgColor
+            ] as CFArray
+            let gradient = CGGradient(
+                colorsSpace: CGColorSpaceCreateDeviceRGB(),
+                colors: colors,
+                locations: [0, 0.52, 1]
+            )!
+            context.cgContext.drawLinearGradient(
+                gradient,
+                start: .zero,
+                end: CGPoint(x: size.width, y: size.height),
+                options: []
+            )
+
+            UIColor.white.withAlphaComponent(0.22).setFill()
+            for index in 0..<12 {
+                let diameter = CGFloat(34 + (index % 4) * 18)
+                let x = CGFloat((index * 137) % 1_520)
+                let y = CGFloat(80 + ((index * 83) % 650))
+                context.cgContext.fillEllipse(in: CGRect(x: x, y: y, width: diameter, height: diameter * 0.68))
+            }
+
+            let panel = UIBezierPath(roundedRect: CGRect(x: 120, y: 160, width: 1_360, height: 680), cornerRadius: 72)
+            UIColor.white.withAlphaComponent(0.20).setFill()
+            panel.fill()
+            UIColor.white.withAlphaComponent(0.72).setStroke()
+            panel.lineWidth = 8
+            panel.stroke()
+
+            let title = "横版画集 · 温柔收藏" as NSString
+            title.draw(
+                at: CGPoint(x: 210, y: 382),
+                withAttributes: [
+                    .font: UIFont.systemFont(ofSize: 92, weight: .bold),
+                    .foregroundColor: UIColor.white
+                ]
+            )
+            let subtitle = "Landscape Art Collection" as NSString
+            subtitle.draw(
+                at: CGPoint(x: 215, y: 520),
+                withAttributes: [
+                    .font: UIFont.systemFont(ofSize: 44, weight: .medium),
+                    .foregroundColor: UIColor.white.withAlphaComponent(0.82)
+                ]
+            )
+        }
+        return image.jpegData(compressionQuality: 0.92)!
     }
 
     /// A long, explicitly single-page fixture catches position-dependent paging

@@ -5,13 +5,53 @@ struct BookCard: View {
     let book: Book
     let coverURL: URL?
     let previewURLs: [URL]
+    let knownCoverAspectRatio: CGFloat?
+    let onCoverAspectRatio: ((CGFloat) -> Void)?
     @Environment(\.colorScheme) private var colorScheme
+    @State private var detectedCoverAspectRatio: CGFloat?
+
+    init(
+        book: Book,
+        coverURL: URL?,
+        previewURLs: [URL],
+        knownCoverAspectRatio: CGFloat? = nil,
+        onCoverAspectRatio: ((CGFloat) -> Void)? = nil
+    ) {
+        self.book = book
+        self.coverURL = coverURL
+        self.previewURLs = previewURLs
+        self.knownCoverAspectRatio = knownCoverAspectRatio
+        self.onCoverAspectRatio = onCoverAspectRatio
+        _detectedCoverAspectRatio = State(initialValue: nil)
+    }
+
+    private var sourceAspectRatio: CGFloat? {
+        let ratio = knownCoverAspectRatio
+            ?? detectedCoverAspectRatio
+            ?? book.coverAspectRatio.map(CGFloat.init)
+        guard let ratio, ratio.isFinite, ratio >= 0.2, ratio <= 5 else { return nil }
+        return ratio
+    }
+
+    private var isLandscapeCover: Bool {
+        (sourceAspectRatio ?? 0) >= ShelfCoverLayout.landscapeThreshold
+    }
+
+    private var displayedCoverAspectRatio: CGFloat {
+        guard isLandscapeCover, let sourceAspectRatio else { return 0.70 }
+        return min(max(sourceAspectRatio, 1.32), 1.82)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             ZStack(alignment: .topTrailing) {
-                CoverArtwork(book: book, coverURL: coverURL, previewURLs: previewURLs)
-                    .aspectRatio(0.70, contentMode: .fit)
+                CoverArtwork(
+                    book: book,
+                    coverURL: coverURL,
+                    previewURLs: previewURLs,
+                    onAspectRatio: rememberCoverAspectRatio
+                )
+                    .aspectRatio(displayedCoverAspectRatio, contentMode: .fit)
                     .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                     .shadow(color: AppTheme.wood.opacity(0.20), radius: 10, y: 7)
                     .overlay(alignment: .bottom) {
@@ -118,7 +158,18 @@ struct BookCard: View {
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("book-\(book.id.uuidString.lowercased())")
         .accessibilityLabel("\(book.title)，\(book.kind.label)，\(book.progressLabel)")
+        .accessibilityValue(isLandscapeCover ? "横版封面" : "竖版封面")
         .hoverEffect(.lift)
+    }
+
+    private func rememberCoverAspectRatio(_ ratio: CGFloat) {
+        guard ratio.isFinite, ratio >= 0.2, ratio <= 5 else { return }
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            detectedCoverAspectRatio = ratio
+            onCoverAspectRatio?(ratio)
+        }
     }
 }
 
@@ -126,7 +177,20 @@ struct CoverArtwork: View {
     let book: Book
     let coverURL: URL?
     let previewURLs: [URL]
+    let onAspectRatio: ((CGFloat) -> Void)?
     @State private var decodedImage: UIImage?
+
+    init(
+        book: Book,
+        coverURL: URL?,
+        previewURLs: [URL],
+        onAspectRatio: ((CGFloat) -> Void)? = nil
+    ) {
+        self.book = book
+        self.coverURL = coverURL
+        self.previewURLs = previewURLs
+        self.onAspectRatio = onAspectRatio
+    }
 
     private var sourceURL: URL? { coverURL ?? previewURLs.first }
 
@@ -144,8 +208,24 @@ struct CoverArtwork: View {
             guard let sourceURL else { return }
             let image = await CoverImagePipeline.shared.image(for: sourceURL)
             guard !Task.isCancelled else { return }
-            decodedImage = image
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                decodedImage = image
+                if let image, image.size.height > 0 {
+                    onAspectRatio?(image.size.width / image.size.height)
+                }
+            }
         }
+    }
+}
+
+enum ShelfCoverLayout {
+    static let landscapeThreshold: CGFloat = 1.12
+
+    static func isLandscape(_ ratio: CGFloat?) -> Bool {
+        guard let ratio, ratio.isFinite else { return false }
+        return ratio >= landscapeThreshold
     }
 }
 

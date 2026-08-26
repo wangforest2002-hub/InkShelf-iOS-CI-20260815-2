@@ -63,6 +63,9 @@ enum EBookImporter {
                 CoverService.createImagePreviews(sourceURLs: [$0], in: folder)
             } ?? []
             let previewPaths = previewNames.map { "\(id.uuidString.lowercased())/\($0)" }
+            let coverAspectRatio = previewNames.first.flatMap {
+                CoverService.aspectRatio(at: folder.appendingPathComponent($0))
+            }
             let title = generated.package.title.trimmingCharacters(in: .whitespacesAndNewlines)
             // ebook.json and publication contain everything the reader needs.
             // The selected source remains in Files/iCloud, so the copied
@@ -76,6 +79,7 @@ enum EBookImporter {
                 contentRelativePath: "\(id.uuidString.lowercased())/ebook.json",
                 sourceRelativePath: nil,
                 coverRelativePath: previewPaths.first,
+                coverAspectRatio: coverAspectRatio,
                 previewRelativePaths: previewPaths,
                 pageCount: generated.package.chapters.count,
                 fileSize: folderSize(of: folder),
