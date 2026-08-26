@@ -1131,7 +1131,8 @@ final class BookModelTests: XCTestCase {
         }
         try XCTUnwrap(source.jpegData(compressionQuality: 0.9)).write(to: url)
 
-        let decoded = try XCTUnwrap(await CoverImagePipeline.shared.image(for: url, maxPixelSize: 512))
+        let loaded = await CoverImagePipeline.shared.image(for: url, maxPixelSize: 512)
+        let decoded = try XCTUnwrap(loaded)
         XCTAssertLessThanOrEqual(max(decoded.size.width, decoded.size.height), 512)
         XCTAssertEqual(decoded.size.width / decoded.size.height, 16.0 / 9.0, accuracy: 0.02)
     }
