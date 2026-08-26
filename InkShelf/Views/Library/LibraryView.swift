@@ -468,7 +468,7 @@ struct LibraryView: View {
 
     private func coverAspectRatio(for book: Book) -> CGFloat? {
         let ratio = transientCoverAspectRatios[book.id]
-            ?? book.coverAspectRatio.map(CGFloat.init)
+            ?? book.coverAspectRatio.map { CGFloat($0) }
         guard let ratio, ratio.isFinite, ratio >= 0.2, ratio <= 5 else { return nil }
         return ratio
     }
