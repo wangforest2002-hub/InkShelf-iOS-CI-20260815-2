@@ -700,7 +700,10 @@ struct ReaderView: View {
 
     private func toggleControls() {
         hideControlsTask?.cancel()
-        withAnimation(reduceMotion ? nil : AppMotion.panel) {
+        // Reader chrome should settle once with the finger tap. A spring here
+        // also animates system-bar handoff and can create a visible second
+        // bounce even though the page itself never moved.
+        withAnimation(reduceMotion ? nil : AppMotion.chrome) {
             controlsVisible.toggle()
         }
         if controlsVisible { scheduleControlsHide() }
