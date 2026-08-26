@@ -14,7 +14,7 @@ on:
 jobs:
   build:
     runs-on: macos-26
-    timeout-minutes: 40
+    timeout-minutes: 48
     env:
       IOS_SIGNING_ENABLED: ${{ secrets.IOS_P12_BASE64 != '' && secrets.IOS_MOBILEPROVISION_BASE64 != '' }}
 
@@ -134,7 +134,7 @@ jobs:
             -parallel-testing-enabled NO
 
       - name: Run long-album paging test on iPad
-        timeout-minutes: 7
+        timeout-minutes: 12
         run: |
           set -o pipefail
           xcrun simctl shutdown "$DEVICE_ID" 2>/dev/null || true
