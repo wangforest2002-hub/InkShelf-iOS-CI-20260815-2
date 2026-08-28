@@ -38,8 +38,7 @@ struct BookCard: View {
     }
 
     private var displayedCoverAspectRatio: CGFloat {
-        guard isLandscapeCover, let sourceAspectRatio else { return 0.70 }
-        return min(max(sourceAspectRatio, 1.32), 1.82)
+        isLandscapeCover ? 1.46 : 0.70
     }
 
     var body: some View {
@@ -49,6 +48,7 @@ struct BookCard: View {
                     book: book,
                     coverURL: coverURL,
                     previewURLs: previewURLs,
+                    contentMode: .fill,
                     onAspectRatio: rememberCoverAspectRatio
                 )
                     .aspectRatio(displayedCoverAspectRatio, contentMode: .fit)
@@ -178,6 +178,7 @@ struct CoverArtwork: View {
     let book: Book
     let coverURL: URL?
     let previewURLs: [URL]
+    let contentMode: ContentMode
     let onAspectRatio: ((CGFloat) -> Void)?
     @State private var decodedImage: UIImage?
 
@@ -185,11 +186,13 @@ struct CoverArtwork: View {
         book: Book,
         coverURL: URL?,
         previewURLs: [URL],
+        contentMode: ContentMode = .fit,
         onAspectRatio: ((CGFloat) -> Void)? = nil
     ) {
         self.book = book
         self.coverURL = coverURL
         self.previewURLs = previewURLs
+        self.contentMode = contentMode
         self.onAspectRatio = onAspectRatio
     }
 
@@ -198,7 +201,7 @@ struct CoverArtwork: View {
     var body: some View {
         Group {
             if let decodedImage {
-                AdaptiveCoverImage(image: Image(uiImage: decodedImage))
+                AdaptiveCoverImage(image: Image(uiImage: decodedImage), contentMode: contentMode)
             } else {
                 PlaceholderCover(book: book)
             }
@@ -230,12 +233,17 @@ enum ShelfCoverLayout {
     }
 }
 
-/// Keeps every cover's original composition inside the shelf's portrait card.
-/// Landscape and unusually narrow artwork is letterboxed over a soft extension
-/// of itself, so it never gets stretched or aggressively cropped.
+/// Displays artwork without stretching. Shelf cards use a gentle center crop
+/// for a consistent rhythm; larger previews keep the full composition visible.
 struct AdaptiveCoverImage: View {
     let image: Image
+    let contentMode: ContentMode
     @Environment(\.colorScheme) private var colorScheme
+
+    init(image: Image, contentMode: ContentMode = .fit) {
+        self.image = image
+        self.contentMode = contentMode
+    }
 
     var body: some View {
         GeometryReader { proxy in
@@ -250,7 +258,7 @@ struct AdaptiveCoverImage: View {
 
                 image
                     .resizable()
-                    .scaledToFit()
+                    .aspectRatio(contentMode: contentMode)
                     .frame(width: proxy.size.width, height: proxy.size.height)
                     .shadow(color: .black.opacity(0.10), radius: 4, y: 1)
             }
