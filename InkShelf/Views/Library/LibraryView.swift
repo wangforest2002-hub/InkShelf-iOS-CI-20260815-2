@@ -78,7 +78,7 @@ struct LibraryView: View {
 
     private var shelfColumnCount: Int {
         if horizontalSizeClass == .compact { return 2 }
-        return gridDensity == .compact ? 4 : 3
+        return gridDensity == .compact ? 5 : 4
     }
 
     private var shelfGridSpacing: CGFloat {
