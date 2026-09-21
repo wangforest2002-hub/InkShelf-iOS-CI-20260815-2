@@ -248,10 +248,14 @@ final class ReaderNavigationUITests: XCTestCase {
         XCTAssertTrue(pageLabel.waitForExistence(timeout: 3), "The long album page counter did not appear")
         assertPage(1, of: 61, on: pageLabel)
 
+        // Swiping beyond either edge must keep the physical page unchanged.
+        swipeOnePageBackward(in: app)
+        assertPage(1, of: 61, on: pageLabel)
+
         // UIPageViewController exposes only its adjacent controller. A native
         // XCTest swipe therefore has one possible completed destination and is
         // less prone to the delayed synthetic-drag delivery seen on iPad.
-        for page in 2...59 {
+        for page in 2...61 {
             advanceExactlyOnePageForward(
                 from: page - 1,
                 to: page,
@@ -276,6 +280,17 @@ final class ReaderNavigationUITests: XCTestCase {
                 )
             }
         }
+
+        swipeOnePageForward(in: app)
+        assertPage(61, of: 61, on: pageLabel)
+        advanceExactlyOnePageBackward(from: 61, to: 60, of: 61, in: app, on: pageLabel)
+        advanceExactlyOnePageForward(from: 60, to: 61, of: 61, in: app, on: pageLabel)
+        XCTAssertEqual(Double(progress.normalizedSliderPosition), 1, accuracy: 0.01)
+
+        let lastPageScreenshot = XCTAttachment(screenshot: app.screenshot())
+        lastPageScreenshot.name = "Long album final page"
+        lastPageScreenshot.lifetime = .keepAlways
+        add(lastPageScreenshot)
 
         // The progress control keeps its native numeric accessibility value,
         // so a midpoint request must settle at the middle physical page. XCU's

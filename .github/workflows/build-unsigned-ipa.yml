@@ -20,7 +20,7 @@ on:
 jobs:
   build:
     runs-on: macos-26
-    timeout-minutes: 48
+    timeout-minutes: 60
     env:
       IOS_SIGNING_ENABLED: ${{ secrets.IOS_P12_BASE64 != '' && secrets.IOS_MOBILEPROVISION_BASE64 != '' }}
 
@@ -146,12 +146,31 @@ jobs:
             -only-testing:InkShelfUITests/ReaderNavigationUITests/testSystemDocumentPickerImportsThenOpensImage \
             -parallel-testing-enabled NO
 
+      - name: Run iPad long-album page stability test
+        if: ${{ inputs.quick_release != true }}
+        timeout-minutes: 12
+        run: |
+          set -o pipefail
+          xcrun simctl shutdown "$DEVICE_ID" 2>/dev/null || true
+          xcrun simctl boot "$IPAD_DEVICE_ID" 2>/dev/null || true
+          xcrun simctl bootstatus "$IPAD_DEVICE_ID" -b
+          xcodebuild test-without-building \
+            -project InkShelf.xcodeproj \
+            -scheme InkShelf \
+            -configuration Debug \
+            -destination "platform=iOS Simulator,id=$IPAD_DEVICE_ID" \
+            -derivedDataPath build-simulator \
+            -resultBundlePath ui-tests-ipad-reader.xcresult \
+            -only-testing:InkShelfUITests/ReaderNavigationUITests/testLongSinglePageAlbumAdvancesExactlyOnceAtStartMiddleAndEnd \
+            -parallel-testing-enabled NO
+
       - name: Freeze UI test diagnostics
         if: ${{ always() && inputs.quick_release != true }}
         run: |
           for BUNDLE in \
             ui-tests.xcresult \
-            ui-tests-picker.xcresult; do
+            ui-tests-picker.xcresult \
+            ui-tests-ipad-reader.xcresult; do
             if [ -d "$BUNDLE" ]; then
               ditto -c -k --sequesterRsrc --keepParent "$BUNDLE" "$BUNDLE.zip"
             fi
@@ -166,6 +185,7 @@ jobs:
           path: |
             ui-tests.xcresult.zip
             ui-tests-picker.xcresult.zip
+            ui-tests-ipad-reader.xcresult.zip
           if-no-files-found: ignore
           compression-level: 0
           retention-days: 14
