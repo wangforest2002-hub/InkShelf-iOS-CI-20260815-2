@@ -4,6 +4,9 @@ struct SettingsView: View {
     @Environment(LibraryStore.self) private var library
     @Environment(AICompanionStore.self) private var companion
     @Environment(AppUpdateStore.self) private var updates
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage("appearance") private var appearance = AppAppearance.light.rawValue
     @AppStorage("reader.layout") private var layout = ReaderLayout.single.rawValue
     @AppStorage("reader.flow") private var flow = ReaderFlow.horizontal.rawValue
@@ -25,44 +28,25 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 Section {
-                    HStack(spacing: 16) {
-                        CozyWindowView()
-                            .frame(width: 84, height: 62)
-                        VStack(alignment: .leading, spacing: 5) {
-                            Label("把这里布置成喜欢的样子", systemImage: "house.fill")
-                                .font(.headline)
-                            Text("阅读习惯、收藏和陪读伙伴都安放在这里。")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .padding(.vertical, 6)
-                    .accessibilityElement(children: .combine)
+                    homeOverview
+                        .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
+                        .listRowBackground(Color.clear)
                 }
 
-                Section("模式与外观") {
+                Section {
                     Picker("显示模式", selection: $appearance) {
                         ForEach(AppAppearance.allCases) { item in
                             Text(item.title).tag(item.rawValue)
                         }
                     }
 
-                    LabeledContent("界面材质") {
-                        Text(materialLabel)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Label {
-                        Text("夜间模式只切换全局色彩与阅读氛围，不再建立另一套书架；全部书籍、搜索、分组和最近阅读都能照常使用，成年向档案也会保留。")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    } icon: {
-                        Image(systemName: "moon.stars.fill")
-                            .foregroundStyle(AppTheme.lilac)
-                    }
+                } header: {
+                    SettingsSectionHeading(title: "模式与外观", symbol: "paintpalette.fill", tint: AppTheme.lilac)
+                } footer: {
+                    Text("日间与夜间沿用同一个小家，书籍、分组、最近阅读和成年向档案始终相伴。")
                 }
 
-                Section("默认阅读方式") {
+                Section {
                     Picker("页面布局", selection: $layout) {
                         ForEach(ReaderLayout.allCases) { item in
                             Label(item.title, systemImage: item.systemImage).tag(item.rawValue)
@@ -95,9 +79,11 @@ struct SettingsView: View {
 
                     Toggle("双页时封面单独显示", isOn: $coverSingle)
                     Toggle("阅读时保持屏幕常亮", isOn: $keepAwake)
+                } header: {
+                    SettingsSectionHeading(title: "默认阅读方式", symbol: "book.pages.fill", tint: AppTheme.accent)
                 }
 
-                Section("电子书") {
+                Section {
                     Picker("阅读方式", selection: $ebookFlow) {
                         ForEach(EBookFlow.allCases) { item in
                             Label(item.title, systemImage: item.systemImage).tag(item.rawValue)
@@ -113,30 +99,36 @@ struct SettingsView: View {
                             Text(item.title).tag(item.rawValue)
                         }
                     }
+                } header: {
+                    SettingsSectionHeading(title: "电子书", symbol: "text.book.closed.fill", tint: AppTheme.wood)
                 }
 
-                Section("AI 陪读") {
+                Section {
                     NavigationLink {
                         AISettingsView()
                     } label: {
-                        LabeledContent("DeepSeek 陪读") {
+                        LabeledContent {
                             Text(companion.hasAPIKey ? "已配置" : "未配置")
                                 .foregroundStyle(.secondary)
+                        } label: {
+                            SettingsRowLabel(title: "DeepSeek 陪读", symbol: "bubble.left.and.text.bubble.right.fill", tint: AppTheme.lilac)
                         }
                     }
 
                     NavigationLink {
                         AIWritingStudioView(book: nil)
                     } label: {
-                        Label("AI 创作室", systemImage: "text.badge.star")
+                        SettingsRowLabel(title: "AI 创作室", symbol: "text.badge.star", tint: AppTheme.coral)
                     }
+                } header: {
+                    SettingsSectionHeading(title: "AI 陪读", symbol: "sparkles", tint: AppTheme.lilac)
                 }
 
-                Section("小家记录") {
+                Section {
                     NavigationLink {
                         AchievementsView()
                     } label: {
-                        Label("回家足迹与成就", systemImage: "medal.star.fill")
+                        SettingsRowLabel(title: "回家足迹与成就", symbol: "medal.star.fill", tint: AppTheme.honey)
                     }
                     .accessibilityIdentifier("settings-achievements")
 
@@ -147,21 +139,25 @@ struct SettingsView: View {
                             Text(AppFormatters.fileSize(library.storageUsage))
                                 .foregroundStyle(.secondary)
                         } label: {
-                            Label("本地存储管家", systemImage: "externaldrive.fill")
+                            SettingsRowLabel(title: "本地存储管家", symbol: "externaldrive.fill", tint: AppTheme.accent)
                         }
                     }
+                } header: {
+                    SettingsSectionHeading(title: "小家记录", symbol: "house.fill", tint: AppTheme.wood)
                 }
 
-                Section("图片工具") {
+                Section {
                     NavigationLink {
                         SharpImageSettingsView()
                     } label: {
-                        Label("Sharp 图片清晰化", systemImage: "wand.and.stars.inverse")
+                        SettingsRowLabel(title: "Sharp 图片清晰化", symbol: "wand.and.stars.inverse", tint: AppTheme.lilac)
                     }
                     .accessibilityIdentifier("settings-sharp")
+                } header: {
+                    SettingsSectionHeading(title: "图片工具", symbol: "photo.on.rectangle.angled", tint: AppTheme.coral)
                 }
 
-                Section("应用更新") {
+                Section {
                     NavigationLink {
                         UpdateCenterView()
                     } label: {
@@ -169,27 +165,24 @@ struct SettingsView: View {
                             Text(updates.statusText)
                                 .foregroundStyle(updates.availableRelease == nil ? Color.secondary : AppTheme.accent)
                         } label: {
-                            Label("在线更新", systemImage: "arrow.down.app.fill")
+                            SettingsRowLabel(title: "在线更新", symbol: "arrow.down.app.fill", tint: AppTheme.accent)
                         }
                     }
                     .accessibilityIdentifier("settings-online-update")
 
-                    Label {
-                        Text("覆盖安装只替换应用本体，不删除书架、画册缓存、收藏和阅读记录。")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    } icon: {
-                        Image(systemName: "checkmark.shield.fill")
-                            .foregroundStyle(AppTheme.mint)
-                    }
+                } header: {
+                    SettingsSectionHeading(title: "应用更新", symbol: "arrow.down.circle.fill", tint: AppTheme.accent)
+                } footer: {
+                    Text("覆盖安装保留书架、画册缓存、收藏和阅读记录。")
                 }
 
-                Section("存储与隐私") {
+                Section {
                     LabeledContent("源文件占用") {
                         Text(AppFormatters.fileSize(library.storageUsage))
                     }
                     LabeledContent("本地读物") {
                         Text("\(library.books.count) 本")
+                            .monospacedDigit()
                     }
 
                     Toggle("导入重复内容时提醒", isOn: $warnOnDuplicateImport)
@@ -201,41 +194,45 @@ struct SettingsView: View {
                             Text("扫描书架")
                                 .foregroundStyle(.secondary)
                         } label: {
-                            Label("重复内容检测", systemImage: "doc.on.doc.fill")
+                            SettingsRowLabel(title: "重复内容检测", symbol: "doc.on.doc.fill", tint: AppTheme.wood)
                         }
                     }
                     .accessibilityIdentifier("settings-duplicate-content")
 
-                    Label {
-                        Text("从“文件”App 导入时可以直接选择 iCloud Drive 中的读物，应用只保存自己的本地副本，不会修改 iCloud 原文件。启用 AI 后，仅将本机识别出的文字和粗略画面标签发送给 DeepSeek，不上传整页原图。")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    } icon: {
-                        Image(systemName: "hand.raised.fill")
-                            .foregroundStyle(AppTheme.accent)
-                    }
+                } header: {
+                    SettingsSectionHeading(title: "存储与隐私", symbol: "hand.raised.fill", tint: AppTheme.mint)
+                } footer: {
+                    Text("从“文件”App 导入时可以直接选择 iCloud Drive 中的读物，应用只保存自己的本地副本，不会修改 iCloud 原文件。启用 AI 后，仅将本机识别出的文字和粗略画面标签发送给 DeepSeek，不上传整页原图。")
                 }
 
-                Section("欢迎与版本") {
-                    LabeledContent("二次元小家", value: "2.5.2 · 正式版")
+                Section {
+                    LabeledContent("二次元小家", value: "2.5.3 · 正式版")
+
+                    LabeledContent("界面材质") {
+                        Text(materialLabel)
+                            .foregroundStyle(.secondary)
+                    }
 
                     Button {
                         showingWelcome = true
                     } label: {
-                        Label("查看 2.5 正式版欢迎页", systemImage: "sparkles.rectangle.stack.fill")
+                        SettingsRowLabel(title: "查看 2.5 正式版欢迎页", symbol: "sparkles.rectangle.stack.fill", tint: AppTheme.coral)
                     }
                     .accessibilityIdentifier("settings-welcome-tour")
 
                     Toggle("大版本更新时展示欢迎页", isOn: $showWelcomeOnMajorUpdate)
 
+                } header: {
+                    SettingsSectionHeading(title: "欢迎与版本", symbol: "heart.text.square.fill", tint: AppTheme.coral)
+                } footer: {
                     Text("只在 2.5 这类大版本首次启动时展示；普通修复更新不会反复打扰。也可以随时从这里重新查看。")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
                 }
             }
+            .listSectionSpacing(22)
             .scrollContentBackground(.hidden)
             .background(AuroraBackground())
             .navigationTitle("小家设置")
+            .sensoryFeedback(.selection, trigger: appearance)
         }
         .fullScreenCover(isPresented: $showingWelcome) {
             WelcomeView {
@@ -246,10 +243,121 @@ struct SettingsView: View {
         }
     }
 
+    private var homeOverview: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(alignment: .center, spacing: 14) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Label("我的阅读小家", systemImage: "house.fill")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(colorScheme == .dark ? AppTheme.peach : AppTheme.wood)
+                    Text("把这里布置成喜欢的样子")
+                        .font(.title3.weight(.bold))
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("阅读习惯、收藏和陪读伙伴，都有自己的位置。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                if !dynamicTypeSize.isAccessibilitySize {
+                    CozyWindowView()
+                        .frame(width: 66, height: 60)
+                }
+            }
+
+            LazyVGrid(
+                columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: dynamicTypeSize >= .xxxLarge ? 1 : 3),
+                alignment: .leading,
+                spacing: 8
+            ) {
+                overviewItem(
+                    title: "本地读物",
+                    value: "\(library.books.count) 本",
+                    symbol: "books.vertical.fill",
+                    tint: AppTheme.accent
+                )
+                overviewItem(
+                    title: "显示模式",
+                    value: (AppAppearance(rawValue: appearance) ?? .light).title,
+                    symbol: colorScheme == .dark ? "moon.stars.fill" : "sun.max.fill",
+                    tint: colorScheme == .dark ? AppTheme.lilac : AppTheme.wood
+                )
+                overviewItem(
+                    title: "AI 陪读",
+                    value: companion.hasAPIKey ? "已配置" : "待配置",
+                    symbol: "sparkles",
+                    tint: AppTheme.coral
+                )
+            }
+        }
+        .padding(18)
+        .inkGlass(cornerRadius: 24)
+        .animation(reduceMotion ? nil : AppMotion.value, value: library.books.count)
+    }
+
+    private func overviewItem(title: String, value: String, symbol: String, tint: Color) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Label(title, systemImage: symbol)
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(.secondary)
+                .symbolRenderingMode(.hierarchical)
+            Text(value)
+                .font(.subheadline.weight(.semibold))
+                .monospacedDigit()
+                .contentTransition(reduceMotion ? .identity : .numericText())
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(11)
+        .background(tint.opacity(colorScheme == .dark ? 0.13 : 0.065), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .accessibilityElement(children: .combine)
+    }
+
     private var materialLabel: String {
         if #available(iOS 26.0, *) {
             return "Liquid Glass"
         }
         return "系统动态材质"
+    }
+}
+
+private struct SettingsSectionHeading: View {
+    let title: String
+    let symbol: String
+    let tint: Color
+
+    var body: some View {
+        Label {
+            Text(title)
+                .foregroundStyle(.secondary)
+        } icon: {
+            Image(systemName: symbol)
+                .foregroundStyle(tint)
+        }
+        .font(.caption.weight(.semibold))
+        .textCase(nil)
+    }
+}
+
+private struct SettingsRowLabel: View {
+    let title: String
+    let symbol: String
+    let tint: Color
+
+    var body: some View {
+        Label {
+            Text(title)
+                .foregroundStyle(.primary)
+        } icon: {
+            Image(systemName: symbol)
+                .font(.subheadline.weight(.semibold))
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(tint)
+                .frame(width: 32, height: 32)
+                .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .accessibilityHidden(true)
+        }
+        .padding(.vertical, 2)
     }
 }

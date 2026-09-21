@@ -24,7 +24,8 @@ struct RootView: View {
                 if launchArguments.contains("INKSHELF_UI_TEST_NIGHT")
                     || launchArguments.contains("INKSHELF_UI_TEST_SEED")
                     || launchArguments.contains("INKSHELF_UI_TEST_PICKER")
-                    || launchArguments.contains("INKSHELF_UI_TEST_LONG_READER") {
+                    || launchArguments.contains("INKSHELF_UI_TEST_LONG_READER")
+                    || launchArguments.contains("INKSHELF_UI_TEST_APPEARANCE") {
                     hasSeenWelcome = true
                     lastSeenWelcomeRelease = WelcomeRelease.current
                     launchDestination = nil
@@ -119,7 +120,8 @@ struct RootView: View {
         guard !ProcessInfo.processInfo.arguments.contains("INKSHELF_UI_TEST_SEED"),
               !ProcessInfo.processInfo.arguments.contains("INKSHELF_UI_TEST_PICKER"),
               !ProcessInfo.processInfo.arguments.contains("INKSHELF_UI_TEST_NIGHT"),
-              !ProcessInfo.processInfo.arguments.contains("INKSHELF_UI_TEST_LONG_READER")
+              !ProcessInfo.processInfo.arguments.contains("INKSHELF_UI_TEST_LONG_READER"),
+              !ProcessInfo.processInfo.arguments.contains("INKSHELF_UI_TEST_APPEARANCE")
         else { return }
         if !updates.didCheckThisLaunch {
             await updates.checkForUpdates(silent: true)

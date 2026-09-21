@@ -8,6 +8,7 @@ struct ImageGalleryHubView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.ambientMotionEnabled) private var ambientMotionEnabled
+    @AppStorage("library.gridDensity") private var gridDensityRaw = LibraryGridDensity.comfortable.rawValue
     @State private var section: ImageGallerySection = .imports
     @State private var query = ""
     @State private var showFilePicker = false
@@ -18,6 +19,8 @@ struct ImageGalleryHubView: View {
     @State private var previewingBook: Book?
     @State private var profileEditingBook: Book?
     @State private var pendingDeletion: Book?
+    @State private var transientCoverAspectRatios: [UUID: CGFloat] = [:]
+    @State private var galleryContentVisible = false
     @Namespace private var coverTransition
 
     private var imageBooks: [Book] {
@@ -37,9 +40,36 @@ struct ImageGalleryHubView: View {
         return library.favoritePageItems.filter { $0.book.matchesLibrarySearch(query) }
     }
 
-    private var gridColumns: [GridItem] {
-        let minimum: CGFloat = horizontalSizeClass == .compact ? 142 : 176
-        return [GridItem(.adaptive(minimum: minimum, maximum: 230), spacing: 18)]
+    private var gridDensity: LibraryGridDensity {
+        LibraryGridDensity(rawValue: gridDensityRaw) ?? .comfortable
+    }
+
+    private var gridColumnCount: Int {
+        horizontalSizeClass == .compact ? 2 : (gridDensity == .compact ? 5 : 4)
+    }
+
+    private var displayedBooks: [Book] {
+        switch section {
+        case .imports: imageBooks
+        case .favoritePages: []
+        case .favoriteBooks: favoriteBooks
+        }
+    }
+
+    private var galleryPresentationID: GalleryPresentationID {
+        GalleryPresentationID(section: section, bookIDs: displayedBooks.map(\.id))
+    }
+
+    private var sectionSelection: Binding<ImageGallerySection> {
+        Binding(get: { section }, set: { next in
+            guard next != section else { return }
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                galleryContentVisible = false
+                section = next
+            }
+        })
     }
 
     var body: some View {
@@ -50,7 +80,7 @@ struct ImageGalleryHubView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
                         ImageGalleryHero(
-                            section: $section,
+                            section: sectionSelection,
                             imageCount: library.imageCollectionBooks.count,
                             pageCount: library.favoritePageItems.count,
                             bookCount: library.favoriteBooks.count
@@ -58,14 +88,19 @@ struct ImageGalleryHubView: View {
 
                         Group { galleryContent }
                             .id(section)
-                            .transition(.opacity)
-                            .animation(reduceMotion ? nil : AppMotion.value, value: section)
+                            .opacity(galleryContentVisible ? 1 : 0.001)
+                            .offset(y: reduceMotion || galleryContentVisible ? 0 : 3)
                     }
                     .padding(.horizontal, 18)
                     .padding(.top, 12)
                     .padding(.bottom, 110)
+                    .containerRelativeFrame(.horizontal, alignment: .leading)
                 }
                 .scrollIndicators(.hidden)
+                .scrollDismissesKeyboard(.interactively)
+                .task(id: galleryPresentationID) {
+                    await prepareGalleryPresentation()
+                }
 
                 if library.isImporting {
                     GalleryImportOverlay(status: library.importStatusText)
@@ -205,7 +240,7 @@ struct ImageGalleryHubView: View {
                     action: {}
                 )
             } else {
-                FavoritePageGrid(items: favoritePages) { item in
+                FavoritePageGrid(items: favoritePages, showsHeading: false) { item in
                     var target = item.book
                     target.currentPage = item.page
                     open(target)
@@ -233,20 +268,75 @@ struct ImageGalleryHubView: View {
     }
 
     private func bookGrid(_ books: [Book]) -> some View {
-        LazyVGrid(columns: gridColumns, spacing: 24) {
-            ForEach(books) { book in
-                Button { open(book) } label: {
-                    BookCard(
-                        book: book,
-                        coverURL: library.coverURL(for: book),
-                        previewURLs: library.previewURLs(for: book)
-                    )
-                    .matchedTransitionSource(id: book.id, in: coverTransition)
+        let rows = ShelfBookRow.make(books: books, columns: gridColumnCount, aspectRatio: coverAspectRatio(for:))
+        return LazyVStack(spacing: gridDensity == .compact ? 18 : 24) {
+            ForEach(rows) { row in
+                ShelfBookRowLayout(columns: gridColumnCount, spacing: gridDensity == .compact ? 14 : 18) {
+                    ForEach(row.items) { item in
+                        Button { open(item.book) } label: {
+                            BookCard(
+                                book: item.book,
+                                coverURL: library.coverURL(for: item.book),
+                                previewURLs: library.previewURLs(for: item.book),
+                                knownCoverAspectRatio: coverAspectRatio(for: item.book),
+                                onCoverAspectRatio: { rememberCoverAspectRatio($0, for: item.book.id) }
+                            )
+                            .matchedTransitionSource(id: item.book.id, in: coverTransition)
+                        }
+                        .buttonStyle(PressableCardStyle())
+                        .contextMenu { galleryContextMenu(item.book) }
+                        .shelfColumnSpan(item.span)
+                    }
                 }
-                .buttonStyle(PressableCardStyle())
-                .contextMenu { galleryContextMenu(book) }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
+    }
+
+    private func coverAspectRatio(for book: Book) -> CGFloat? {
+        let ratio = transientCoverAspectRatios[book.id] ?? book.coverAspectRatio.map { CGFloat($0) }
+        guard let ratio, ratio.isFinite, ratio >= 0.2, ratio <= 5 else { return nil }
+        return ratio
+    }
+
+    private func rememberCoverAspectRatio(_ ratio: CGFloat, for bookID: UUID) {
+        guard ratio.isFinite, ratio >= 0.2, ratio <= 5,
+              abs((transientCoverAspectRatios[bookID] ?? 0) - ratio) > 0.001
+        else { return }
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) { transientCoverAspectRatios[bookID] = ratio }
+    }
+
+    @MainActor
+    private func prepareGalleryPresentation() async {
+        let requests = displayedBooks.prefix(240).compactMap { book -> GalleryCoverRatioRequest? in
+            guard coverAspectRatio(for: book) == nil,
+                  let url = library.coverURL(for: book)
+            else { return nil }
+            return GalleryCoverRatioRequest(id: book.id, url: url)
+        }
+        let detected = await Task.detached(priority: .userInitiated) {
+            var result: [UUID: CGFloat] = [:]
+            for request in requests where !Task.isCancelled {
+                if let ratio = CoverService.aspectRatio(at: request.url) {
+                    result[request.id] = CGFloat(ratio)
+                }
+            }
+            return result
+        }.value
+        guard !Task.isCancelled else { return }
+
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            transientCoverAspectRatios.merge(detected) { _, new in new }
+            galleryContentVisible = reduceMotion
+        }
+        guard !reduceMotion else { return }
+        await Task.yield()
+        guard !Task.isCancelled else { return }
+        withAnimation(AppMotion.shelfReveal) { galleryContentVisible = true }
     }
 
     private var importMenu: some View {
@@ -363,6 +453,16 @@ struct ImageGalleryHubView: View {
     }
 }
 
+private struct GalleryPresentationID: Hashable {
+    let section: ImageGallerySection
+    let bookIDs: [UUID]
+}
+
+private struct GalleryCoverRatioRequest: Sendable {
+    let id: UUID
+    let url: URL
+}
+
 private enum ImageGallerySection: String, CaseIterable, Identifiable {
     case imports
     case favoritePages
@@ -393,51 +493,80 @@ private struct ImageGalleryHero: View {
     let pageCount: Int
     let bookCount: Int
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var appeared = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            HStack(spacing: 14) {
-                ZStack {
-                    Circle().fill(AppTheme.coral.opacity(0.14))
-                    Image(systemName: "photo.artframe")
-                        .font(.title2.weight(.semibold))
-                        .foregroundStyle(AppTheme.coral)
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 24) {
+                    introduction
+                    Spacer(minLength: 0)
+                    counts.frame(minWidth: 240, maxWidth: 340)
                 }
-                .frame(width: 52, height: 52)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("把喜欢的画面分门安放")
-                        .font(.headline)
-                    Text("导入图片与阅读收藏互不混放，一眼就能找到。")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer(minLength: 0)
-            }
-
-            Picker("画廊区域", selection: $section) {
-                ForEach(ImageGallerySection.allCases) { item in
-                    Label(item.title, systemImage: item.systemImage).tag(item)
+                VStack(alignment: .leading, spacing: 14) {
+                    introduction
+                    counts
                 }
             }
-            .pickerStyle(.segmented)
-            .accessibilityIdentifier("gallery-section-picker")
 
-            HStack(spacing: 8) {
-                GalleryCountChip(symbol: "photo.stack.fill", count: imageCount, title: "图片")
-                GalleryCountChip(symbol: "heart.fill", count: pageCount, title: "单页")
-                GalleryCountChip(symbol: "star.fill", count: bookCount, title: "读物")
+            if dynamicTypeSize.isAccessibilitySize {
+                sectionPicker
+                    .pickerStyle(.menu)
+                    .frame(minHeight: 44)
+            } else {
+                sectionPicker
+                    .pickerStyle(.segmented)
             }
         }
         .padding(18)
         .inkGlass(cornerRadius: 28)
         .overlay { WarmLightSweep().clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous)) }
         .opacity(appeared ? 1 : 0)
-        .offset(y: appeared ? 0 : 8)
+        .offset(y: reduceMotion || appeared ? 0 : 8)
         .onAppear {
             withAnimation(reduceMotion ? nil : AppMotion.reveal) { appeared = true }
         }
+        .sensoryFeedback(.selection, trigger: section)
+    }
+
+    private var introduction: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "photo.artframe")
+                .font(.title2.weight(.semibold))
+                .foregroundStyle(AppTheme.coral)
+                .frame(width: 46, height: 46)
+                .background(AppTheme.coral.opacity(0.12), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 5) {
+                Text("把喜欢的画面分门安放")
+                    .font(.headline)
+                Text("收藏一瞬心动，也收藏一整个故事。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private var counts: some View {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+            : AnyLayout(HStackLayout(spacing: 8))
+        return layout {
+            GalleryCountChip(symbol: "photo.stack.fill", count: imageCount, title: "图片")
+            GalleryCountChip(symbol: "heart.fill", count: pageCount, title: "单页")
+            GalleryCountChip(symbol: "star.fill", count: bookCount, title: "读物")
+        }
+    }
+
+    private var sectionPicker: some View {
+        Picker("画廊区域", selection: $section) {
+            ForEach(ImageGallerySection.allCases) { item in
+                Label(item.title, systemImage: item.systemImage).tag(item)
+            }
+        }
+        .accessibilityIdentifier("gallery-section-picker")
     }
 }
 

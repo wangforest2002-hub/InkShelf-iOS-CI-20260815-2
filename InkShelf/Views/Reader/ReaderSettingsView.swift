@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ReaderSettingsView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Binding var layoutRaw: String
     @Binding var flowRaw: String
     @Binding var pageTransitionRaw: String
@@ -22,10 +23,34 @@ struct ReaderSettingsView: View {
     @AppStorage("ai.density") private var aiDensity = AIDanmakuDensity.balanced.rawValue
     @AppStorage("ai.endComments") private var aiEndComments = true
     @State private var didSaveComicDefaults = false
+    @State private var defaultsFeedbackTask: Task<Void, Never>?
 
     var body: some View {
         NavigationStack {
             Form {
+                Section {
+                    HStack(spacing: 14) {
+                        Image(systemName: isEBook ? "text.book.closed.fill" : "book.pages.fill")
+                            .font(.title2)
+                            .foregroundStyle(.white)
+                            .frame(width: 52, height: 60)
+                            .background(AppTheme.accentGradient, in: RoundedRectangle(cornerRadius: 17, style: .continuous))
+                            .accessibilityHidden(true)
+
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("把阅读调成喜欢的样子")
+                                .font(.headline)
+                            Text(readingSummary)
+                                .font(.caption.weight(.medium))
+                                .foregroundStyle(.secondary)
+                                .contentTransition(.opacity)
+                                .animation(reduceMotion ? nil : AppMotion.value, value: readingSummary)
+                        }
+                    }
+                    .padding(.vertical, 8)
+                    .accessibilityElement(children: .combine)
+                }
+
                 if isEBook {
                     Section("电子书排版") {
                         Picker("阅读方式", selection: $ebookFlowRaw) {
@@ -43,16 +68,19 @@ struct ReaderSettingsView: View {
 
                         VStack(alignment: .leading, spacing: 8) {
                             LabeledContent("字号", value: "\(Int(ebookFontSize))")
+                                .monospacedDigit()
                             Slider(value: $ebookFontSize, in: 14...32, step: 1)
                         }
 
                         VStack(alignment: .leading, spacing: 8) {
                             LabeledContent("行距", value: ebookLineHeight.formatted(.number.precision(.fractionLength(1))))
+                                .monospacedDigit()
                             Slider(value: $ebookLineHeight, in: 1.2...2.2, step: 0.1)
                         }
 
                         VStack(alignment: .leading, spacing: 8) {
                             LabeledContent("页边距", value: "\(Int(ebookMargin))")
+                                .monospacedDigit()
                             Slider(value: $ebookMargin, in: 12...48, step: 2)
                         }
                     }
@@ -120,10 +148,12 @@ struct ReaderSettingsView: View {
                         LabeledContent("当前设置", value: "自动记住到本书")
                         Button {
                             saveComicDefaults()
-                            withAnimation(AppMotion.panel) { didSaveComicDefaults = true }
-                            Task {
+                            defaultsFeedbackTask?.cancel()
+                            withAnimation(reduceMotion ? nil : AppMotion.panel) { didSaveComicDefaults = true }
+                            defaultsFeedbackTask = Task {
                                 try? await Task.sleep(for: .seconds(2))
-                                withAnimation(AppMotion.value) { didSaveComicDefaults = false }
+                                guard !Task.isCancelled else { return }
+                                withAnimation(reduceMotion ? nil : AppMotion.value) { didSaveComicDefaults = false }
                             }
                         } label: {
                             Label(
@@ -161,6 +191,7 @@ struct ReaderSettingsView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            .tint(AppTheme.accent)
             .navigationTitle("阅读设置")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -168,6 +199,19 @@ struct ReaderSettingsView: View {
                     Button("完成") { dismiss() }
                 }
             }
+            .onDisappear { defaultsFeedbackTask?.cancel() }
         }
+    }
+
+    private var readingSummary: String {
+        if isEBook {
+            let font = EBookFont(rawValue: ebookFontRaw) ?? .serif
+            let theme = EBookTheme(rawValue: ebookThemeRaw) ?? .paper
+            return "\(font.title) · \(Int(ebookFontSize)) 号 · \(theme.title)"
+        }
+        let layout = ReaderLayout(rawValue: layoutRaw) ?? .single
+        let flow = ReaderFlow(rawValue: flowRaw) ?? .horizontal
+        let backdrop = ReaderBackdrop(rawValue: backdropRaw) ?? .black
+        return "\(layout.title) · \(flow.title) · \(backdrop.title)"
     }
 }

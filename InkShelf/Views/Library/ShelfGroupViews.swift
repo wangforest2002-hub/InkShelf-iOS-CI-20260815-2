@@ -8,7 +8,10 @@ enum ShelfFilter: Hashable {
 
 struct ShelfGroupStrip: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var colorScheme
     @Binding var selection: ShelfFilter
+    @State private var highlightedFilter: ShelfFilter = .all
+    @Namespace private var selectionHighlight
     let groups: [ShelfGroup]
     let totalCount: Int
     let ungroupedCount: Int
@@ -58,10 +61,10 @@ struct ShelfGroupStrip: View {
                     Button(action: create) {
                         Image(systemName: "plus")
                             .font(.subheadline.bold())
-                            .frame(width: 42, height: 42)
-                            .inkGlass(cornerRadius: 21, interactive: true)
+                            .frame(width: 44, height: 44)
+                            .inkGlass(cornerRadius: 22, interactive: true)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(PressableCardStyle())
                     .accessibilityIdentifier("shelf-new-group")
                     .accessibilityLabel("新建书架分组")
                 }
@@ -70,6 +73,15 @@ struct ShelfGroupStrip: View {
             .padding(.horizontal, 1)
         }
         .scrollIndicators(.hidden)
+        .onAppear { highlightedFilter = selection }
+        .onChange(of: selection) { _, next in
+            // The shelf switches its content without animation to avoid cover
+            // reflow. Only this small highlight gets an animated transaction.
+            var transaction = Transaction(animation: reduceMotion ? nil : AppMotion.panel)
+            transaction.disablesAnimations = reduceMotion
+            withTransaction(transaction) { highlightedFilter = next }
+        }
+        .sensoryFeedback(.selection, trigger: selection)
     }
 
     private func filterChip(
@@ -79,29 +91,41 @@ struct ShelfGroupStrip: View {
         filter: ShelfFilter,
         tint: Color
     ) -> some View {
-        let selected = selection == filter
+        let selected = highlightedFilter == filter
         return Button {
             selection = filter
         } label: {
             HStack(spacing: 7) {
                 Image(systemName: symbol)
+                    .foregroundStyle(selected ? tint : .secondary)
                 Text(title).lineLimit(1)
                 Text("\(count)")
                     .font(.caption2.monospacedDigit())
-                    .foregroundStyle(selected ? .white.opacity(0.82) : .secondary)
+                    .foregroundStyle(selected ? .primary : .secondary)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(selected ? tint.opacity(0.12) : Color.secondary.opacity(0.07), in: Capsule())
             }
             .font(.subheadline.weight(.semibold))
-            .foregroundStyle(selected ? .white : .primary)
-            .padding(.horizontal, 13)
-            .frame(height: 42)
-            .background(selected ? tint : Color.clear, in: Capsule())
-            .inkGlass(cornerRadius: 21, interactive: true)
-            .animation(reduceMotion ? nil : AppMotion.value, value: selected)
+            .foregroundStyle(.primary)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .frame(minHeight: 44)
+            .background {
+                if selected {
+                    Capsule()
+                        .fill(colorScheme == .dark ? Color.white.opacity(0.09) : Color.white.opacity(0.90))
+                        .overlay { Capsule().strokeBorder(tint.opacity(0.30), lineWidth: 1) }
+                        .matchedGeometryEffect(id: "shelf-selection", in: selectionHighlight)
+                }
+            }
+            .inkGlass(cornerRadius: 24, interactive: true)
         }
         .buttonStyle(PressableCardStyle())
         .accessibilityIdentifier(accessibilityIdentifier(for: filter))
         .accessibilityLabel("\(title)，\(count) 本")
-        .accessibilityAddTraits(selected ? .isSelected : [])
+        .accessibilityAddTraits(selection == filter ? .isSelected : [])
+        .accessibilityHint("显示这个分组的读物")
     }
 
     private func accessibilityIdentifier(for filter: ShelfFilter) -> String {

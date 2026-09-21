@@ -4,13 +4,52 @@ private struct AmbientMotionEnabledKey: EnvironmentKey {
     static let defaultValue = true
 }
 
+private struct AmbientResourcesAvailableKey: EnvironmentKey {
+    static let defaultValue = true
+}
+
 extension EnvironmentValues {
     /// Ambient decoration keeps moving only while its screen is actually
     /// visible. Navigation destinations and inactive tabs can therefore keep
     /// their state without running hidden animation loops behind the reader.
     var ambientMotionEnabled: Bool {
-        get { self[AmbientMotionEnabledKey.self] }
+        get { self[AmbientMotionEnabledKey.self] && self[AmbientResourcesAvailableKey.self] }
         set { self[AmbientMotionEnabledKey.self] = newValue }
+    }
+
+    fileprivate var ambientResourcesAvailable: Bool {
+        get { self[AmbientResourcesAvailableKey.self] }
+        set { self[AmbientResourcesAvailableKey.self] = newValue }
+    }
+}
+
+/// One observer for the whole scene, rather than a power/thermal observer on
+/// every card. Tab visibility can only narrow this policy, never override it.
+struct AmbientResourcePolicy: ViewModifier {
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var resourcesAvailable = Self.resourcesAvailableNow
+
+    private static var resourcesAvailableNow: Bool {
+        let process = ProcessInfo.processInfo
+        return !process.isLowPowerModeEnabled
+            && process.thermalState != .serious
+            && process.thermalState != .critical
+    }
+
+    func body(content: Content) -> some View {
+        content
+            .environment(\.ambientResourcesAvailable, resourcesAvailable && scenePhase == .active)
+            .onReceive(NotificationCenter.default.publisher(for: .NSProcessInfoPowerStateDidChange)
+                .receive(on: RunLoop.main)) { _ in
+                resourcesAvailable = Self.resourcesAvailableNow
+            }
+            .onReceive(NotificationCenter.default.publisher(for: ProcessInfo.thermalStateDidChangeNotification)
+                .receive(on: RunLoop.main)) { _ in
+                resourcesAvailable = Self.resourcesAvailableNow
+            }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active { resourcesAvailable = Self.resourcesAvailableNow }
+            }
     }
 }
 
@@ -49,6 +88,7 @@ struct AuroraBackground: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.ambientMotionEnabled) private var ambientMotionEnabled
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @State private var animate = false
 
     private var canAnimate: Bool {
@@ -108,7 +148,21 @@ struct AuroraBackground: View {
             )
             .rotationEffect(.degrees(-18))
             .offset(x: animate ? 100 : -40)
+
+            // A single static drawing adds depth without one animation task
+            // per speck or a per-frame timeline on the scrolling shelf.
+            Canvas { context, size in
+                for index in 0..<18 {
+                    let x = CGFloat((index * 73 + 19) % 100) / 100 * size.width
+                    let y = CGFloat((index * 47 + 11) % 100) / 100 * size.height
+                    let radius: CGFloat = index.isMultiple(of: 4) ? 2 : 1
+                    let dot = Path(ellipseIn: CGRect(x: x, y: y, width: radius * 2, height: radius * 2))
+                    context.fill(dot, with: .color(colorScheme == .dark ? AppTheme.cream : AppTheme.wood))
+                }
+            }
+            .opacity(reduceTransparency ? 0 : (colorScheme == .dark ? 0.10 : 0.055))
         }
+        .allowsHitTesting(false)
         .ignoresSafeArea()
         .task(id: canAnimate) {
             var reset = Transaction()
@@ -284,10 +338,33 @@ struct PressableCardStyle: ButtonStyle {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .scaleEffect(configuration.isPressed ? 0.975 : 1)
-            .opacity(configuration.isPressed ? 0.92 : 1)
-            .animation(reduceMotion ? nil : AppMotion.press, value: configuration.isPressed)
+        PressableCardSurface(isPressed: configuration.isPressed, reduceMotion: reduceMotion) {
+            configuration.label
+        }
+    }
+}
+
+private struct PressableCardSurface<Content: View>: View {
+    let isPressed: Bool
+    let reduceMotion: Bool
+    let content: Content
+    @State private var isHovered = false
+
+    init(isPressed: Bool, reduceMotion: Bool, @ViewBuilder content: () -> Content) {
+        self.isPressed = isPressed
+        self.reduceMotion = reduceMotion
+        self.content = content()
+    }
+
+    var body: some View {
+        content
+            .scaleEffect(reduceMotion ? 1 : (isPressed ? 0.985 : (isHovered ? 1.008 : 1)))
+            .offset(y: reduceMotion ? 0 : (isPressed ? 1 : (isHovered ? -2 : 0)))
+            .opacity(isPressed ? 0.94 : 1)
+            .brightness(isHovered && !isPressed ? 0.015 : 0)
+            .animation(reduceMotion ? nil : AppMotion.press, value: isPressed)
+            .animation(reduceMotion ? nil : AppMotion.chrome, value: isHovered)
+            .onHover { isHovered = $0 }
     }
 }
 
@@ -297,6 +374,7 @@ struct PressableCardStyle: ButtonStyle {
 struct AppearanceModeButton: View {
     @AppStorage("appearance") private var appearance = AppAppearance.light.rawValue
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var isNight: Bool { colorScheme == .dark }
 
@@ -306,7 +384,7 @@ struct AppearanceModeButton: View {
                 isNight ? "切换到日间模式" : "切换到夜间模式",
                 systemImage: isNight ? "sun.max.fill" : "moon.stars.fill"
             )
-            .symbolEffect(.bounce, value: appearance)
+            .symbolEffect(.bounce, options: .nonRepeating, value: reduceMotion ? "" : appearance)
         }
         .accessibilityIdentifier("appearance-mode-toggle")
         .accessibilityValue(isNight ? "夜间模式已开启" : "日间模式已开启")

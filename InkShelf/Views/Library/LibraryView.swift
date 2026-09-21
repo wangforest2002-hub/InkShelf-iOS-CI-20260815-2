@@ -8,6 +8,7 @@ struct LibraryView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.ambientMotionEnabled) private var ambientMotionEnabled
     let scope: LibraryScope
 
@@ -137,7 +138,7 @@ struct LibraryView: View {
                                 )
                             }
 
-                            VStack(alignment: .leading, spacing: 22) {
+                            VStack(alignment: .leading, spacing: 18) {
                                 if query.isEmpty, scope == .all {
                                     if shelfFilter == .all {
                                         HomeWelcomeHeader(
@@ -157,32 +158,7 @@ struct LibraryView: View {
                                             )
                                         }
 
-                                        if let continueBook = library.continueReadingBook {
-                                            Button { open(continueBook) } label: {
-                                                ContinueReadingCard(
-                                                    book: continueBook,
-                                                    coverURL: library.coverURL(for: continueBook)
-                                                )
-                                            }
-                                            .buttonStyle(PressableCardStyle())
-                                        }
-
-                                        if !achievements.footprint.openedBookIDs.isEmpty {
-                                            Button { showAchievements = true } label: {
-                                                FootprintHomeCard(
-                                                    unlocked: achievements.unlockedCount,
-                                                    total: achievements.achievements.count,
-                                                    pages: achievements.footprint.pagesTurned,
-                                                    minutes: achievements.readingMinutes,
-                                                    level: achievements.homeLevel,
-                                                    levelTitle: achievements.homeLevelTitle,
-                                                    levelProgress: achievements.homeLevelProgress,
-                                                    streak: achievements.currentStreak,
-                                                    dailyCompleted: achievements.dailyQuests().filter(\.isCompleted).count
-                                                )
-                                            }
-                                            .buttonStyle(PressableCardStyle())
-                                        }
+                                        homeActivityCards
                                     }
                                 } else if query.isEmpty, scope == .favorites {
                                     LibrarySectionHeading(
@@ -226,7 +202,7 @@ struct LibraryView: View {
                                 }
                             }
                             .opacity(shelfContentOpacity)
-                            .offset(y: shelfContentVisible ? 0 : 3)
+                            .offset(y: reduceMotion || shelfContentVisible ? 0 : 3)
                             .id(shelfPresentationID)
                         }
                         .padding(.horizontal, 18)
@@ -239,6 +215,7 @@ struct LibraryView: View {
                         .containerRelativeFrame(.horizontal, alignment: .leading)
                     }
                     .scrollIndicators(.hidden)
+                    .scrollDismissesKeyboard(.interactively)
                     .task(id: shelfPresentationID) {
                         await prepareShelfPresentation()
                     }
@@ -572,6 +549,45 @@ struct LibraryView: View {
         }
     }
 
+    private var homeActivityCards: some View {
+        let isWide = horizontalSizeClass == .regular && !dynamicTypeSize.isAccessibilitySize
+        let layout = isWide
+            ? AnyLayout(HStackLayout(alignment: .top, spacing: 16))
+            : AnyLayout(VStackLayout(alignment: .leading, spacing: 14))
+        return layout {
+            if let continueBook = library.continueReadingBook {
+                Button { open(continueBook) } label: {
+                    ContinueReadingCard(
+                        book: continueBook,
+                        coverURL: library.coverURL(for: continueBook),
+                        minimumHeight: isWide ? 130 : 0
+                    )
+                }
+                .buttonStyle(PressableCardStyle())
+                .frame(maxWidth: .infinity)
+            }
+
+            if !achievements.footprint.openedBookIDs.isEmpty {
+                Button { showAchievements = true } label: {
+                    FootprintHomeCard(
+                        unlocked: achievements.unlockedCount,
+                        total: achievements.achievements.count,
+                        pages: achievements.footprint.pagesTurned,
+                        minutes: achievements.readingMinutes,
+                        level: achievements.homeLevel,
+                        levelTitle: achievements.homeLevelTitle,
+                        levelProgress: achievements.homeLevelProgress,
+                        streak: achievements.currentStreak,
+                        dailyCompleted: achievements.dailyQuests().filter(\.isCompleted).count,
+                        minimumHeight: isWide ? 130 : 0
+                    )
+                }
+                .buttonStyle(PressableCardStyle())
+                .frame(maxWidth: .infinity)
+            }
+        }
+    }
+
     @ViewBuilder
     private func bookContextMenu(_ book: Book) -> some View {
         if book.kind == .archive || book.kind == .imageCollection {
@@ -819,7 +835,7 @@ private struct CoverRatioRequest: Sendable {
     let url: URL
 }
 
-private struct ShelfBookRow: Identifiable {
+struct ShelfBookRow: Identifiable {
     let items: [ShelfBookItem]
 
     var id: String {
@@ -854,7 +870,7 @@ private struct ShelfBookRow: Identifiable {
     }
 }
 
-private struct ShelfBookItem: Identifiable {
+struct ShelfBookItem: Identifiable {
     let book: Book
     let span: Int
     var id: UUID { book.id }
@@ -864,7 +880,7 @@ private struct ShelfColumnSpanKey: LayoutValueKey {
     static let defaultValue = 1
 }
 
-private extension View {
+extension View {
     func shelfColumnSpan(_ span: Int) -> some View {
         layoutValue(key: ShelfColumnSpanKey.self, value: max(1, span))
     }
@@ -873,7 +889,7 @@ private extension View {
 /// Each row is still created lazily by the surrounding LazyVStack. Landscape
 /// covers consume two columns, while portrait covers keep the familiar dense
 /// shelf. This avoids the eager cost of SwiftUI's non-lazy Grid.
-private struct ShelfBookRowLayout: Layout {
+struct ShelfBookRowLayout: Layout {
     let columns: Int
     let spacing: CGFloat
 
@@ -941,9 +957,10 @@ private enum ShelfGroupEditorTarget: Identifiable {
 private struct ContinueReadingCard: View {
     let book: Book
     let coverURL: URL?
+    var minimumHeight: CGFloat = 0
 
     var body: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: 14) {
             Group {
                 if coverURL != nil {
                     CoverArtwork(book: book, coverURL: coverURL, previewURLs: [])
@@ -960,11 +977,12 @@ private struct ContinueReadingCard: View {
                     }
                 }
             }
-            .frame(width: 72, height: 94)
+            .frame(width: 64, height: 88)
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .shadow(color: AppTheme.wood.opacity(0.15), radius: 6, y: 4)
 
             VStack(alignment: .leading, spacing: 7) {
-                Label("为你留着位置", systemImage: "play.fill")
+                Label("继续上次的故事", systemImage: "bookmark.fill")
                     .font(.caption.weight(.bold))
                     .foregroundStyle(AppTheme.wood)
                 Text(book.title)
@@ -979,10 +997,14 @@ private struct ContinueReadingCard: View {
             }
             Spacer(minLength: 4)
             Image(systemName: "chevron.right")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.tertiary)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(AppTheme.accent)
+                .frame(width: 28, height: 28)
+                .background(AppTheme.accent.opacity(0.09), in: Circle())
+                .accessibilityHidden(true)
         }
         .padding(14)
+        .frame(maxWidth: .infinity, minHeight: minimumHeight, alignment: .leading)
         .inkGlass(cornerRadius: 24, interactive: true)
         .overlay {
             WarmLightSweep()
@@ -1011,135 +1033,92 @@ private struct NightModeShelfCard: View {
     let favoritePageCount: Int
     let featuredBook: Book?
     let openFeatured: (Book) -> Void
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.scenePhase) private var scenePhase
-    @Environment(\.ambientMotionEnabled) private var ambientMotionEnabled
-    @State private var glowing = false
-
-    private var canAnimate: Bool {
-        ambientMotionEnabled && scenePhase == .active && !reduceMotion
-    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .top, spacing: 13) {
-                ZStack {
-                    Circle()
-                        .fill(
-                            RadialGradient(
-                                colors: [AppTheme.honey.opacity(glowing ? 0.28 : 0.10), .clear],
-                                center: .center,
-                                startRadius: 0,
-                                endRadius: 28
-                            )
-                        )
-                        .frame(width: 58, height: 58)
-                        .scaleEffect(glowing ? 1.08 : 0.92)
-                    Circle()
-                        .fill(AppTheme.peach.opacity(glowing ? 0.22 : 0.12))
-                        .shadow(color: AppTheme.honey.opacity(0.12), radius: 6)
-                    Image(systemName: "moon.stars.fill")
-                        .font(.title3.weight(.semibold))
-                        .foregroundStyle(AppTheme.peach)
-                }
-                .frame(width: 46, height: 46)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("夜间模式已点亮")
-                        .font(.headline)
-                        .foregroundStyle(.white)
-                    Text("全部 \(allBookCount) 本读物照常可见，成年向标签、心动评分和私人笔记也都保留。")
-                        .font(.caption)
-                        .foregroundStyle(.white.opacity(0.64))
-                        .lineSpacing(2)
-                }
-                Spacer(minLength: 0)
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 20) {
+                summary.frame(minWidth: 280, maxWidth: .infinity, alignment: .leading)
+                featuredAction.frame(minWidth: 220, maxWidth: 340)
             }
-
-            HStack(spacing: 9) {
-                NightModeStatChip(symbol: "books.vertical.fill", value: allBookCount, title: "全部书籍")
-                NightModeStatChip(symbol: "18.circle.fill", value: adultBookCount, title: "成年档案")
-                NightModeStatChip(symbol: "heart.fill", value: favoritePageCount, title: "心动单页")
-            }
-
-            if let featuredBook {
-                Button {
-                    openFeatured(featuredBook)
-                } label: {
-                    HStack(spacing: 9) {
-                        Image(systemName: featuredBook.belongsToAfterDark ? "flame.fill" : "book.fill")
-                            .foregroundStyle(AppTheme.peach)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(featuredBook.belongsToAfterDark ? "今晚继续心动" : "今晚继续阅读")
-                                .font(.caption.weight(.bold))
-                                .foregroundStyle(AppTheme.peach)
-                            Text(featuredBook.title)
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(.white)
-                                .lineLimit(1)
-                        }
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.caption.bold())
-                            .foregroundStyle(.white.opacity(0.46))
-                    }
-                    .padding(12)
-                    .background(.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                }
-                .buttonStyle(PressableCardStyle())
+            VStack(alignment: .leading, spacing: 12) {
+                summary
+                featuredAction
             }
         }
-        .padding(17)
+        .padding(16)
         .background(
             LinearGradient(
                 colors: [AppTheme.midnight.opacity(0.94), Color(red: 0.20, green: 0.10, blue: 0.22).opacity(0.92)],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             ),
-            in: RoundedRectangle(cornerRadius: 26, style: .continuous)
+            in: RoundedRectangle(cornerRadius: 24, style: .continuous)
         )
-        .overlay { RoundedRectangle(cornerRadius: 26).stroke(.white.opacity(0.12), lineWidth: 1) }
-        .shadow(color: AppTheme.lilac.opacity(0.13), radius: 20, y: 10)
-        .task(id: canAnimate) {
-            var reset = Transaction()
-            reset.disablesAnimations = true
-            withTransaction(reset) { glowing = false }
-            guard canAnimate else { return }
-            await Task.yield()
-            guard !Task.isCancelled else { return }
-            withAnimation(.easeInOut(duration: 2.6).repeatForever(autoreverses: true)) {
-                glowing = true
-            }
+        .overlay {
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(.white.opacity(0.12), lineWidth: 1)
         }
         .accessibilityIdentifier("night-mode-library-card")
     }
-}
 
-private struct NightModeStatChip: View {
-    let symbol: String
-    let value: Int
-    let title: String
-
-    var body: some View {
-        VStack(spacing: 4) {
-            Label("\(value)", systemImage: symbol)
-                .font(.caption.weight(.bold).monospacedDigit())
+    private var summary: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "moon.stars.fill")
+                .font(.title3.weight(.semibold))
                 .foregroundStyle(AppTheme.peach)
-            Text(title)
-                .font(.caption2)
-                .foregroundStyle(.white.opacity(0.52))
+                .frame(width: 42, height: 42)
+                .background(AppTheme.peach.opacity(0.12), in: Circle())
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 5) {
+                Text("夜间模式已点亮")
+                    .font(.headline)
+                    .foregroundStyle(.white)
+                Text("\(allBookCount) 本读物 · \(adultBookCount) 份成年档案 · \(favoritePageCount) 张心动单页")
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.70))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 9)
-        .background(.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .accessibilityElement(children: .combine)
+    }
+
+    @ViewBuilder
+    private var featuredAction: some View {
+        if let featuredBook {
+            Button {
+                openFeatured(featuredBook)
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: featuredBook.belongsToAfterDark ? "flame.fill" : "book.fill")
+                        .foregroundStyle(AppTheme.peach)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(featuredBook.belongsToAfterDark ? "今晚继续心动" : "今晚继续阅读")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(AppTheme.peach)
+                        Text(featuredBook.title)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .lineLimit(2)
+                    }
+                    Spacer(minLength: 4)
+                    Image(systemName: "chevron.right")
+                        .font(.caption.bold())
+                        .foregroundStyle(.white.opacity(0.55))
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                .background(.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            }
+            .buttonStyle(PressableCardStyle())
+        }
     }
 }
-
 private struct HomeWelcomeHeader: View {
     let bookCount: Int
     let favoriteCount: Int
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var appeared = false
 
     var body: some View {
@@ -1147,21 +1126,16 @@ private struct HomeWelcomeHeader: View {
             HStack(spacing: 18) {
                 greetingCopy
                 Spacer(minLength: 8)
-                CozyWindowView()
-                    .frame(width: 116, height: 88)
-            }
-
-            VStack(alignment: .leading, spacing: 14) {
-                greetingCopy
-
-                HStack {
-                    Spacer(minLength: 0)
+                if !dynamicTypeSize.isAccessibilitySize {
                     CozyWindowView()
-                        .frame(width: 82, height: 64)
+                        .frame(width: 92, height: 72)
                 }
             }
+
+            greetingCopy
         }
-        .padding(18)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 16)
         .background {
             RoundedRectangle(cornerRadius: 28, style: .continuous)
                 .fill(
@@ -1183,9 +1157,8 @@ private struct HomeWelcomeHeader: View {
             RoundedRectangle(cornerRadius: 28, style: .continuous)
                 .stroke(.white.opacity(colorScheme == .dark ? 0.16 : 0.36), lineWidth: 1)
         }
-        .shadow(color: AppTheme.honey.opacity(0.12), radius: 24, y: 12)
         .opacity(appeared ? 1 : 0)
-        .offset(y: appeared ? 0 : 8)
+        .offset(y: reduceMotion || appeared ? 0 : 8)
         .onAppear {
             withAnimation(reduceMotion ? nil : AppMotion.reveal) {
                 appeared = true
@@ -1195,30 +1168,33 @@ private struct HomeWelcomeHeader: View {
     }
 
     private var greetingCopy: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            Label(greeting, systemImage: "books.vertical.fill")
-                .font(.title2.bold())
-                .lineLimit(2)
+        VStack(alignment: .leading, spacing: 7) {
+            Text(greeting)
+                .font(.title2.weight(.bold))
+                .foregroundStyle(.primary)
                 .fixedSize(horizontal: false, vertical: true)
-                .foregroundStyle(
-                    LinearGradient(
-                        colors: [AppTheme.wood, AppTheme.coral, AppTheme.accent],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                )
 
             Text(message)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            HStack(spacing: 8) {
-                HomeStatChip(symbol: "books.vertical.fill", text: "\(bookCount) 本")
-                if favoriteCount > 0 {
-                    HomeStatChip(symbol: "star.fill", text: "\(favoriteCount) 本收藏")
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) {
+                    homeStats
+                }
+                VStack(alignment: .leading, spacing: 6) {
+                    homeStats
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private var homeStats: some View {
+        HomeStatChip(symbol: "books.vertical.fill", text: "\(bookCount) 本故事")
+        if favoriteCount > 0 {
+            HomeStatChip(symbol: "star.fill", text: "\(favoriteCount) 本珍藏")
         }
     }
 
@@ -1241,11 +1217,11 @@ private struct HomeStatChip: View {
 
     var body: some View {
         Label(text, systemImage: symbol)
-            .font(.caption.weight(.semibold))
+            .font(.caption2.weight(.semibold))
             .foregroundStyle(.secondary)
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
-            .background(.white.opacity(0.28), in: Capsule())
+            .background(AppTheme.honey.opacity(0.09), in: Capsule())
     }
 }
 
@@ -1261,6 +1237,7 @@ private struct FootprintHomeCard: View {
     let levelProgress: Double
     let streak: Int
     let dailyCompleted: Int
+    var minimumHeight: CGFloat = 0
 
     var body: some View {
         HStack(spacing: 14) {
@@ -1296,8 +1273,8 @@ private struct FootprintHomeCard: View {
                 .foregroundStyle(.tertiary)
         }
         .padding(16)
+        .frame(maxWidth: .infinity, minHeight: minimumHeight, alignment: .leading)
         .inkGlass(cornerRadius: 22, interactive: true)
-        .overlay { WarmLightSweep().clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous)) }
         .onAppear {
             withAnimation(reduceMotion ? nil : AppMotion.reveal) { appeared = true }
         }
@@ -1311,16 +1288,30 @@ private struct LibrarySectionHeading: View {
     let symbol: String
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline) {
-            Label(title, systemImage: symbol)
-                .font(.headline)
-                .foregroundStyle(.primary)
-            Spacer()
-            Text(subtitle)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                heading
+                Spacer(minLength: 8)
+                detail
+            }
+            VStack(alignment: .leading, spacing: 5) {
+                heading
+                detail
+            }
         }
         .accessibilityElement(children: .combine)
+    }
+
+    private var heading: some View {
+        Label(title, systemImage: symbol)
+            .font(.headline)
+            .foregroundStyle(.primary)
+    }
+
+    private var detail: some View {
+        Text(subtitle)
+            .font(.caption)
+            .foregroundStyle(.secondary)
     }
 }
 

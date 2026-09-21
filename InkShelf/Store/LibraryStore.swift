@@ -108,6 +108,22 @@ final class LibraryStore {
         if ProcessInfo.processInfo.arguments.contains("INKSHELF_UI_TEST_PICKER") {
             installPickerSmokeInput()
         }
+#if targetEnvironment(simulator)
+        if ProcessInfo.processInfo.arguments.contains("INKSHELF_UI_TEST_APPEARANCE") {
+            do {
+                books = try AppearancePreviewFixture.make(in: libraryURL)
+                shelfGroups = [ShelfGroup(id: AppearancePreviewFixture.groupID, title: "画集收藏", styleIndex: 1)]
+                saveImmediately()
+                saveShelfGroups()
+                defaults.set(AppAppearance.light.rawValue, forKey: "appearance")
+                defaults.set(LibrarySortOrder.lastOpened.rawValue, forKey: "library.sortOrder")
+                defaults.set(ReadingStatusFilter.all.rawValue, forKey: "library.readingStatus")
+                defaults.set(LibraryGridDensity.comfortable.rawValue, forKey: "library.gridDensity")
+            } catch {
+                alert = LibraryAlert(title: "预览素材加载失败", message: error.localizedDescription)
+            }
+        }
+#endif
 #endif
     }
 

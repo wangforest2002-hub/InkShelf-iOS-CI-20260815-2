@@ -17,6 +17,7 @@ struct ReaderView: View {
     @State private var ebookPackage: EBookPackage?
     @State private var ebookProgress: Double
     @State private var controlsVisible = true
+    @State private var isProgressScrubbing = false
     @State private var showSettings = false
     @State private var showThumbnails = false
     @State private var showAICompanion = false
@@ -146,7 +147,7 @@ struct ReaderView: View {
                     }
                     .buttonStyle(PressableCardStyle())
                     .padding(.horizontal, 18)
-                    .padding(.bottom, controlsVisible ? 142 : 18)
+                    .padding(.bottom, controlsVisible ? 218 : 18)
                 }
                 .transition(.move(edge: .bottom).combined(with: .opacity))
                 .zIndex(16)
@@ -167,7 +168,7 @@ struct ReaderView: View {
                 VStack {
                     Spacer()
                     ReaderNoticeToast(text: readerNotice)
-                        .padding(.bottom, controlsVisible ? 126 : 24)
+                        .padding(.bottom, controlsVisible ? 206 : 24)
                 }
                 .transition(.move(edge: .bottom).combined(with: .opacity))
                 .zIndex(29)
@@ -212,9 +213,10 @@ struct ReaderView: View {
                     toggleAI: toggleAI,
                     showThumbnails: { showThumbnails = true },
                     showSettings: { showSettings = true },
-                    onInteraction: showControlsTemporarily
+                    onInteraction: showControlsTemporarily,
+                    onScrubbingChanged: setProgressScrubbing
                 )
-                .transition(.opacity.combined(with: .scale(scale: 0.985)))
+                .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.985)))
                 .zIndex(20)
             }
         }
@@ -820,11 +822,13 @@ struct ReaderView: View {
         let arguments = ProcessInfo.processInfo.arguments
         if arguments.contains("INKSHELF_UI_TEST_SEED")
             || arguments.contains("INKSHELF_UI_TEST_PICKER")
-            || arguments.contains("INKSHELF_UI_TEST_LONG_READER") {
+            || arguments.contains("INKSHELF_UI_TEST_LONG_READER")
+            || arguments.contains("INKSHELF_UI_TEST_APPEARANCE") {
             return
         }
 #endif
         hideControlsTask?.cancel()
+        guard !isProgressScrubbing else { return }
         hideControlsTask = Task {
             try? await Task.sleep(for: .seconds(4))
             guard !Task.isCancelled,
@@ -832,11 +836,21 @@ struct ReaderView: View {
                   !showThumbnails,
                   !showAICompanion,
                   !showEndComments,
+                  !isProgressScrubbing,
                   !pdfLocked
             else { return }
             withAnimation(reduceMotion ? nil : AppMotion.value) {
                 controlsVisible = false
             }
+        }
+    }
+
+    private func setProgressScrubbing(_ isScrubbing: Bool) {
+        isProgressScrubbing = isScrubbing
+        if isScrubbing {
+            hideControlsTask?.cancel()
+        } else {
+            scheduleControlsHide()
         }
     }
 }
@@ -905,6 +919,7 @@ private struct ReaderControls: View {
     let showThumbnails: () -> Void
     let showSettings: () -> Void
     let onInteraction: () -> Void
+    let onScrubbingChanged: (Bool) -> Void
 
     private var position: ReaderPagePosition {
         ReaderPagePosition(
@@ -964,7 +979,7 @@ private struct ReaderControls: View {
                             Image(systemName: aiEnabled ? "sparkles.square.fill" : "sparkles")
                                 .foregroundStyle(aiEnabled ? AppTheme.accent : .secondary)
                                 .opacity(aiActivity.isBusy ? 0.18 : 1)
-                                .contentTransition(.symbolEffect(.replace))
+                                .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
                             if aiEnabled, aiActivity.isBusy {
                                 ProgressView()
                                     .controlSize(.small)
@@ -981,7 +996,7 @@ private struct ReaderControls: View {
                         Image(systemName: isFavorite ? "star.fill" : "star")
                             .foregroundStyle(isFavorite ? .yellow : .primary)
                             .frame(width: 34, height: 34)
-                            .contentTransition(.symbolEffect(.replace))
+                            .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
                     }
                     .adaptiveGlassButton()
                     .accessibilityLabel(isFavorite ? "取消收藏" : "收藏")
@@ -995,15 +1010,18 @@ private struct ReaderControls: View {
                     .accessibilityIdentifier("reader-settings")
                 }
             }
+            .frame(maxWidth: 960)
             .padding(.horizontal, 14)
+            .frame(maxWidth: .infinity)
             .safeAreaPadding(.top, 8)
 
             Spacer()
 
-            VStack(spacing: 12) {
+            VStack(spacing: 8) {
                 HStack {
                     Label(position.displayLabel, systemImage: isEBook ? "text.book.closed.fill" : "book.pages.fill")
                         .font(.caption.weight(.semibold))
+                        .monospacedDigit()
                         .contentTransition(.numericText())
                         .animation(reduceMotion ? nil : AppMotion.value, value: currentPage)
                         .accessibilityIdentifier("reader-page-label")
@@ -1016,6 +1034,9 @@ private struct ReaderControls: View {
                         .contentTransition(.numericText())
                         .animation(reduceMotion ? nil : AppMotion.value, value: currentPage)
                         .accessibilityIdentifier("reader-progress-percent")
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 5)
+                        .background((nightMood == nil ? AppTheme.accent : AppTheme.coral).opacity(0.12), in: Capsule())
                 }
 
                 ReaderProgressSlider(
@@ -1023,20 +1044,25 @@ private struct ReaderControls: View {
                     range: 0...position.sliderUpperBound,
                     step: isEBook ? 0.01 : 1,
                     isEnabled: isEBook || pageCount > 1,
-                    tintColor: UIColor(nightMood == nil ? AppTheme.accent : AppTheme.coral)
+                    tintColor: UIColor(nightMood == nil ? AppTheme.accent : AppTheme.coral),
+                    onEditingChanged: onScrubbingChanged
                 )
-                .frame(height: 30)
+                .frame(height: 44)
+
+                Rectangle()
+                    .fill(Color.primary.opacity(0.08))
+                    .frame(height: 0.5)
 
                 HStack(spacing: 8) {
                     Button { perform(showThumbnails) } label: {
-                        Image(systemName: isEBook ? "list.bullet.indent" : "square.grid.3x3")
+                        Label(isEBook ? "目录" : "页面总览", systemImage: isEBook ? "list.bullet.indent" : "square.grid.3x3")
                     }
                     .readerActionButton()
                     .accessibilityIdentifier("reader-thumbnails")
                     .accessibilityLabel(isEBook ? "目录" : "缩略图")
 
                     Button { perform(toggleLayout) } label: {
-                        Image(systemName: isEBook ? ebookFlow.systemImage : layout.systemImage)
+                        Label(isEBook ? ebookFlow.title : layout.title, systemImage: isEBook ? ebookFlow.systemImage : layout.systemImage)
                     }
                     .readerActionButton()
                     .accessibilityIdentifier("reader-layout")
@@ -1047,7 +1073,7 @@ private struct ReaderControls: View {
                             if isEnhancingPage {
                                 ProgressView().tint(.primary)
                             } else {
-                                Image(systemName: "wand.and.stars")
+                                Label("清晰化", systemImage: "wand.and.stars")
                             }
                         }
                         .readerActionButton()
@@ -1059,7 +1085,7 @@ private struct ReaderControls: View {
                             if isSavingPage {
                                 ProgressView().tint(.primary)
                             } else {
-                                Image(systemName: "square.and.arrow.down")
+                                Label("保存画面", systemImage: "square.and.arrow.down")
                             }
                         }
                         .readerActionButton()
@@ -1068,17 +1094,18 @@ private struct ReaderControls: View {
                         .accessibilityLabel(isSavingPage ? "正在保存当前页" : "保存当前页到照片")
 
                         Button { perform(togglePageFavorite) } label: {
-                            Image(systemName: isPageFavorite ? "heart.fill" : "heart")
+                            Label(isPageFavorite ? "已珍藏" : "珍藏本页", systemImage: isPageFavorite ? "heart.fill" : "heart")
                                 .foregroundStyle(isPageFavorite ? AppTheme.coral : .primary)
-                                .contentTransition(.symbolEffect(.replace))
+                                .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
                         }
-                        .readerActionButton()
+                        .readerActionButton(isActive: isPageFavorite)
                         .disabled(!canUsePageActions)
                         .accessibilityIdentifier("reader-page-favorite")
                         .accessibilityLabel(isPageFavorite ? "取消收藏当前页" : "收藏当前页")
                     }
                 }
-                .buttonStyle(.plain)
+                .labelStyle(ReaderActionLabelStyle())
+                .buttonStyle(PressableCardStyle())
             }
             .padding(.horizontal, 18)
             .padding(.vertical, 14)
@@ -1092,7 +1119,9 @@ private struct ReaderControls: View {
                     .offset(x: -18, y: -38)
                     .allowsHitTesting(false)
             }
+            .frame(maxWidth: 640)
             .padding(.horizontal, 14)
+            .frame(maxWidth: .infinity)
             .safeAreaPadding(.bottom, 8)
         }
         .foregroundStyle(.primary)
@@ -1113,6 +1142,7 @@ private struct ReaderProgressSlider: UIViewRepresentable {
     let step: Double
     let isEnabled: Bool
     let tintColor: UIColor
+    let onEditingChanged: (Bool) -> Void
 
     func makeCoordinator() -> Coordinator {
         Coordinator(parent: self)
@@ -1123,6 +1153,7 @@ private struct ReaderProgressSlider: UIViewRepresentable {
         slider.isContinuous = true
         slider.accessibilityIdentifier = "reader-progress"
         slider.accessibilityLabel = "阅读进度"
+        slider.addTarget(context.coordinator, action: #selector(Coordinator.beginEditing(_:)), for: .touchDown)
         slider.addTarget(context.coordinator, action: #selector(Coordinator.valueChanged(_:)), for: .valueChanged)
         slider.addTarget(
             context.coordinator,
@@ -1172,10 +1203,15 @@ private struct ReaderProgressSlider: UIViewRepresentable {
             commit(value)
         }
 
+        @objc func beginEditing(_ sender: UISlider) {
+            parent.onEditingChanged(true)
+        }
+
         @objc func commitValue(_ sender: UISlider) {
             let value = parent.snapped(Double(sender.value))
             sender.value = Float(value)
             commit(value)
+            parent.onEditingChanged(false)
         }
 
         private func commit(_ value: Double) {
@@ -1193,6 +1229,7 @@ private struct ReaderAlert: Identifiable {
 }
 
 private struct AchievementUnlockToast: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let achievement: ReadingAchievement
 
     var body: some View {
@@ -1200,7 +1237,7 @@ private struct AchievementUnlockToast: View {
             Image(systemName: achievement.systemImage)
                 .font(.title2)
                 .foregroundStyle(AppTheme.coral)
-                .symbolEffect(.bounce)
+                .symbolEffect(.bounce, isActive: !reduceMotion)
             VStack(alignment: .leading, spacing: 2) {
                 Text("点亮新成就").font(.caption.weight(.bold)).foregroundStyle(AppTheme.coral)
                 Text(achievement.title).font(.headline)
@@ -1229,9 +1266,29 @@ private struct ReaderNoticeToast: View {
 }
 
 private extension View {
-    func readerActionButton() -> some View {
-        frame(maxWidth: .infinity, minHeight: 46)
-            .contentShape(Rectangle())
+    func readerActionButton(isActive: Bool = false) -> some View {
+        frame(maxWidth: .infinity, minHeight: 52)
+            .background(isActive ? AppTheme.coral.opacity(0.12) : Color.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .hoverEffect(.highlight)
+    }
+}
+
+private struct ReaderActionLabelStyle: LabelStyle {
+    @Environment(\.horizontalSizeClass) private var sizeClass
+
+    func makeBody(configuration: Configuration) -> some View {
+        VStack(spacing: 5) {
+            configuration.icon
+                .font(.body.weight(.medium))
+            if sizeClass == .regular {
+                configuration.title
+                    .font(.caption2.weight(.medium))
+                    .lineLimit(1)
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: 52)
+        .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 }
 

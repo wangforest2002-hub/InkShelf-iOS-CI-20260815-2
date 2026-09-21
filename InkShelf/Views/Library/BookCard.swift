@@ -8,6 +8,7 @@ struct BookCard: View {
     let knownCoverAspectRatio: CGFloat?
     let onCoverAspectRatio: ((CGFloat) -> Void)?
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var detectedCoverAspectRatio: CGFloat?
 
     init(
@@ -52,23 +53,25 @@ struct BookCard: View {
                     onAspectRatio: rememberCoverAspectRatio
                 )
                     .aspectRatio(displayedCoverAspectRatio, contentMode: .fit)
-                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                    .shadow(color: AppTheme.wood.opacity(0.20), radius: 10, y: 7)
-                    .overlay(alignment: .bottom) {
-                        Capsule()
-                            .fill(
-                                LinearGradient(
-                                    colors: [AppTheme.wood.opacity(0.72), AppTheme.honey.opacity(0.56)],
-                                    startPoint: .leading,
-                                    endPoint: .trailing
-                                )
-                            )
-                            .frame(height: 6)
-                            .padding(.horizontal, 7)
-                            .offset(y: 5)
-                            .shadow(color: AppTheme.wood.opacity(0.18), radius: 4, y: 3)
+                    .overlay(alignment: .leading) {
+                        LinearGradient(
+                            stops: [
+                                .init(color: .black.opacity(0.20), location: 0),
+                                .init(color: .white.opacity(0.10), location: 0.36),
+                                .init(color: .clear, location: 1)
+                            ],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                            .frame(width: 16)
                             .accessibilityHidden(true)
                     }
+                    .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 15, style: .continuous)
+                            .strokeBorder(.white.opacity(colorScheme == .dark ? 0.10 : 0.24), lineWidth: 0.7)
+                    }
+                    .shadow(color: .black.opacity(colorScheme == .dark ? 0.18 : 0.10), radius: 6, y: 4)
 
                 if book.isFavorite {
                     Image(systemName: "star.fill")
@@ -108,23 +111,26 @@ struct BookCard: View {
                 Text(book.title)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.primary)
-                    .lineLimit(2)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 2, reservesSpace: true)
                     .multilineTextAlignment(.leading)
 
-                HStack(spacing: 5) {
-                    Text(book.kind.label)
-                        .font(.caption2.weight(.bold))
-                        .foregroundStyle(AppTheme.accent)
-                    Text("·")
-                    Text(book.progressLabel)
-                        .lineLimit(1)
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 5) {
+                        kindLabel
+                        Text("·")
+                        Text(book.progressLabel)
+                    }
+                    VStack(alignment: .leading, spacing: 3) {
+                        kindLabel
+                        Text(book.progressLabel)
+                    }
                 }
                 .font(.caption2)
                 .foregroundStyle(.secondary)
 
                 ProgressView(value: book.progress)
                     .tint(book.progress > 0 ? AppTheme.coral : AppTheme.accent)
-                    .scaleEffect(x: 1, y: 0.72, anchor: .center)
+                    .accessibilityHidden(true)
 
                 if book.normalizedHeartRating > 0 || book.normalizedSpiceRating > 0 {
                     HStack(spacing: 8) {
@@ -153,14 +159,28 @@ struct BookCard: View {
         }
         .overlay {
             RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(.white.opacity(0.24), lineWidth: 0.8)
+                .strokeBorder(
+                    LinearGradient(
+                        colors: colorScheme == .dark
+                            ? [.white.opacity(0.16), .white.opacity(0.045)]
+                            : [.white.opacity(0.90), AppTheme.wood.opacity(0.10)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 0.8
+                )
         }
         .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("book-\(book.id.uuidString.lowercased())")
         .accessibilityLabel("\(book.title)，\(book.kind.label)，\(book.progressLabel)")
         .accessibilityValue(isLandscapeCover ? "横版封面" : "竖版封面")
-        .hoverEffect(.lift)
+    }
+
+    private var kindLabel: some View {
+        Text(book.kind.label)
+            .font(.caption2.weight(.bold))
+            .foregroundStyle(AppTheme.accent)
     }
 
     private func rememberCoverAspectRatio(_ ratio: CGFloat) {

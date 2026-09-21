@@ -18,6 +18,7 @@ struct InkShelfApp: App {
                 .environment(updates)
                 .environment(socialImports)
                 .preferredColorScheme(AppAppearance(rawValue: appearance)?.colorScheme)
+                .modifier(AmbientResourcePolicy())
                 .onOpenURL { url in
                     if !socialImports.accept(url) {
                         library.importFiles([url])
