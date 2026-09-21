@@ -9,6 +9,7 @@ final class AppearancePreviewUITests: XCTestCase {
         app.launchArguments = ["INKSHELF_UI_TEST_APPEARANCE"]
         app.launch()
         XCTAssertTrue(app.buttons["appearance-mode-toggle"].waitForExistence(timeout: 15))
+        waitForStableOrientation(isLandscape: false, app: app)
         capture("01-shelf-day", app: app)
 
         let continueReading = app.buttons["library-continue-reading"]
@@ -23,8 +24,10 @@ final class AppearancePreviewUITests: XCTestCase {
         capture("02-shelf-covers", app: app)
         if app.frame.width > 700 {
             XCUIDevice.shared.orientation = .landscapeLeft
+            waitForStableOrientation(isLandscape: true, app: app)
             capture("02b-shelf-landscape", app: app)
             XCUIDevice.shared.orientation = .portrait
+            waitForStableOrientation(isLandscape: false, app: app)
         }
 
         app.buttons["appearance-mode-toggle"].tap()
@@ -55,9 +58,33 @@ final class AppearancePreviewUITests: XCTestCase {
     private func capture(_ name: String, app: XCUIApplication) {
         // Allow short presentation and image decode transitions to settle.
         Thread.sleep(forTimeInterval: 1.2)
-        let attachment = XCTAttachment(screenshot: app.screenshot())
+        // Capture the physical display rather than clipping through the
+        // application's accessibility frame after an orientation change.
+        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
+    }
+
+    private func waitForStableOrientation(isLandscape: Bool, app: XCUIApplication) {
+        var previousFrame = CGRect.null
+        var stableObservations = 0
+        let predicate = NSPredicate { _, _ in
+            let frame = app.frame
+            let matchesOrientation = isLandscape
+                ? frame.width > frame.height
+                : frame.height > frame.width
+            stableObservations = matchesOrientation && frame == previousFrame
+                ? stableObservations + 1
+                : 0
+            previousFrame = frame
+            return stableObservations >= 2
+        }
+        let settled = XCTNSPredicateExpectation(predicate: predicate, object: nil)
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [settled], timeout: 10),
+            .completed,
+            "Application frame did not settle after changing orientation."
+        )
     }
 }

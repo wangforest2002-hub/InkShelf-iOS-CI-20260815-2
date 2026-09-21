@@ -330,7 +330,7 @@ private struct SettingsSectionHeading: View {
     var body: some View {
         Label {
             Text(title)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.primary.opacity(0.82))
         } icon: {
             Image(systemName: symbol)
                 .foregroundStyle(tint)
