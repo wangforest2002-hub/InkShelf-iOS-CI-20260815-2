@@ -9,7 +9,7 @@ on:
         type: boolean
         default: false
       capture_preview:
-        description: Capture appearance previews without running paging tests in quick release mode
+        description: Capture appearance previews only, skipping automated functional tests
         required: false
         type: boolean
         default: false
@@ -71,7 +71,7 @@ jobs:
             -parallel-testing-enabled NO
 
       - name: Run model and reading-restoration tests
-        if: ${{ inputs.quick_release != true }}
+        if: ${{ inputs.quick_release != true && inputs.capture_preview != true }}
         timeout-minutes: 12
         run: |
           set -o pipefail
@@ -87,7 +87,7 @@ jobs:
             -parallel-testing-enabled NO
 
       - name: Run security-scoped copy smoke test
-        if: ${{ inputs.quick_release != true }}
+        if: ${{ inputs.quick_release != true && inputs.capture_preview != true }}
         timeout-minutes: 3
         run: |
           set -o pipefail
@@ -101,7 +101,7 @@ jobs:
             -parallel-testing-enabled NO
 
       - name: Run CBZ, PDF, and folder import smoke test
-        if: ${{ inputs.quick_release != true }}
+        if: ${{ inputs.quick_release != true && inputs.capture_preview != true }}
         timeout-minutes: 4
         run: |
           set -o pipefail
@@ -115,14 +115,14 @@ jobs:
             -parallel-testing-enabled NO
 
       - name: Restart simulator before UI tests
-        if: ${{ inputs.quick_release != true }}
+        if: ${{ inputs.quick_release != true && inputs.capture_preview != true }}
         run: |
           xcrun simctl shutdown "$DEVICE_ID" 2>/dev/null || true
           xcrun simctl boot "$DEVICE_ID"
           xcrun simctl bootstatus "$DEVICE_ID" -b
 
       - name: Run shelf-to-reader and app-navigation UI smoke test
-        if: ${{ inputs.quick_release != true }}
+        if: ${{ inputs.quick_release != true && inputs.capture_preview != true }}
         timeout-minutes: 10
         run: |
           set -o pipefail
@@ -137,7 +137,7 @@ jobs:
             -parallel-testing-enabled NO
 
       - name: Run system document-picker UI smoke test
-        if: ${{ inputs.quick_release != true }}
+        if: ${{ inputs.quick_release != true && inputs.capture_preview != true }}
         timeout-minutes: 5
         run: |
           set -o pipefail
@@ -152,7 +152,7 @@ jobs:
             -parallel-testing-enabled NO
 
       - name: Run iPad long-album page stability test
-        if: ${{ inputs.quick_release != true }}
+        if: ${{ inputs.quick_release != true && inputs.capture_preview != true }}
         timeout-minutes: 12
         run: |
           set -o pipefail
@@ -231,7 +231,7 @@ jobs:
           retention-days: 14
 
       - name: Launch app and capture formal welcome and UI smoke screenshots
-        if: ${{ inputs.quick_release != true }}
+        if: ${{ inputs.quick_release != true && inputs.capture_preview != true }}
         run: |
           APP_PATH="build-simulator/Build/Products/Debug-iphonesimulator/InkShelf.app"
           test -d "$APP_PATH"
@@ -263,7 +263,7 @@ jobs:
           test -s welcome-2-5-ipad.png
 
       - name: Upload UI smoke screenshot
-        if: ${{ inputs.quick_release != true }}
+        if: ${{ inputs.quick_release != true && inputs.capture_preview != true }}
         uses: actions/upload-artifact@v4
         with:
           name: InkShelf-ui-smoke

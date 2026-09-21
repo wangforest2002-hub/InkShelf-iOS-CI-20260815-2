@@ -316,7 +316,15 @@ struct ImageGalleryHubView: View {
             else { return nil }
             return GalleryCoverRatioRequest(id: book.id, url: url)
         }
-        let detected = await Task.detached(priority: .userInitiated) {
+        guard !Task.isCancelled else { return }
+        guard !requests.isEmpty else {
+            withAnimation(reduceMotion ? nil : AppMotion.shelfReveal) {
+                galleryContentVisible = true
+            }
+            return
+        }
+
+        let preparation = Task.detached(priority: .userInitiated) {
             var result: [UUID: CGFloat] = [:]
             for request in requests where !Task.isCancelled {
                 if let ratio = CoverService.aspectRatio(at: request.url) {
@@ -324,16 +332,21 @@ struct ImageGalleryHubView: View {
                 }
             }
             return result
-        }.value
+        }
+        let detected = await withTaskCancellationHandler {
+            await preparation.value
+        } onCancel: {
+            preparation.cancel()
+        }
         guard !Task.isCancelled else { return }
 
         var transaction = Transaction()
         transaction.disablesAnimations = true
         withTransaction(transaction) {
             transientCoverAspectRatios.merge(detected) { _, new in new }
-            galleryContentVisible = reduceMotion
+            if reduceMotion { galleryContentVisible = true }
         }
-        guard !reduceMotion else { return }
+        guard !galleryContentVisible else { return }
         await Task.yield()
         guard !Task.isCancelled else { return }
         withAnimation(AppMotion.shelfReveal) { galleryContentVisible = true }

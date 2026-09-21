@@ -489,7 +489,15 @@ struct LibraryView: View {
             else { return nil }
             return CoverRatioRequest(id: book.id, url: url)
         }
-        let detected = await Task.detached(priority: .userInitiated) {
+        guard !Task.isCancelled else { return }
+        guard !requests.isEmpty else {
+            withAnimation(reduceMotion ? nil : AppMotion.shelfReveal) {
+                shelfContentVisible = true
+            }
+            return
+        }
+
+        let preparation = Task.detached(priority: .userInitiated) {
             var result: [UUID: CGFloat] = [:]
             for request in requests where !Task.isCancelled {
                 if let ratio = CoverService.aspectRatio(at: request.url) {
@@ -497,7 +505,12 @@ struct LibraryView: View {
                 }
             }
             return result
-        }.value
+        }
+        let detected = await withTaskCancellationHandler {
+            await preparation.value
+        } onCancel: {
+            preparation.cancel()
+        }
         guard !Task.isCancelled else { return }
 
         var transaction = Transaction()
@@ -564,6 +577,7 @@ struct LibraryView: View {
                     )
                 }
                 .buttonStyle(PressableCardStyle())
+                .accessibilityIdentifier("library-continue-reading")
                 .frame(maxWidth: .infinity)
             }
 
