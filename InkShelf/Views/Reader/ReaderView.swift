@@ -218,6 +218,7 @@ struct ReaderView: View {
                     onInteraction: showControlsTemporarily,
                     onScrubbingChanged: setProgressScrubbing
                 )
+                .environment(\.colorScheme, .dark)
                 .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.985)))
                 .zIndex(20)
             }

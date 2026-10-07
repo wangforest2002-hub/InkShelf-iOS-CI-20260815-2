@@ -67,18 +67,18 @@ final class TranslationScrollView: UIScrollView, UIScrollViewDelegate {
         regionButtons.removeAll()
         if mode != .original && !selecting {
             for (index, region) in regions.enumerated() {
-                let button = UIButton(type: .custom)
+                let button = TranslationRegionButton(type: .custom)
                 let box = region.box.pixels(in: image.size)
                 let fittedFont = TranslationTypography.font(for: region.translated, in: box.size, imageWidth: image.size.width)
                 let showText = mode == .chinese && !region.translated.isEmpty && fittedFont != nil
-                let fontSize = max(22, image.size.width * 0.015)
+                let fontSize = max(30, image.size.width * 0.026)
                 let title = showText ? region.translated : "\(index + 1)"
                 button.setTitle(title, for: .normal)
                 button.titleLabel?.font = showText ? fittedFont : .systemFont(ofSize: fontSize, weight: .medium)
                 button.titleLabel?.numberOfLines = showText ? 0 : 1
                 button.titleLabel?.adjustsFontSizeToFitWidth = false
                 button.titleLabel?.lineBreakMode = .byTruncatingTail
-                button.backgroundColor = showText ? UIColor(white: 0.98, alpha: 0.98) : UIColor.systemBlue.withAlphaComponent(0.88)
+                button.backgroundColor = showText ? .white : UIColor.systemBlue.withAlphaComponent(0.88)
                 button.setTitleColor(showText ? .black : .white, for: .normal)
                 let badgeSide = fontSize * 1.8
                 button.frame = showText ? box : CGRect(x: box.minX, y: box.minY, width: badgeSide, height: badgeSide)
@@ -148,11 +148,21 @@ final class TranslationScrollView: UIScrollView, UIScrollViewDelegate {
     }
 }
 
+private final class TranslationRegionButton: UIButton {
+    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+        // Keep small numbered regions tappable even while the full page is fitted.
+        let scale = max(0.01, abs(superview?.transform.a ?? 1))
+        let minimumSide = 44 / scale
+        return bounds.insetBy(dx: min(0, (bounds.width - minimumSide) / 2),
+                              dy: min(0, (bounds.height - minimumSide) / 2)).contains(point)
+    }
+}
+
 enum TranslationTypography {
     static func font(for text: String, in size: CGSize, imageWidth: CGFloat) -> UIFont? {
         guard !text.isEmpty, size.width > 12, size.height > 12 else { return nil }
-        let minimum = max(18, imageWidth * 0.014)
-        var pointSize = max(minimum, imageWidth * 0.024)
+        let minimum = max(22, imageWidth * 0.022)
+        var pointSize = max(minimum, imageWidth * 0.036)
         while pointSize >= minimum {
             let font = UIFont.systemFont(ofSize: pointSize, weight: .medium)
             let bounds = (text as NSString).boundingRect(

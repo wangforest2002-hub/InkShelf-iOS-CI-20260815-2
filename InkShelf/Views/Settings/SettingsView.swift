@@ -29,26 +29,26 @@ struct SettingsView: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                if !query.isEmpty && !hasSearchResults {
-                    ContentUnavailableView.search(text: query)
-                }
-                if query.isEmpty && category == .all { overviewSection }
-                if matches(.appearance, keywords: "显示 模式 日间 夜间 外观 主题") { appearanceSection }
-                if matches(.reading, keywords: "阅读 默认 双页 单页 布局 翻页 方向 顺序 动效 背景 常亮 封面") { readerSection }
-                if matches(.reading, keywords: "电子书 字体 主题 阅读 方式") { ebookSection }
-                if matches(.ai, keywords: "日语 中文 图片 翻译 AI 陪读 DeepSeek 密钥 创作") { aiSection }
-                if matches(.collection, keywords: "成就 足迹 记录") { recordsSection }
-                if matches(.ai, keywords: "清晰化 Sharp 图片") { imageToolsSection }
-                if matches(.about, keywords: "应用 更新 版本 在线") { updatesSection }
-                if matches(.storage, keywords: "存储 空间 缓存 重复 检测 隐私 导入") { storageSection }
-                if matches(.about, keywords: "欢迎 版本 材质 正式版") { aboutSection }
-            }
-            .listSectionSpacing(22)
-            .scrollContentBackground(.hidden)
-            .background(AuroraBackground())
-            .safeAreaInset(edge: .leading, spacing: 0) {
+            HStack(spacing: 0) {
                 if availableWidth >= 900 { categoryRail.frame(width: 190) }
+                Form {
+                    if !query.isEmpty && !hasSearchResults {
+                        ContentUnavailableView.search(text: query)
+                    }
+                    if query.isEmpty && category == .all { overviewSection }
+                    if matches(.appearance, keywords: "显示 模式 日间 夜间 外观 主题") { appearanceSection }
+                    if matches(.reading, keywords: "阅读 默认 双页 单页 布局 翻页 方向 顺序 动效 背景 常亮 封面") { readerSection }
+                    if matches(.reading, keywords: "电子书 字体 主题 阅读 方式") { ebookSection }
+                    if matches(.ai, keywords: "日语 中文 图片 翻译 AI 陪读 DeepSeek 密钥 创作") { aiSection }
+                    if matches(.collection, keywords: "成就 足迹 记录") { recordsSection }
+                    if matches(.ai, keywords: "清晰化 Sharp 图片") { imageToolsSection }
+                    if matches(.about, keywords: "应用 更新 版本 在线") { updatesSection }
+                    if matches(.storage, keywords: "存储 空间 缓存 重复 检测 隐私 导入") { storageSection }
+                    if matches(.about, keywords: "欢迎 版本 材质 正式版") { aboutSection }
+                }
+                .listSectionSpacing(22)
+                .scrollContentBackground(.hidden)
+                .background(AuroraBackground())
             }
             .safeAreaInset(edge: .top, spacing: 0) {
                 if availableWidth < 900 { categoryStrip }

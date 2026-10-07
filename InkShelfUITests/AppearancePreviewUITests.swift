@@ -17,6 +17,7 @@ final class AppearancePreviewUITests: XCTestCase {
         XCTAssertTrue(continueReading.waitForExistence(timeout: 5))
         continueReading.tap()
         XCTAssertTrue(app.buttons["reader-close"].waitForExistence(timeout: 10))
+        Thread.sleep(forTimeInterval: 3.6) // Let the first-opening achievement toast finish.
         capture("03-reader-controls", app: app)
         app.buttons["reader-translate"].tap()
         XCTAssertTrue(app.buttons["translation-close"].waitForExistence(timeout: 10))

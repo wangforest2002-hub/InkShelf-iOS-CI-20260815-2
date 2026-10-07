@@ -133,7 +133,7 @@ struct PageTranslationView: View {
                     Button(isSelecting ? "取消框选" : "框选识别", systemImage: "crop") {
                         manualSelection = false; isSelecting.toggle()
                     }.disabled(store.image == nil || store.isBusy)
-                    Button("翻译未完成文字", systemImage: "character.bubble.fill") { store.translate() }
+                    Button("翻译本页", systemImage: "character.bubble.fill") { store.translate() }
                         .disabled(store.regions.isEmpty || store.isBusy || store.completedCount == store.regions.count)
                         .accessibilityIdentifier("translation-start")
                     if store.isBusy { Button("暂停", systemImage: "pause.fill") { store.cancel() } }

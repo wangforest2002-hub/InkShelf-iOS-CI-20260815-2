@@ -119,127 +119,128 @@ struct LibraryView: View {
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                AuroraBackground()
+            HStack(spacing: 0) {
+                if usesSidebar { shelfSidebar.frame(width: 210) }
+                ZStack {
+                    AuroraBackground()
 
-                if books.isEmpty
-                    && !(scope == .favorites && !library.favoritePageItems.isEmpty)
-                    && !keepsShelfVisibleWhenEmpty {
-                    EmptyLibraryView(
-                        scope: scope,
-                        hasSearch: !query.isEmpty,
-                        importAction: { importPicker = .files }
-                    )
-                } else {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 22) {
-                            if query.isEmpty, scope == .all, !usesSidebar {
-                                ShelfGroupStrip(
-                                    selection: shelfFilterSelection,
-                                    groups: library.shelfGroups,
-                                    totalCount: library.books.count,
-                                    ungroupedCount: library.books.filter { $0.shelfGroupID == nil }.count,
-                                    countForGroup: library.bookCount(inShelfGroup:),
-                                    create: { groupEditor = .create },
-                                    rename: { groupEditor = .rename($0) },
-                                    delete: { pendingGroupDeletion = $0 }
-                                )
-                            }
+                    if books.isEmpty
+                        && !(scope == .favorites && !library.favoritePageItems.isEmpty)
+                        && !keepsShelfVisibleWhenEmpty {
+                        EmptyLibraryView(
+                            scope: scope,
+                            hasSearch: !query.isEmpty,
+                            importAction: { importPicker = .files }
+                        )
+                    } else {
+                        ScrollView {
+                            VStack(alignment: .leading, spacing: 22) {
+                                if query.isEmpty, scope == .all, !usesSidebar {
+                                    ShelfGroupStrip(
+                                        selection: shelfFilterSelection,
+                                        groups: library.shelfGroups,
+                                        totalCount: library.books.count,
+                                        ungroupedCount: library.books.filter { $0.shelfGroupID == nil }.count,
+                                        countForGroup: library.bookCount(inShelfGroup:),
+                                        create: { groupEditor = .create },
+                                        rename: { groupEditor = .rename($0) },
+                                        delete: { pendingGroupDeletion = $0 }
+                                    )
+                                }
 
-                            VStack(alignment: .leading, spacing: 18) {
-                                if query.isEmpty, scope == .all {
-                                    if shelfFilter == .all {
-                                        HomeWelcomeHeader(
-                                            bookCount: library.books.count,
-                                            favoriteCount: library.books.filter(\.isFavorite).count
+                                VStack(alignment: .leading, spacing: 18) {
+                                    if query.isEmpty, scope == .all {
+                                        if shelfFilter == .all {
+                                            HomeWelcomeHeader(
+                                                bookCount: library.books.count,
+                                                favoriteCount: library.books.filter(\.isFavorite).count
+                                            )
+
+                                            homeActivityCards
+                                            Button {
+                                                withAnimation(reduceMotion ? nil : AppMotion.panel) { showFootprints.toggle() }
+                                            } label: {
+                                                Label(showFootprints ? "收起回家足迹" : "回家足迹 · Lv.\(achievements.homeLevel) · 展开", systemImage: showFootprints ? "chevron.up" : "medal.star")
+                                                    .font(.caption).foregroundStyle(.secondary)
+                                            }.buttonStyle(.plain)
+                                        }
+                                    } else if query.isEmpty, scope == .favorites {
+                                        LibrarySectionHeading(
+                                            title: "珍藏角落",
+                                            subtitle: "整本与单页，都替你安静收在这里",
+                                            symbol: "star.fill"
                                         )
-
-                                        homeActivityCards
-                                        Button {
-                                            withAnimation(reduceMotion ? nil : AppMotion.panel) { showFootprints.toggle() }
-                                        } label: {
-                                            Label(showFootprints ? "收起回家足迹" : "回家足迹 · Lv.\(achievements.homeLevel) · 展开", systemImage: showFootprints ? "chevron.up" : "medal.star")
-                                                .font(.caption).foregroundStyle(.secondary)
-                                        }.buttonStyle(.plain)
                                     }
-                                } else if query.isEmpty, scope == .favorites {
-                                    LibrarySectionHeading(
-                                        title: "珍藏角落",
-                                        subtitle: "整本与单页，都替你安静收在这里",
-                                        symbol: "star.fill"
-                                    )
-                                }
 
-                                if scope == .favorites && !library.favoritePageItems.isEmpty && query.isEmpty {
-                                    FavoritePageGrid(items: library.favoritePageItems) { item in
-                                        var target = item.book
-                                        target.currentPage = item.page
-                                        open(target)
-                                    }
-                                }
-
-                                if !books.isEmpty {
-                                    LibrarySectionHeading(
-                                        title: sectionTitle,
-                                        subtitle: sectionSubtitle,
-                                        symbol: sectionSymbol
-                                    )
-
-                                    LazyVStack(spacing: gridDensity == .compact ? 18 : 24) {
-                                        ForEach(shelfRows) { row in
-                                            ShelfBookRowLayout(
-                                                columns: shelfColumnCount,
-                                                spacing: shelfGridSpacing
-                                            ) {
-                                                ForEach(row.items) { item in
-                                                    shelfBookButton(item.book)
-                                                        .shelfColumnSpan(item.span)
-                                                }
-                                            }
-                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                    if scope == .favorites && !library.favoritePageItems.isEmpty && query.isEmpty {
+                                        FavoritePageGrid(items: library.favoritePageItems) { item in
+                                            var target = item.book
+                                            target.currentPage = item.page
+                                            open(target)
                                         }
                                     }
-                                } else if keepsShelfVisibleWhenEmpty {
-                                    EmptyShelfGroupCard(createGroup: false)
+
+                                    if !books.isEmpty {
+                                        LibrarySectionHeading(
+                                            title: sectionTitle,
+                                            subtitle: sectionSubtitle,
+                                            symbol: sectionSymbol
+                                        )
+
+                                        LazyVStack(spacing: gridDensity == .compact ? 18 : 24) {
+                                            ForEach(shelfRows) { row in
+                                                ShelfBookRowLayout(
+                                                    columns: shelfColumnCount,
+                                                    spacing: shelfGridSpacing
+                                                ) {
+                                                    ForEach(row.items) { item in
+                                                        shelfBookButton(item.book)
+                                                            .shelfColumnSpan(item.span)
+                                                    }
+                                                }
+                                                .frame(maxWidth: .infinity, alignment: .leading)
+                                            }
+                                        }
+                                    } else if keepsShelfVisibleWhenEmpty {
+                                        EmptyShelfGroupCard(createGroup: false)
+                                    }
                                 }
+                                .opacity(shelfContentOpacity)
+                                .offset(y: reduceMotion || shelfContentVisible ? 0 : 3)
+                                .id(shelfPresentationID)
                             }
-                            .opacity(shelfContentOpacity)
-                            .offset(y: reduceMotion || shelfContentVisible ? 0 : 3)
-                            .id(shelfPresentationID)
+                            .padding(.horizontal, 18)
+                            .padding(.top, 12)
+                            .padding(.bottom, 110)
+                            // A horizontally scrolling group strip and a wide
+                            // welcome card must never define the width of the
+                            // vertical shelf. Otherwise compact devices can lay
+                            // out extra grid columns beyond the visible viewport.
+                            .containerRelativeFrame(.horizontal, alignment: .leading)
                         }
-                        .padding(.horizontal, 18)
-                        .padding(.top, 12)
-                        .padding(.bottom, 110)
-                        // A horizontally scrolling group strip and a wide
-                        // welcome card must never define the width of the
-                        // vertical shelf. Otherwise compact devices can lay
-                        // out extra grid columns beyond the visible viewport.
-                        .containerRelativeFrame(.horizontal, alignment: .leading)
+                        .scrollIndicators(.hidden)
+                        .scrollDismissesKeyboard(.interactively)
+                        .task(id: shelfPresentationID) {
+                            await prepareShelfPresentation()
+                        }
                     }
-                    .scrollIndicators(.hidden)
-                    .scrollDismissesKeyboard(.interactively)
-                    .task(id: shelfPresentationID) {
-                        await prepareShelfPresentation()
-                    }
-                }
 
-                if library.isImporting {
-                    ImportOverlay(status: library.importStatusText)
-                        .transition(.scale(scale: 0.92).combined(with: .opacity))
-                }
-
-                if let notice = library.importNotice, !library.isImporting {
-                    VStack {
-                        ImportSuccessToast(text: notice)
-                            .padding(.top, 8)
-                        Spacer()
+                    if library.isImporting {
+                        ImportOverlay(status: library.importStatusText)
+                            .transition(.scale(scale: 0.92).combined(with: .opacity))
                     }
-                    .transition(.move(edge: .top).combined(with: .opacity))
-                    .allowsHitTesting(false)
+
+                    if let notice = library.importNotice, !library.isImporting {
+                        VStack {
+                            ImportSuccessToast(text: notice)
+                                .padding(.top, 8)
+                            Spacer()
+                        }
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                        .allowsHitTesting(false)
+                    }
                 }
-            }
-            .safeAreaInset(edge: .leading, spacing: 0) {
-                if usesSidebar { shelfSidebar.frame(width: 210) }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .safeAreaInset(edge: .bottom) {
                 if isSelectingBooks { selectionBar }
