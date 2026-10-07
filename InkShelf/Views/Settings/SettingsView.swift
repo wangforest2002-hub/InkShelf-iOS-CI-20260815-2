@@ -50,7 +50,6 @@ struct SettingsView: View {
             .safeAreaInset(edge: .leading, spacing: 0) {
                 if availableWidth >= 900 { categoryRail.frame(width: 190) }
             }
-            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { availableWidth = $0 }
             .safeAreaInset(edge: .top, spacing: 0) {
                 if availableWidth < 900 { categoryStrip }
             }
@@ -58,6 +57,7 @@ struct SettingsView: View {
             .searchable(text: $query, prompt: "搜索设置，例如翻译、背景、缓存")
             .sensoryFeedback(.selection, trigger: appearance)
         }
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { availableWidth = $0 }
         .fullScreenCover(isPresented: $showingWelcome) {
             WelcomeView {
                 hasSeenWelcome = true

@@ -241,7 +241,6 @@ struct LibraryView: View {
             .safeAreaInset(edge: .leading, spacing: 0) {
                 if usesSidebar { shelfSidebar.frame(width: 210) }
             }
-            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { availableWidth = $0 }
             .safeAreaInset(edge: .bottom) {
                 if isSelectingBooks { selectionBar }
             }
@@ -348,6 +347,9 @@ struct LibraryView: View {
                     .navigationTransition(.zoom(sourceID: book.id, in: coverTransition))
             }
         }
+        // Measure outside the navigation content: inserting a sidebar must not
+        // change the width used to decide whether that sidebar is visible.
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { availableWidth = $0 }
         .environment(\.ambientMotionEnabled, ambientMotionEnabled && openedBook == nil)
         .sheet(item: $importPicker) { picker in
             DocumentPickerView(

@@ -189,10 +189,11 @@ jobs:
 
       - name: Capture iPad and iPhone appearance previews
         if: ${{ inputs.capture_preview == true }}
-        timeout-minutes: 18
+        timeout-minutes: 24
         run: |
           set -o pipefail
-          for DESTINATION in "$IPAD_DEVICE_ID" "$DEVICE_ID"; do
+          CAPTURE_STATUS=0
+          for DESTINATION in "$DEVICE_ID" "$IPAD_DEVICE_ID"; do
             xcrun simctl shutdown all 2>/dev/null || true
             xcrun simctl boot "$DESTINATION"
             xcrun simctl bootstatus "$DESTINATION" -b
@@ -205,11 +206,14 @@ jobs:
               -derivedDataPath build-simulator \
               -resultBundlePath "appearance-$DESTINATION.xcresult" \
               -only-testing:InkShelfUITests/AppearancePreviewUITests \
-              -parallel-testing-enabled NO
+              -parallel-testing-enabled NO || CAPTURE_STATUS=$?
             xcrun xcresulttool export attachments \
               --path "appearance-$DESTINATION.xcresult" \
-              --output-path "appearance-previews/$DESTINATION"
+              --output-path "appearance-previews/$DESTINATION" || true
+            mkdir -p "appearance-previews/$DESTINATION"
+            xcrun simctl io "$DESTINATION" screenshot "appearance-previews/$DESTINATION/final-display.png" || true
           done
+          exit "$CAPTURE_STATUS"
 
       - name: Upload appearance previews
         if: ${{ always() && inputs.capture_preview == true }}
