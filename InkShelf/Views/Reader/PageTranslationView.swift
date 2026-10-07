@@ -23,6 +23,7 @@ struct PageTranslationView: View {
     @State private var previewOriginal = false
     @State private var exportURL: URL?
     @State private var exporting = false
+    @State private var exportGeneration = UUID()
 
     init(book: Book, pages: [TranslationPageInput]) {
         self.book = book; self.pages = pages
@@ -80,7 +81,7 @@ struct PageTranslationView: View {
                 }
                 ToolbarItem(placement: .primaryAction) {
                     Menu {
-                        Button("翻译与陪读设置", systemImage: "gearshape") { showingSettings = true }
+                        Button("翻译与陪读设置", systemImage: "gearshape") { store.cancel(); showingSettings = true }
                         Button("框选并手动添加", systemImage: "pencil.and.outline") {
                             manualSelection = true; isSelecting = true
                         }.disabled(store.image == nil || store.isBusy)
@@ -91,7 +92,7 @@ struct PageTranslationView: View {
                 }
             }
             .task(id: selectedPage) {
-                isSelecting = false; exportURL = nil
+                isSelecting = false; exportURL = nil; exporting = false; exportGeneration = UUID()
                 guard let input = pages.first(where: { $0.page == selectedPage }) else { return }
                 store.open(source: input.source, page: input.page, bookID: book.id)
             }
@@ -215,6 +216,7 @@ struct PageTranslationView: View {
         exporting = true
         let regions = store.regions
         let page = selectedPage
+        let token = exportGeneration
         Task {
             let result = await Task.detached(priority: .utility) {
                 let format = UIGraphicsImageRendererFormat(); format.scale = 1; format.opaque = true
@@ -252,6 +254,7 @@ struct PageTranslationView: View {
                     return url
                 } catch { return nil }
             }.value
+            guard exportGeneration == token, selectedPage == page else { return }
             exportURL = result; exporting = false
         }
     }
@@ -272,7 +275,7 @@ private struct TranslationEditor: View {
             Form {
                 Section("日文原文") { TextEditor(text: $source).frame(minHeight: 100) }
                 Section("中文译文") { TextEditor(text: $translated).frame(minHeight: 140) }
-                Text("修改会保存在这一页。若只校正了原文，可清空译文，再点“翻译此处”。")
+                Text("修改会保存在这一页。只修改原文时，旧译文会清空，可再点“翻译此处”。")
                     .font(.footnote).foregroundStyle(.secondary)
             }
             .navigationTitle("校对这段文字")

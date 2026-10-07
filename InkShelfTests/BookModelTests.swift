@@ -21,7 +21,7 @@ final class BookModelTests: XCTestCase {
                 lastSeenRelease: "2.4",
                 showOnMajorUpdate: true
             ),
-            "An existing user should see the 2.5 major-version tour once"
+            "An existing user should see the current major-version tour once"
         )
         XCTAssertFalse(
             WelcomePresentationPolicy.shouldPresent(

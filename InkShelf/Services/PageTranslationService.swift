@@ -13,6 +13,7 @@ struct PreparedTranslationPage: @unchecked Sendable {
 /// Separate from the companion: no face detection, classification or page summaries.
 actor PageTranslationService {
     static let shared = PageTranslationService()
+    private var deletedBookIDs: Set<String> = []
 
     func prepare(source: AIPageSource, page: Int, bookID: UUID) throws -> PreparedTranslationPage {
         try Task.checkCancellation()
@@ -90,8 +91,20 @@ actor PageTranslationService {
     }
 
     func save(_ document: PageTranslationDocument, key: String) throws {
+        guard !deletedBookIDs.contains(String(key.prefix(36))) else { return }
         let data = try JSONEncoder().encode(document)
         try data.write(to: fileURL(key: key), options: .atomic)
+    }
+
+    func removeRecords(bookID: UUID) throws {
+        let prefix = bookID.uuidString + "-"
+        deletedBookIDs.insert(bookID.uuidString)
+        let folder = try fileURL(key: "placeholder").deletingLastPathComponent()
+        for url in try FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil) {
+            if url.pathExtension == "json", url.lastPathComponent.hasPrefix(prefix) {
+                try FileManager.default.removeItem(at: url)
+            }
+        }
     }
 
     private func fileURL(key: String) throws -> URL {

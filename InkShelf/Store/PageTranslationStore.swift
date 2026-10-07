@@ -129,8 +129,11 @@ final class PageTranslationStore {
 
     func edit(id: String, source: String, translated: String) {
         guard !isBusy, let index = regions.firstIndex(where: { $0.id == id }) else { return }
-        regions[index].source = source.trimmingCharacters(in: .whitespacesAndNewlines)
-        regions[index].translated = translated.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanedSource = source.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanedTranslation = translated.trimmingCharacters(in: .whitespacesAndNewlines)
+        let changedOnlySource = cleanedSource != regions[index].source && cleanedTranslation == regions[index].translated
+        regions[index].source = cleanedSource
+        regions[index].translated = changedOnlySource ? "" : cleanedTranslation
         regions[index].isEdited = true
         persist()
     }

@@ -3,6 +3,48 @@ import UIKit
 @testable import InkShelf
 
 final class TranslationTests: XCTestCase {
+    func testOldLibraryWithoutCoverFocusRemainsReadable() throws {
+        let book = Book(title: "旧书", kind: .imageCollection, sourceFileName: "old", contentRelativePath: "old/pages", pageCount: 2, fileSize: 0)
+        let data = try JSONEncoder().encode(book)
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        json.removeValue(forKey: "coverFocus")
+        let restored = try JSONDecoder().decode(Book.self, from: JSONSerialization.data(withJSONObject: json))
+        XCTAssertEqual(restored.id, book.id)
+        XCTAssertNil(restored.coverFocus)
+    }
+
+    func testLongTranslationFallsBackToMarkerInsteadOfClipping() {
+        XCTAssertNil(TranslationTypography.font(for: String(repeating: "很长的译文", count: 50),
+                                                in: CGSize(width: 80, height: 30), imageWidth: 1000))
+        XCTAssertNotNil(TranslationTypography.font(for: "一起回家吧", in: CGSize(width: 500, height: 180), imageWidth: 1000))
+    }
+
+    func testDeletingBookTranslationRecordsKeepsOtherBookAndRejectsLateSave() async throws {
+        let first = UUID(), other = UUID()
+        let key = first.uuidString + "-0-test"
+        let otherKey = other.uuidString + "-0-test"
+        let document = PageTranslationDocument(regions: [region("a")])
+        try await PageTranslationService.shared.save(document, key: key)
+        try await PageTranslationService.shared.save(document, key: otherKey)
+        try await PageTranslationService.shared.removeRecords(bookID: first)
+        try await PageTranslationService.shared.save(document, key: key)
+        let deleted = await PageTranslationService.shared.load(key: key)
+        let retained = await PageTranslationService.shared.load(key: otherKey)
+        XCTAssertNil(deleted)
+        XCTAssertNotNil(retained)
+        try await PageTranslationService.shared.removeRecords(bookID: other)
+    }
+
+    func testCompanionHistoryNeverIncludesAnotherBookOrUnreadPages() {
+        let first = UUID(), second = UUID()
+        let own = AIPageReaction(page: 1, summary: "本书", mood: "", danmaku: [], talkingPoints: [])
+        let foreign = AIPageReaction(page: 0, summary: "另一册", mood: "", danmaku: [], talkingPoints: [])
+        let future = AIPageReaction(page: 8, summary: "尚未读到", mood: "", danmaku: [], talkingPoints: [])
+        let cache = ["\(first)-1-pro": own, "\(second)-0-pro": foreign, "\(first)-8-pro": future]
+        XCTAssertEqual(AIReadingHistory.reactions(for: first, before: 3, from: cache).map(\.summary), ["本书"])
+        XCTAssertEqual(AIReadingHistory.reactions(for: second, from: cache).map(\.summary), ["另一册"])
+    }
+
     func testSelectionClampsToImageAndMapsToPixels() {
         let box = TranslationBox(CGRect(x: -0.1, y: 0.2, width: 0.5, height: 1))
         XCTAssertEqual(box.rect, CGRect(x: 0, y: 0.2, width: 0.4, height: 0.8))

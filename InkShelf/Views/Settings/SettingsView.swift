@@ -30,12 +30,15 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
+                if !query.isEmpty && !hasSearchResults {
+                    ContentUnavailableView.search(text: query)
+                }
                 if query.isEmpty && category == .all { overviewSection }
                 if matches(.appearance, keywords: "显示 模式 日间 夜间 外观 主题") { appearanceSection }
                 if matches(.reading, keywords: "阅读 默认 双页 单页 布局 翻页 方向 顺序 动效 背景 常亮 封面") { readerSection }
                 if matches(.reading, keywords: "电子书 字体 主题 阅读 方式") { ebookSection }
                 if matches(.ai, keywords: "日语 中文 图片 翻译 AI 陪读 DeepSeek 密钥 创作") { aiSection }
-                if matches(.collection, keywords: "成就 足迹 记录 存储 本地") { recordsSection }
+                if matches(.collection, keywords: "成就 足迹 记录") { recordsSection }
                 if matches(.ai, keywords: "清晰化 Sharp 图片") { imageToolsSection }
                 if matches(.about, keywords: "应用 更新 版本 在线") { updatesSection }
                 if matches(.storage, keywords: "存储 空间 缓存 重复 检测 隐私 导入") { storageSection }
@@ -185,16 +188,7 @@ struct SettingsView: View {
                     }
                     .accessibilityIdentifier("settings-achievements")
 
-                    NavigationLink {
-                        StorageManagerView()
-                    } label: {
-                        LabeledContent {
-                            Text(AppFormatters.fileSize(library.storageUsage))
-                                .foregroundStyle(.secondary)
-                        } label: {
-                            SettingsRowLabel(title: "本地存储管家", symbol: "externaldrive.fill", tint: AppTheme.accent)
-                        }
-                    }
+
                 } header: {
                     SettingsSectionHeading(title: "小家记录", symbol: "house.fill", tint: AppTheme.wood)
                 }
@@ -236,6 +230,16 @@ struct SettingsView: View {
 
     private var storageSection: some View {
         Section {
+                    NavigationLink {
+                        StorageManagerView()
+                    } label: {
+                        LabeledContent {
+                            Text(AppFormatters.fileSize(library.storageUsage))
+                                .foregroundStyle(.secondary)
+                        } label: {
+                            SettingsRowLabel(title: "本地存储管家", symbol: "externaldrive.fill", tint: AppTheme.accent)
+                        }
+                    }
                     LabeledContent("源文件占用") {
                         Text(AppFormatters.fileSize(library.storageUsage))
                     }
@@ -288,6 +292,13 @@ struct SettingsView: View {
                 } footer: {
                     Text("只在 3.0 这类大版本首次启动时展示；普通修复更新不会反复打扰。也可以随时从这里重新查看。")
                 }
+    }
+
+    private var hasSearchResults: Bool {
+        ["显示 模式 日间 夜间 外观 主题", "阅读 默认 双页 单页 布局 翻页 方向 顺序 动效 背景 常亮 封面",
+         "电子书 字体 主题 阅读 方式", "日语 中文 图片 翻译 AI 陪读 DeepSeek 密钥 创作", "成就 足迹 记录",
+         "清晰化 Sharp 图片", "应用 更新 版本 在线", "存储 空间 缓存 重复 检测 隐私 导入", "欢迎 版本 材质 正式版"]
+            .contains { $0.localizedStandardContains(query.trimmingCharacters(in: .whitespacesAndNewlines)) }
     }
 
     private func matches(_ target: SettingsCategory, keywords: String) -> Bool {

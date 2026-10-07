@@ -24,6 +24,7 @@ final class AICompanionStore {
     @ObservationIgnored private var discussionTask: Task<Void, Never>?
     @ObservationIgnored private var pageGeneration = UUID()
     @ObservationIgnored private var discussionGeneration = UUID()
+    @ObservationIgnored private var chatGeneration = UUID()
     @ObservationIgnored private var requestContext: RequestContext?
     @ObservationIgnored private var reactions: [String: AIPageReaction] = [:]
 
@@ -77,6 +78,11 @@ final class AICompanionStore {
         source: AIPageSource,
         force: Bool = false
     ) {
+        if currentBookID != book.id {
+            chatMessages = []
+            endDiscussion = nil
+        }
+        chatGeneration = UUID()
         currentBookID = book.id
         currentPage = page
         currentReaction = nil
@@ -134,6 +140,8 @@ final class AICompanionStore {
     func ask(_ question: String) async {
         let trimmed = question.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, let context = requestContext, let key = apiKey else { return }
+        chatGeneration = UUID()
+        let generation = chatGeneration
         chatMessages.append(AIChatMessage(role: .user, text: trimmed))
         activity = .answering
         errorMessage = nil
@@ -147,19 +155,21 @@ final class AICompanionStore {
                 conversation: chatMessages,
                 settings: requestSettings
             )
-            guard currentBookID == context.book.id else { return }
+            guard chatGeneration == generation, currentBookID == context.book.id, currentPage == context.page else { return }
             chatMessages.append(AIChatMessage(role: .companion, text: answer))
         } catch {
+            guard chatGeneration == generation, currentBookID == context.book.id, currentPage == context.page else { return }
             errorMessage = error.localizedDescription
             chatMessages.append(AIChatMessage(
                 role: .companion,
                 text: "云端刚刚没有回应。问题已经保留，网络恢复后可以再发一次，我仍会陪你看这一页。"
             ))
         }
-        activity = .idle
+        if chatGeneration == generation { activity = .idle }
     }
 
     func clearConversation() {
+        chatGeneration = UUID()
         chatMessages = []
     }
 
@@ -195,6 +205,7 @@ final class AICompanionStore {
     }
 
     func clearCachedContent() async {
+        cancelAll()
         do {
             try await AIResponseCache.shared.clear()
             reactions = [:]
@@ -212,6 +223,7 @@ final class AICompanionStore {
         discussionTask?.cancel()
         pageGeneration = UUID()
         discussionGeneration = UUID()
+        chatGeneration = UUID()
         activity = .idle
     }
 
@@ -282,10 +294,7 @@ final class AICompanionStore {
         currentInsight = insight
 
         do {
-            let recent = reactions.filter { $0.key.hasPrefix(context.book.id.uuidString + "-") }
-                .map(\.value)
-                .filter { $0.page < context.page }
-                .sorted { $0.page < $1.page }
+            let recent = AIReadingHistory.reactions(for: context.book.id, before: context.page, from: reactions)
             let reaction = try await DeepSeekService.shared.pageReaction(
                 apiKey: key,
                 bookTitle: context.book.title,
@@ -330,7 +339,7 @@ final class AICompanionStore {
 
         activity = .generatingDiscussion
         do {
-            let recent = reactions.filter { $0.key.hasPrefix(context.book.id.uuidString + "-") }.map(\.value).sorted { $0.page < $1.page }
+            let recent = AIReadingHistory.reactions(for: context.book.id, from: reactions)
             let discussion = try await DeepSeekService.shared.endDiscussion(
                 apiKey: key,
                 bookTitle: context.book.title,

@@ -13,6 +13,11 @@ on:
         required: false
         type: boolean
         default: false
+      verify_translation:
+        description: Run focused translation checks without page-turn tests
+        required: false
+        type: boolean
+        default: false
   push:
     branches: [main]
     paths:
@@ -46,7 +51,7 @@ jobs:
             -scheme InkShelf
 
       - name: Select available iPhone and iPad Simulators
-        if: ${{ inputs.quick_release != true || inputs.capture_preview == true }}
+        if: ${{ inputs.quick_release != true || inputs.capture_preview == true || inputs.verify_translation == true }}
         run: |
           DEVICE_ID=$(xcrun simctl list devices available --json | python3 -c 'import json,sys; data=json.load(sys.stdin); print(next(device["udid"] for runtime in data["devices"].values() for device in runtime if device.get("isAvailable") and device["name"].startswith("iPhone")))')
           IPAD_DEVICE_ID=$(xcrun simctl list devices available --json | python3 -c 'import json,sys; data=json.load(sys.stdin); print(next(device["udid"] for runtime in data["devices"].values() for device in runtime if device.get("isAvailable") and device["name"].startswith("iPad")))')
@@ -59,7 +64,7 @@ jobs:
           echo "IPAD_DEVICE_ID=$IPAD_DEVICE_ID" >> "$GITHUB_ENV"
 
       - name: Build the simulator test bundle
-        if: ${{ inputs.quick_release != true || inputs.capture_preview == true }}
+        if: ${{ inputs.quick_release != true || inputs.capture_preview == true || inputs.verify_translation == true }}
         run: |
           set -o pipefail
           xcodebuild build-for-testing \
@@ -170,7 +175,7 @@ jobs:
             -parallel-testing-enabled NO
 
       - name: Verify translation geometry, persistence, and local Japanese OCR
-        if: ${{ inputs.capture_preview == true }}
+        if: ${{ inputs.capture_preview == true || inputs.verify_translation == true }}
         timeout-minutes: 6
         run: |
           xcodebuild test-without-building \
@@ -216,7 +221,7 @@ jobs:
           retention-days: 30
 
       - name: Freeze UI test diagnostics
-        if: ${{ always() && (inputs.quick_release != true || inputs.capture_preview == true) }}
+        if: ${{ always() && (inputs.quick_release != true || inputs.capture_preview == true || inputs.verify_translation == true) }}
         run: |
           for BUNDLE in \
             ui-tests.xcresult \
@@ -229,7 +234,7 @@ jobs:
           done
 
       - name: Upload UI test diagnostics
-        if: ${{ always() && (inputs.quick_release != true || inputs.capture_preview == true) }}
+        if: ${{ always() && (inputs.quick_release != true || inputs.capture_preview == true || inputs.verify_translation == true) }}
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:

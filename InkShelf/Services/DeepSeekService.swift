@@ -9,7 +9,7 @@ struct DeepSeekPageSettings: Sendable {
     let allowsCellularAccess: Bool
 
     var cacheVariant: String {
-        [model.rawValue, persona.rawValue, density.rawValue, strictSpoilers ? "strict" : "context", includeRecognizedText ? "ocr" : "noocr"]
+        ["v3-scoped", model.modelID, persona.rawValue, density.rawValue, strictSpoilers ? "strict" : "context", includeRecognizedText ? "ocr" : "noocr"]
             .joined(separator: "-")
     }
 }

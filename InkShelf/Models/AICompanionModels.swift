@@ -1,12 +1,23 @@
 import Foundation
 
+enum AIReadingHistory {
+    static func reactions(for bookID: UUID, before page: Int? = nil,
+                          from cache: [String: AIPageReaction]) -> [AIPageReaction] {
+        let scoped = cache.filter { $0.key.hasPrefix(bookID.uuidString + "-") }.map(\.value)
+            .filter { page == nil || $0.page < page! }
+        return Dictionary(grouping: scoped, by: \.page).values
+            .compactMap { $0.max { $0.createdAt < $1.createdAt } }
+            .sorted { $0.page < $1.page }
+    }
+}
+
 enum AIModelChoice: String, CaseIterable, Identifiable, Codable, Sendable {
     case flash
     case pro
 
     var id: String { rawValue }
-    var modelID: String { self == .flash ? "deepseek-v4-flash" : "deepseek-v4-pro" }
-    var title: String { self == .flash ? "V4 Flash" : "V4 Pro" }
+    var modelID: String { self == .flash ? "deepseek-flash" : "deepseek-v4-pro" }
+    var title: String { self == .flash ? "V4.1 Flash" : "V4 Pro" }
     var detail: String { self == .flash ? "翻页更快、费用更低" : "评论更细腻、响应稍慢" }
 }
 

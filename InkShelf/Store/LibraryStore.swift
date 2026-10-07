@@ -958,6 +958,10 @@ final class LibraryStore {
             measuredStorageSizes.removeValue(forKey: book.id)
             endReading(book.id)
             saveImmediately()
+            Task {
+                do { try await PageTranslationService.shared.removeRecords(bookID: book.id) }
+                catch { alert = LibraryAlert(title: "书籍已删除", message: "对应译文暂未清理：\(error.localizedDescription)") }
+            }
         } catch {
             alert = LibraryAlert(title: "无法删除", message: error.localizedDescription)
         }
