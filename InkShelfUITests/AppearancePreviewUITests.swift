@@ -18,6 +18,13 @@ final class AppearancePreviewUITests: XCTestCase {
         continueReading.tap()
         XCTAssertTrue(app.buttons["reader-close"].waitForExistence(timeout: 10))
         capture("03-reader-controls", app: app)
+        app.buttons["reader-translate"].tap()
+        XCTAssertTrue(app.buttons["translation-close"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.descendants(matching: .any)["translation-canvas"].waitForExistence(timeout: 15))
+        capture("08-translation-comparison", app: app)
+        app.segmentedControls["translation-mode"].buttons["中文"].tap()
+        capture("09-translation-chinese", app: app)
+        app.buttons["translation-close"].tap()
         app.buttons["reader-close"].tap()
 
         app.swipeUp()

@@ -216,12 +216,23 @@ struct CoverArtwork: View {
         self.onAspectRatio = onAspectRatio
     }
 
+    private var coverAlignment: Alignment {
+        guard contentMode == .fill else { return .center }
+        switch book.coverFocus {
+        case "top": return .top
+        case "bottom": return .bottom
+        case "leading": return .leading
+        case "trailing": return .trailing
+        default: return .center
+        }
+    }
+
     private var sourceURL: URL? { coverURL ?? previewURLs.first }
 
     var body: some View {
         Group {
             if let decodedImage {
-                AdaptiveCoverImage(image: Image(uiImage: decodedImage), contentMode: contentMode)
+                AdaptiveCoverImage(image: Image(uiImage: decodedImage), contentMode: contentMode, alignment: coverAlignment)
             } else {
                 PlaceholderCover(book: book)
             }
@@ -256,11 +267,13 @@ enum ShelfCoverLayout {
 /// Displays artwork without stretching. Shelf cards use a gentle center crop
 /// for a consistent rhythm; larger previews keep the full composition visible.
 struct AdaptiveCoverImage: View {
+    let alignment: Alignment
     let image: Image
     let contentMode: ContentMode
     @Environment(\.colorScheme) private var colorScheme
 
-    init(image: Image, contentMode: ContentMode = .fit) {
+    init(image: Image, contentMode: ContentMode = .fit, alignment: Alignment = .center) {
+        self.alignment = alignment
         self.image = image
         self.contentMode = contentMode
     }
@@ -279,7 +292,7 @@ struct AdaptiveCoverImage: View {
                 image
                     .resizable()
                     .aspectRatio(contentMode: contentMode)
-                    .frame(width: proxy.size.width, height: proxy.size.height)
+                    .frame(width: proxy.size.width, height: proxy.size.height, alignment: alignment)
                     .shadow(color: .black.opacity(0.10), radius: 4, y: 1)
             }
         }

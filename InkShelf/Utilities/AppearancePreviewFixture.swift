@@ -16,7 +16,8 @@ enum AppearancePreviewFixture {
             let landscape = index == 1 || index == 4
             let data = artwork(title: title, index: index, landscape: landscape)
             for page in 1...12 {
-                try data.write(to: pages.appendingPathComponent(String(format: "%06d.jpg", page)), options: .atomic)
+                let pageData = index == 0 && page == 5 ? translationArtwork() : data
+                try pageData.write(to: pages.appendingPathComponent(String(format: "%06d.jpg", page)), options: .atomic)
             }
             return Book(
                 id: id,
@@ -35,6 +36,37 @@ enum AppearancePreviewFixture {
                 favoritePages: index == 0 ? [0, 3] : [],
                 shelfGroupID: index < 4 ? groupID : nil
             )
+        }
+    }
+
+    static var translationRegions: [TranslationRegion] {
+        [
+            TranslationRegion(id: "preview-1", box: TranslationBox(CGRect(x: 0.13, y: 0.16, width: 0.70, height: 0.12)), source: "今日は一緒に帰ろう。", translated: "今天一起回家吧。", confidence: 0.98, isVertical: false),
+            TranslationRegion(id: "preview-2", box: TranslationBox(CGRect(x: 0.25, y: 0.43, width: 0.64, height: 0.12)), source: "少しだけ、寄り道しない？", translated: "要不要稍微绕个路？", confidence: 0.97, isVertical: false),
+            TranslationRegion(id: "preview-3", box: TranslationBox(CGRect(x: 0.10, y: 0.69, width: 0.64, height: 0.12)), source: "うん。夕焼けがきれいだね。", translated: "好呀。晚霞真好看。", confidence: 0.99, isVertical: false)
+        ]
+    }
+
+    private static func translationArtwork() -> Data {
+        let size = CGSize(width: 1_000, height: 1_400)
+        let format = UIGraphicsImageRendererFormat(); format.scale = 1; format.opaque = true
+        return UIGraphicsImageRenderer(size: size, format: format).jpegData(withCompressionQuality: 0.95) { context in
+            UIColor(red: 0.90, green: 0.92, blue: 0.98, alpha: 1).setFill()
+            context.fill(CGRect(origin: .zero, size: size))
+            for (index, region) in translationRegions.enumerated() {
+                let rect = region.box.pixels(in: size)
+                UIColor.white.setFill(); UIBezierPath(roundedRect: rect.insetBy(dx: -24, dy: -24), cornerRadius: 42).fill()
+                let style = NSMutableParagraphStyle(); style.alignment = .center
+                (region.source as NSString).draw(in: rect.insetBy(dx: 16, dy: 35), withAttributes: [
+                    .font: UIFont.systemFont(ofSize: 36), .foregroundColor: UIColor.darkGray, .paragraphStyle: style
+                ])
+                ("0\(index + 1)" as NSString).draw(at: CGPoint(x: rect.minX, y: rect.minY - 70), withAttributes: [
+                    .font: UIFont.systemFont(ofSize: 24), .foregroundColor: UIColor.systemIndigo
+                ])
+            }
+            ("二次元小家 · 日文翻译示例" as NSString).draw(at: CGPoint(x: 90, y: 90), withAttributes: [
+                .font: UIFont.systemFont(ofSize: 30, weight: .semibold), .foregroundColor: UIColor.darkGray
+            ])
         }
     }
 

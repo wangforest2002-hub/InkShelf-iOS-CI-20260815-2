@@ -169,9 +169,22 @@ jobs:
             -only-testing:InkShelfUITests/ReaderNavigationUITests/testLongSinglePageAlbumAdvancesExactlyOnceAtStartMiddleAndEnd \
             -parallel-testing-enabled NO
 
+      - name: Verify translation geometry, persistence, and local Japanese OCR
+        if: ${{ inputs.capture_preview == true }}
+        timeout-minutes: 6
+        run: |
+          xcodebuild test-without-building \
+            -project InkShelf.xcodeproj \
+            -scheme InkShelf \
+            -configuration Debug \
+            -destination "platform=iOS Simulator,id=$DEVICE_ID" \
+            -derivedDataPath build-simulator \
+            -only-testing:InkShelfTests/TranslationTests \
+            -parallel-testing-enabled NO
+
       - name: Capture iPad and iPhone appearance previews
         if: ${{ inputs.capture_preview == true }}
-        timeout-minutes: 12
+        timeout-minutes: 18
         run: |
           set -o pipefail
           for DESTINATION in "$IPAD_DEVICE_ID" "$DEVICE_ID"; do
@@ -291,8 +304,8 @@ jobs:
         run: |
           APP_PATH="build/Build/Products/Release-iphoneos/InkShelf.app"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$APP_PATH/Info.plist")" = "二次元小家"
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Info.plist")" = "2.5.3"
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_PATH/Info.plist")" = "31"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Info.plist")" = "3.0.0"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_PATH/Info.plist")" = "32"
           /usr/libexec/PlistBuddy -c 'Print :CFBundleIcons' "$APP_PATH/Info.plist" >/dev/null
           find "$APP_PATH" -maxdepth 1 -type f \( -name 'AppIcon*.png' -o -name 'Assets.car' \) | grep -q .
           test -d "$APP_PATH/RealESRGANAnimeSharp.mlmodelc"
@@ -377,8 +390,8 @@ jobs:
           SIGNED_VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Info.plist")
           SIGNED_BUILD=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_PATH/Info.plist")
           test "$SIGNED_BUNDLE_ID" = "com.inkshelf.reader"
-          test "$SIGNED_VERSION" = "2.5.3"
-          test "$SIGNED_BUILD" = "31"
+          test "$SIGNED_VERSION" = "3.0.0"
+          test "$SIGNED_BUILD" = "32"
           mkdir -p SignedPackage/Payload
           cp -R "$APP_PATH" SignedPackage/Payload/
           (cd SignedPackage && ditto -c -k --sequesterRsrc --keepParent Payload "$GITHUB_WORKSPACE/InkShelf-signed.ipa")

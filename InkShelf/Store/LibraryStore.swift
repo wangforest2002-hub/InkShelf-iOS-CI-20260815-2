@@ -801,6 +801,22 @@ final class LibraryStore {
         saveAsynchronously()
     }
 
+    func organizeBooks(_ ids: Set<UUID>, groupID: UUID? = nil, moveGroup: Bool = false, favorite: Bool? = nil) {
+        guard !moveGroup || groupID == nil || shelfGroups.contains(where: { $0.id == groupID }) else { return }
+        for index in books.indices where ids.contains(books[index].id) {
+            if moveGroup { books[index].shelfGroupID = groupID }
+            if let favorite { books[index].isFavorite = favorite }
+        }
+        saveAsynchronously()
+    }
+
+    func setCoverFocus(_ value: String, bookID: UUID) {
+        guard ["center", "top", "bottom", "leading", "trailing"].contains(value),
+              let index = books.firstIndex(where: { $0.id == bookID }) else { return }
+        books[index].coverFocus = value
+        saveAsynchronously()
+    }
+
     func assignBook(_ bookID: UUID, toShelfGroup groupID: UUID?) {
         guard groupID == nil || shelfGroups.contains(where: { $0.id == groupID }),
               let index = books.firstIndex(where: { $0.id == bookID })

@@ -9,6 +9,7 @@ struct ImageGalleryHubView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.ambientMotionEnabled) private var ambientMotionEnabled
     @AppStorage("library.gridDensity") private var gridDensityRaw = LibraryGridDensity.comfortable.rawValue
+    @AppStorage("gallery.sortOrder") private var gallerySort = "imported"
     @State private var section: ImageGallerySection = .imports
     @State private var query = ""
     @State private var showFilePicker = false
@@ -24,13 +25,21 @@ struct ImageGalleryHubView: View {
     @Namespace private var coverTransition
 
     private var imageBooks: [Book] {
-        library.imageCollectionBooks
-            .filter { $0.matchesLibrarySearch(query) }
+        sortedGalleryBooks(library.imageCollectionBooks.filter { $0.matchesLibrarySearch(query) })
     }
 
     private var favoriteBooks: [Book] {
-        library.favoriteBooks
-            .filter { $0.matchesLibrarySearch(query) }
+        sortedGalleryBooks(library.favoriteBooks.filter { $0.matchesLibrarySearch(query) })
+    }
+
+    private func sortedGalleryBooks(_ books: [Book]) -> [Book] {
+        books.sorted {
+            switch gallerySort {
+            case "title": return $0.title.localizedStandardCompare($1.title) == .orderedAscending
+            case "opened": return ($0.lastOpenedAt ?? .distantPast) > ($1.lastOpenedAt ?? .distantPast)
+            default: return $0.importedAt > $1.importedAt
+            }
+        }
     }
 
     private var favoritePages: [FavoritePageItem] {
@@ -124,6 +133,20 @@ struct ImageGalleryHubView: View {
             .navigationTitle("我的画廊")
             .searchable(text: $query, prompt: "搜索图片画集、收藏读物或来源")
             .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Picker("排序", selection: $gallerySort) {
+                            Text("最近导入").tag("imported")
+                            Text("标题").tag("title")
+                            Text("最近打开").tag("opened")
+                        }
+                        Picker("封面密度", selection: $gridDensityRaw) {
+                            ForEach(LibraryGridDensity.allCases) { Text($0.title).tag($0.rawValue) }
+                        }
+                    } label: { Label("整理画廊", systemImage: "arrow.up.arrow.down.circle") }
+                    .disabled(section == .favoritePages)
+                }
+
                 ToolbarItem(placement: .topBarLeading) {
                     AppearanceModeButton()
                 }

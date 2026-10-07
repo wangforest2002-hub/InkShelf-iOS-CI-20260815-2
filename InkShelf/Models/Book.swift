@@ -51,6 +51,7 @@ struct Book: Identifiable, Codable, Hashable, Sendable {
     /// Width divided by height for the generated shelf cover. Keeping this in
     /// metadata lets the shelf choose its layout before decoding any pixels.
     var coverAspectRatio: Double?
+    var coverFocus: String?
     var previewRelativePaths: [String]?
     var pageCount: Int
     var currentPage: Int

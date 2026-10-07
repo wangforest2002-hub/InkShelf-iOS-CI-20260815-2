@@ -16,6 +16,12 @@ struct LibraryView: View {
     @AppStorage("library.readingStatus") private var readingStatusRaw = ReadingStatusFilter.all.rawValue
     @AppStorage("library.gridDensity") private var gridDensityRaw = LibraryGridDensity.comfortable.rawValue
     @State private var query = ""
+    @State private var availableWidth: CGFloat = 0
+    @State private var showsSidebar = true
+    @State private var isSelectingBooks = false
+    @State private var selectedBooks: Set<UUID> = []
+    @State private var coverEditingBook: Book?
+    @AppStorage("library.showFootprints") private var showFootprints = false
     @State private var importPicker: ImportPicker?
     @State private var showPhotoPicker = false
     @State private var showSocialPostImporter = false
@@ -34,6 +40,8 @@ struct LibraryView: View {
     @State private var groupEditor: ShelfGroupEditorTarget?
     @State private var pendingGroupDeletion: ShelfGroup?
     @Namespace private var coverTransition
+
+    private var usesSidebar: Bool { scope == .all && availableWidth >= 950 && showsSidebar }
 
     private var sortOrder: LibrarySortOrder {
         LibrarySortOrder(rawValue: sortOrderRaw) ?? .lastOpened
@@ -125,7 +133,7 @@ struct LibraryView: View {
                 } else {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 22) {
-                            if query.isEmpty, scope == .all {
+                            if query.isEmpty, scope == .all, !usesSidebar {
                                 ShelfGroupStrip(
                                     selection: shelfFilterSelection,
                                     groups: library.shelfGroups,
@@ -146,19 +154,13 @@ struct LibraryView: View {
                                             favoriteCount: library.books.filter(\.isFavorite).count
                                         )
 
-                                        if colorScheme == .dark {
-                                            NightModeShelfCard(
-                                                allBookCount: library.books.count,
-                                                adultBookCount: library.afterDarkBooks.count,
-                                                favoritePageCount: library.favoritePageItems.count,
-                                                featuredBook: library.afterDarkBooks.first
-                                                    ?? library.continueReadingBook
-                                                    ?? library.books.first,
-                                                openFeatured: open
-                                            )
-                                        }
-
                                         homeActivityCards
+                                        Button {
+                                            withAnimation(reduceMotion ? nil : AppMotion.panel) { showFootprints.toggle() }
+                                        } label: {
+                                            Label(showFootprints ? "收起回家足迹" : "回家足迹 · Lv.\(achievements.homeLevel) · 展开", systemImage: showFootprints ? "chevron.up" : "medal.star")
+                                                .font(.caption).foregroundStyle(.secondary)
+                                        }.buttonStyle(.plain)
                                     }
                                 } else if query.isEmpty, scope == .favorites {
                                     LibrarySectionHeading(
@@ -236,11 +238,39 @@ struct LibraryView: View {
                     .allowsHitTesting(false)
                 }
             }
+            .safeAreaInset(edge: .leading, spacing: 0) {
+                if usesSidebar { shelfSidebar.frame(width: 210) }
+            }
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { availableWidth = $0 }
+            .safeAreaInset(edge: .bottom) {
+                if isSelectingBooks { selectionBar }
+            }
+            .safeAreaInset(edge: .top, spacing: 0) {
+                if !query.isEmpty || (scope != .recent && readingStatus != .all) {
+                    HStack {
+                        Label(query.isEmpty ? readingStatus.title : "搜索：\(query)", systemImage: "line.3.horizontal.decrease.circle")
+                            .lineLimit(1)
+                        Spacer()
+                        Button("清除筛选") { query = ""; readingStatusRaw = ReadingStatusFilter.all.rawValue }
+                    }.font(.caption).padding(12).background(.regularMaterial)
+                }
+            }
             .navigationTitle(navigationTitle)
             .searchable(text: $query, prompt: "搜索标题、标签、文件名或笔记")
             .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(isSelectingBooks ? "完成" : "选择") {
+                        isSelectingBooks.toggle(); selectedBooks.removeAll()
+                    }.accessibilityIdentifier("library-select")
+                }
                 ToolbarItem(placement: .topBarLeading) {
-                    AppearanceModeButton()
+                    HStack {
+                        if scope == .all, availableWidth >= 950 {
+                            Button { showsSidebar.toggle() } label: { Image(systemName: "sidebar.left") }
+                                .accessibilityLabel("显示或收起书架分类")
+                        }
+                        AppearanceModeButton()
+                    }
                 }
 
                 ToolbarItem(placement: .topBarTrailing) {
@@ -413,6 +443,9 @@ struct LibraryView: View {
                 }
             }
         }
+        .sheet(item: $coverEditingBook) { book in
+            CoverFocusEditor(book: book)
+        }
         .sheet(item: $renamingBook) { book in
             RenameBookView(book: book) { title in
                 library.rename(book.id, to: title)
@@ -540,7 +573,12 @@ struct LibraryView: View {
     }
 
     private func shelfBookButton(_ book: Book) -> some View {
-        Button { open(book) } label: {
+        Button {
+            if isSelectingBooks {
+                if selectedBooks.contains(book.id) { selectedBooks.remove(book.id) }
+                else { selectedBooks.insert(book.id) }
+            } else { open(book) }
+        } label: {
             BookCard(
                 book: book,
                 coverURL: library.coverURL(for: book),
@@ -549,6 +587,13 @@ struct LibraryView: View {
                 onCoverAspectRatio: { rememberCoverAspectRatio($0, for: book.id) }
             )
             .matchedTransitionSource(id: book.id, in: coverTransition)
+            .overlay(alignment: .topTrailing) {
+                if isSelectingBooks {
+                    Image(systemName: selectedBooks.contains(book.id) ? "checkmark.circle.fill" : "circle")
+                        .font(.title2).foregroundStyle(selectedBooks.contains(book.id) ? AppTheme.accent : .secondary)
+                        .padding(8).background(.regularMaterial, in: Circle()).padding(6)
+                }
+            }
         }
         .buttonStyle(PressableCardStyle())
         .contextMenu {
@@ -560,6 +605,63 @@ struct LibraryView: View {
                 previewURLs: library.previewURLs(for: book)
             )
         }
+    }
+
+    private var shelfSidebar: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 8) {
+                Label("我的书房", systemImage: "house.fill")
+                    .font(.title3.weight(.semibold)).padding(.vertical, 18)
+                sidebarItem("全部藏书", symbol: "books.vertical.fill", filter: .all, count: library.books.count)
+                sidebarItem("未分组", symbol: "tray.fill", filter: .ungrouped, count: library.books.filter { $0.shelfGroupID == nil }.count)
+                Text("书架分组").font(.caption).foregroundStyle(.secondary).padding(.top, 20)
+                ForEach(library.shelfGroups) { group in
+                    sidebarItem(group.title, symbol: group.systemImage, filter: .group(group.id), count: library.bookCount(inShelfGroup: group.id))
+                        .contextMenu {
+                            Button("重命名") { groupEditor = .rename(group) }
+                            Button("删除分组", role: .destructive) { pendingGroupDeletion = group }
+                        }
+                }
+                Button { groupEditor = .create } label: {
+                    Label("新建分组", systemImage: "folder.badge.plus").frame(minHeight: 44)
+                }.font(.subheadline).padding(.top, 8)
+                Divider().padding(.vertical, 14)
+                Text("挑一本喜欢的，\n把这一刻留给自己。")
+                    .font(.caption).foregroundStyle(.secondary).lineSpacing(5)
+            }.padding(.horizontal, 16)
+        }.background(.thinMaterial)
+    }
+
+    private func sidebarItem(_ title: String, symbol: String, filter: ShelfFilter, count: Int) -> some View {
+        Button { selectShelfFilter(filter) } label: {
+            HStack(spacing: 9) {
+                Image(systemName: symbol).frame(width: 22)
+                Text(title).lineLimit(2)
+                Spacer(minLength: 2)
+                Text("\(count)").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+            }.font(.subheadline).padding(11).frame(minHeight: 44)
+                .background(shelfFilter == filter ? AppTheme.accent.opacity(0.13) : .clear, in: RoundedRectangle(cornerRadius: 12))
+        }.buttonStyle(.plain).foregroundStyle(shelfFilter == filter ? AppTheme.accent : .primary)
+    }
+
+    private var selectionBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 14) {
+                Text("已选 \(selectedBooks.count) 本").font(.subheadline.weight(.semibold))
+                Button("全选当前结果") { selectedBooks = Set(books.map(\.id)) }
+                Menu("移动到", systemImage: "folder") {
+                    Button("未分组") { library.organizeBooks(selectedBooks, moveGroup: true); selectedBooks.removeAll() }
+                    ForEach(library.shelfGroups) { group in
+                        Button(group.title) {
+                            library.organizeBooks(selectedBooks, groupID: group.id, moveGroup: true)
+                            selectedBooks.removeAll()
+                        }
+                    }
+                }.disabled(selectedBooks.isEmpty)
+                Button("收藏", systemImage: "star") { library.organizeBooks(selectedBooks, favorite: true) }.disabled(selectedBooks.isEmpty)
+                Button("取消收藏") { library.organizeBooks(selectedBooks, favorite: false) }.disabled(selectedBooks.isEmpty)
+            }.buttonStyle(.bordered).padding(12)
+        }.background(.regularMaterial)
     }
 
     private var homeActivityCards: some View {
@@ -581,7 +683,7 @@ struct LibraryView: View {
                 .frame(maxWidth: .infinity)
             }
 
-            if !achievements.footprint.openedBookIDs.isEmpty {
+            if !achievements.footprint.openedBookIDs.isEmpty && showFootprints {
                 Button { showAchievements = true } label: {
                     FootprintHomeCard(
                         unlocked: achievements.unlockedCount,
@@ -604,6 +706,9 @@ struct LibraryView: View {
 
     @ViewBuilder
     private func bookContextMenu(_ book: Book) -> some View {
+        Button { coverEditingBook = book } label: {
+            Label("调整封面位置", systemImage: "viewfinder")
+        }
         if book.kind == .archive || book.kind == .imageCollection {
             Button {
                 previewingBook = book

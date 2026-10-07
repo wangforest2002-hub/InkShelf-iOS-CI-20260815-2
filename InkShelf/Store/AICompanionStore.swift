@@ -22,6 +22,8 @@ final class AICompanionStore {
     @ObservationIgnored private static let keyAccount = "deepseek-api-key"
     @ObservationIgnored private var pageTask: Task<Void, Never>?
     @ObservationIgnored private var discussionTask: Task<Void, Never>?
+    @ObservationIgnored private var pageGeneration = UUID()
+    @ObservationIgnored private var discussionGeneration = UUID()
     @ObservationIgnored private var requestContext: RequestContext?
     @ObservationIgnored private var reactions: [String: AIPageReaction] = [:]
 
@@ -84,6 +86,8 @@ final class AICompanionStore {
         requestContext = RequestContext(book: book, page: page, pageCount: pageCount, source: source)
         pageTask?.cancel()
         discussionTask?.cancel()
+        pageGeneration = UUID()
+        discussionGeneration = UUID()
 
         guard UserDefaults.standard.bool(forKey: "ai.enabled"), hasAPIKey else {
             activity = .idle
@@ -92,10 +96,11 @@ final class AICompanionStore {
 
         activity = .readingPage(page)
 
+        let generation = pageGeneration
         pageTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(force ? 20 : 280))
             guard !Task.isCancelled, let self else { return }
-            await self.loadOrGeneratePage(force: force)
+            await self.loadOrGeneratePage(force: force, generation: generation)
         }
     }
 
@@ -118,9 +123,11 @@ final class AICompanionStore {
         else { return }
 
         discussionTask?.cancel()
+        discussionGeneration = UUID()
+        let generation = discussionGeneration
         discussionTask = Task { [weak self] in
             guard let self else { return }
-            await self.loadOrGenerateDiscussion(context: context, force: force)
+            await self.loadOrGenerateDiscussion(context: context, force: force, generation: generation)
         }
     }
 
@@ -203,11 +210,13 @@ final class AICompanionStore {
     func cancelAll() {
         pageTask?.cancel()
         discussionTask?.cancel()
+        pageGeneration = UUID()
+        discussionGeneration = UUID()
         activity = .idle
     }
 
-    private func loadOrGeneratePage(force: Bool) async {
-        guard let context = requestContext,
+    private func loadOrGeneratePage(force: Bool, generation: UUID) async {
+        guard pageGeneration == generation, !Task.isCancelled, let context = requestContext,
               let key = apiKey,
               currentBookID == context.book.id,
               currentPage == context.page
@@ -226,7 +235,7 @@ final class AICompanionStore {
                 )
             }
             if let cached = memoryReaction ?? diskReaction {
-                guard currentBookID == context.book.id, currentPage == context.page else { return }
+                guard pageGeneration == generation, !Task.isCancelled, currentBookID == context.book.id, currentPage == context.page else { return }
                 remember(cached, key: memoryKey)
                 currentReaction = cached
                 currentInsight = AIPageInsight(
@@ -243,6 +252,7 @@ final class AICompanionStore {
             }
         }
 
+        guard pageGeneration == generation, !Task.isCancelled else { return }
         activity = .readingPage(context.page)
         let insight: AIPageInsight
         do {
@@ -252,7 +262,7 @@ final class AICompanionStore {
                 pageCount: context.pageCount
             )
         } catch is CancellationError {
-            activity = .idle
+            if pageGeneration == generation { activity = .idle }
             return
         } catch {
             insight = AIPageInsight(
@@ -265,14 +275,15 @@ final class AICompanionStore {
             )
         }
 
-        guard !Task.isCancelled,
+        guard pageGeneration == generation, !Task.isCancelled,
               currentBookID == context.book.id,
               currentPage == context.page
         else { return }
         currentInsight = insight
 
         do {
-            let recent = reactions.values
+            let recent = reactions.filter { $0.key.hasPrefix(context.book.id.uuidString + "-") }
+                .map(\.value)
                 .filter { $0.page < context.page }
                 .sorted { $0.page < $1.page }
             let reaction = try await DeepSeekService.shared.pageReaction(
@@ -282,7 +293,7 @@ final class AICompanionStore {
                 recentReactions: recent,
                 settings: settings
             )
-            guard !Task.isCancelled,
+            guard pageGeneration == generation, !Task.isCancelled,
                   currentBookID == context.book.id,
                   currentPage == context.page
             else { return }
@@ -291,12 +302,13 @@ final class AICompanionStore {
             currentInsight = insight
             currentReaction = reaction
             await AIResponseCache.shared.save(reaction, bookID: context.book.id, variant: settings.cacheVariant)
+            guard pageGeneration == generation, !Task.isCancelled else { return }
             activity = .idle
             if context.page >= context.pageCount - 1 { generateEndDiscussion() }
         } catch is CancellationError {
-            activity = .idle
+            if pageGeneration == generation { activity = .idle }
         } catch {
-            guard currentBookID == context.book.id, currentPage == context.page else { return }
+            guard pageGeneration == generation, !Task.isCancelled, currentBookID == context.book.id, currentPage == context.page else { return }
             currentInsight = insight
             currentReaction = LocalCompanionFallback.pageReaction(insight: insight, settings: settings)
             errorMessage = "云端暂时没回应，已切换本地陪伴；点刷新可以重试。"
@@ -304,21 +316,21 @@ final class AICompanionStore {
         }
     }
 
-    private func loadOrGenerateDiscussion(context: RequestContext, force: Bool) async {
-        guard let key = apiKey else { return }
+    private func loadOrGenerateDiscussion(context: RequestContext, force: Bool, generation: UUID) async {
+        guard discussionGeneration == generation, !Task.isCancelled, let key = apiKey else { return }
         let settings = requestSettings
         if !force, let cached = await AIResponseCache.shared.endDiscussion(
             bookID: context.book.id,
             variant: settings.cacheVariant
         ) {
-            guard currentBookID == context.book.id else { return }
+            guard discussionGeneration == generation, !Task.isCancelled, currentBookID == context.book.id else { return }
             endDiscussion = cached
             return
         }
 
         activity = .generatingDiscussion
         do {
-            let recent = reactions.values.sorted { $0.page < $1.page }
+            let recent = reactions.filter { $0.key.hasPrefix(context.book.id.uuidString + "-") }.map(\.value).sorted { $0.page < $1.page }
             let discussion = try await DeepSeekService.shared.endDiscussion(
                 apiKey: key,
                 bookTitle: context.book.title,
@@ -326,20 +338,20 @@ final class AICompanionStore {
                 reactions: recent,
                 settings: settings
             )
-            guard !Task.isCancelled, currentBookID == context.book.id else { return }
+            guard discussionGeneration == generation, !Task.isCancelled, currentBookID == context.book.id else { return }
             endDiscussion = discussion
             await AIResponseCache.shared.save(discussion, bookID: context.book.id, variant: settings.cacheVariant)
         } catch is CancellationError {
             // Page navigation can cancel a pending discussion without surfacing an error.
         } catch {
-            guard currentBookID == context.book.id else { return }
+            guard discussionGeneration == generation, !Task.isCancelled, currentBookID == context.book.id else { return }
             endDiscussion = LocalCompanionFallback.endDiscussion(
                 bookTitle: context.book.title,
                 pageCount: context.pageCount
             )
             errorMessage = "云端暂时没回应，先生成了本地片尾评论。"
         }
-        activity = .idle
+        if discussionGeneration == generation { activity = .idle }
     }
 
     private var apiKey: String? {

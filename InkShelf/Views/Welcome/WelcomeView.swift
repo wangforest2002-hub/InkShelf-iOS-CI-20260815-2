@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum WelcomeRelease {
-    static let current = "2.5"
+    static let current = "3.0"
 }
 
 enum WelcomePresentationPolicy {
@@ -22,9 +22,9 @@ struct WelcomeView: View {
 
     private let features: [WelcomeFeature] = [
         .init(
-            eyebrow: "二次元小家 · 2.5 正式版",
+            eyebrow: "二次元小家 · 3.0 正式版",
             title: "欢迎回家",
-            subtitle: "把漫画、画集、电子书和喜欢的画面安放在同一个温暖的小家。2.5 从书架到阅读器都重新梳理，只为让每次打开更自在。",
+            subtitle: "熟悉的小家，有了更舒展的书架和读懂日文的新工具。收藏、分组和阅读位置，仍然在原处等你。",
             symbol: "house.fill",
             highlights: ["清新书架", "沉浸阅读", "安心收藏"],
             colors: [AppTheme.honey, AppTheme.coral],
@@ -32,8 +32,8 @@ struct WelcomeView: View {
         ),
         .init(
             eyebrow: "全新自适应书架",
-            title: "横竖封面，各得其所",
-            subtitle: "横版画集保持横向宽卡，竖版读物继续紧凑排列。切换分类时内容一次完成交接，不再闪出旧卡片或留下鬼影。",
+            title: "整理藏书，更从容",
+            subtitle: "iPad 宽屏分类栏、批量整理和可调整的封面位置，让每本喜欢的作品都有合适的位置。",
             symbol: "rectangle.grid.2x2.fill",
             highlights: ["横版原比例", "竖版双列", "分类无重影"],
             colors: [AppTheme.cyan, AppTheme.accent],
@@ -41,8 +41,8 @@ struct WelcomeView: View {
         ),
         .init(
             eyebrow: "阅读体验焕新",
-            title: "顺滑，是阅读的底色",
-            subtitle: "页面预取、高清解码和缓存调度在幕后协作；翻页、缩放、工具栏和书架动画保留质感，也把流畅度放在第一位。",
+            title: "让日文画面，读起来更亲近",
+            subtitle: "在阅读工具栏点“译”，识别本页或框选日文，在原图、中文与对照之间切换。点选文字区域就能校对，译文会为你保存。",
             symbol: "book.pages.fill",
             highlights: ["稳定页码", "高清预取", "自然动效"],
             colors: [AppTheme.lilac, AppTheme.cyan],
@@ -87,7 +87,7 @@ struct WelcomeView: View {
             }
         }
         .tint(AppTheme.accent)
-        .accessibilityIdentifier("welcome-2-5")
+        .accessibilityIdentifier("welcome-3-0")
     }
 
     private var topBar: some View {
@@ -96,7 +96,7 @@ struct WelcomeView: View {
                 .font(.subheadline.bold())
                 .foregroundStyle(AppTheme.wood)
 
-            Text("2.5")
+            Text("3.0")
                 .font(.caption.bold())
                 .foregroundStyle(.white)
                 .padding(.horizontal, 10)

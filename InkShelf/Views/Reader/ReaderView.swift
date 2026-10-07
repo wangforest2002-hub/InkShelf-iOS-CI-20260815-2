@@ -19,6 +19,7 @@ struct ReaderView: View {
     @State private var controlsVisible = true
     @State private var isProgressScrubbing = false
     @State private var showSettings = false
+    @State private var showTranslation = false
     @State private var showThumbnails = false
     @State private var showAICompanion = false
     @State private var showEndComments = false
@@ -209,6 +210,7 @@ struct ReaderView: View {
                     togglePageFavorite: togglePageFavorite,
                     savePage: saveCurrentPage,
                     enhancePage: enhanceCurrentPage,
+                    translatePage: { companion.cancelAll(); showTranslation = true },
                     toggleLayout: toggleLayout,
                     toggleAI: toggleAI,
                     showThumbnails: { showThumbnails = true },
@@ -369,6 +371,12 @@ struct ReaderView: View {
             if scenePhase == .active {
                 library.endReading(book.id)
             }
+        }
+        .fullScreenCover(isPresented: $showTranslation, onDismiss: {
+            showControlsTemporarily()
+            prepareAIPage()
+        }) {
+            PageTranslationView(book: book, pages: translationPages)
         }
         .sheet(isPresented: $showSettings) {
             ReaderSettingsView(
@@ -794,6 +802,20 @@ struct ReaderView: View {
         showNotice("AI 陪读已开启 · 正在理解本页")
     }
 
+    private var translationPages: [TranslationPageInput] {
+        let range = ReaderPagePosition(currentPage: currentPage, pageCount: pageCount,
+                                       layout: layout, flow: flow, coverSingle: coverSingle, isEBook: false).visibleRange
+        return range.compactMap { page in
+            switch book.kind {
+            case .pdf:
+                return pdfLocked ? nil : TranslationPageInput(page: page, source: .pdf(library.contentURL(for: book), password: pdfPassword))
+            case .archive, .imageCollection:
+                return imageURLs.indices.contains(page) ? TranslationPageInput(page: page, source: .image(imageURLs[page])) : nil
+            case .ebook: return nil
+            }
+        }
+    }
+
     private func prepareAIPage(force: Bool = false) {
         guard aiEnabled, companion.hasAPIKey else { return }
         let source: AIPageSource?
@@ -833,6 +855,7 @@ struct ReaderView: View {
             try? await Task.sleep(for: .seconds(4))
             guard !Task.isCancelled,
                   !showSettings,
+                  !showTranslation,
                   !showThumbnails,
                   !showAICompanion,
                   !showEndComments,
@@ -914,6 +937,7 @@ private struct ReaderControls: View {
     let togglePageFavorite: () -> Void
     let savePage: () -> Void
     let enhancePage: () -> Void
+    let translatePage: () -> Void
     let toggleLayout: () -> Void
     let toggleAI: () -> Void
     let showThumbnails: () -> Void
@@ -1069,6 +1093,14 @@ private struct ReaderControls: View {
                     .accessibilityLabel(isEBook ? ebookFlow.title : (layout == .single ? "单页" : "双页"))
 
                     if !isEBook {
+                        Button { perform(translatePage) } label: {
+                            Label("翻译", systemImage: "character.bubble")
+                        }
+                        .readerActionButton()
+                        .disabled(!canUsePageActions)
+                        .accessibilityIdentifier("reader-translate")
+                        .accessibilityLabel("日语图片翻译")
+
                         Button { perform(enhancePage) } label: {
                             if isEnhancingPage {
                                 ProgressView().tint(.primary)
