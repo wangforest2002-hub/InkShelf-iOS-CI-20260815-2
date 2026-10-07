@@ -29,7 +29,7 @@ on:
 
 jobs:
   build:
-    runs-on: macos-26
+    runs-on: ${{ inputs.capture_preview == true && 'macos-15' || 'macos-26' }}
     timeout-minutes: 60
     env:
       IOS_SIGNING_ENABLED: ${{ secrets.IOS_P12_BASE64 != '' && secrets.IOS_MOBILEPROVISION_BASE64 != '' }}
@@ -37,6 +37,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+
+      - name: Select stable preview toolchain
+        if: ${{ inputs.capture_preview == true }}
+        run: sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
 
       - name: Install XcodeGen
         run: brew install xcodegen
@@ -175,7 +179,7 @@ jobs:
             -parallel-testing-enabled NO
 
       - name: Verify translation geometry, persistence, and local Japanese OCR
-        if: ${{ inputs.capture_preview == true || inputs.verify_translation == true }}
+        if: ${{ inputs.verify_translation == true }}
         timeout-minutes: 6
         run: |
           xcodebuild test-without-building \
@@ -297,6 +301,7 @@ jobs:
           retention-days: 30
 
       - name: Build for iPhone
+        if: ${{ inputs.capture_preview != true }}
         run: |
           set -o pipefail
           xcodebuild build \
@@ -310,6 +315,7 @@ jobs:
             CODE_SIGN_IDENTITY=""
 
       - name: Verify app identity and icon assets
+        if: ${{ inputs.capture_preview != true }}
         run: |
           APP_PATH="build/Build/Products/Release-iphoneos/InkShelf.app"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$APP_PATH/Info.plist")" = "二次元小家"
@@ -320,6 +326,7 @@ jobs:
           test -d "$APP_PATH/RealESRGANAnimeSharp.mlmodelc"
 
       - name: Package unsigned IPA
+        if: ${{ inputs.capture_preview != true }}
         run: |
           APP_PATH="build/Build/Products/Release-iphoneos/InkShelf.app"
           test -d "$APP_PATH"
@@ -329,6 +336,7 @@ jobs:
           ditto -c -k --sequesterRsrc --keepParent Payload InkShelf-unsigned.ipa
 
       - name: Upload IPA
+        if: ${{ inputs.capture_preview != true }}
         uses: actions/upload-artifact@v4
         with:
           name: InkShelf-unsigned-ipa
