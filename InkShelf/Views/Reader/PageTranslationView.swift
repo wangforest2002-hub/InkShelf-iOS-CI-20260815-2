@@ -300,7 +300,8 @@ struct PageTranslationView: View {
         Task {
             let result = await Task.detached(priority: .utility) {
                 let format = UIGraphicsImageRendererFormat(); format.scale = 1; format.opaque = true
-                let width = image.size.width
+                let width = min(1_600, image.size.width)
+                let pageHeight = image.size.height * width / image.size.width
                 let font = UIFont.systemFont(ofSize: max(24, width * 0.028))
                 let style = NSMutableParagraphStyle(); style.lineSpacing = font.pointSize * 0.25
                 let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: UIColor.black, .paragraphStyle: style]
@@ -314,13 +315,13 @@ struct PageTranslationView: View {
                 }
                 // The image export gets a readable transcript below the source,
                 // never number-only substitutes. The TXT always contains all text.
-                let appendix = min(10_000, heights.reduce(64, +))
-                let rendered = UIGraphicsImageRenderer(size: CGSize(width: width, height: image.size.height + appendix), format: format).image { context in
-                    UIColor.white.setFill(); context.fill(CGRect(x: 0, y: 0, width: width, height: image.size.height + appendix))
-                    image.draw(in: CGRect(origin: .zero, size: image.size))
-                    var y = image.size.height + 32
+                let appendix = min(6_000, heights.reduce(64, +))
+                let rendered = UIGraphicsImageRenderer(size: CGSize(width: width, height: pageHeight + appendix), format: format).image { context in
+                    UIColor.white.setFill(); context.fill(CGRect(x: 0, y: 0, width: width, height: pageHeight + appendix))
+                    image.draw(in: CGRect(x: 0, y: 0, width: width, height: pageHeight))
+                    var y = pageHeight + 32
                     for index in paragraphs.indices {
-                        guard y + heights[index] < image.size.height + appendix - 16 else {
+                        guard y + heights[index] < pageHeight + appendix - 16 else {
                             ("更多内容请查看随附的完整译文 TXT" as NSString).draw(at: CGPoint(x: 32, y: y), withAttributes: attributes)
                             break
                         }
