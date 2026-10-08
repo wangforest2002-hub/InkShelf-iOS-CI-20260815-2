@@ -109,7 +109,7 @@ struct PageTranslationView: View {
         .sheet(isPresented: $showingFullPage) {
             NavigationStack {
                 regionList(expanded: true).navigationTitle("本页完整译文")
-                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { showingFullPage = false } } }
+                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { showingFullPage = false }.accessibilityIdentifier("translation-full-close") } }
             }
             .sheet(isPresented: $showingFullPageParagraph) {
                 paragraphSheet { showingFullPageParagraph = false }
@@ -134,7 +134,7 @@ struct PageTranslationView: View {
                 .navigationTitle("这段的翻译")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .confirmationAction) {
-                    Button("完成") { close() }
+                    Button("完成") { close() }.accessibilityIdentifier("translation-paragraph-close")
                 } }
                 .safeAreaInset(edge: .bottom) {
                     if let error = store.error { Text(error).font(.footnote).foregroundStyle(.orange).padding() }
@@ -226,13 +226,13 @@ struct PageTranslationView: View {
                             if mode != .original || expanded {
                                 Text(region.translated.isEmpty ? "尚未翻译 · 点此段翻译" : region.translated)
                                     .font(.body).lineSpacing(5).textSelection(.enabled)
-                                    .accessibilityIdentifier("translation-text-\(region.id)")
+                                    .accessibilityIdentifier(expanded ? "translation-full-text-\(region.id)" : "translation-text-\(region.id)")
                             }
                             Button("查看这段") {
                                 store.select(region.id)
                                 if expanded { showingFullPageParagraph = true } else { showingParagraph = true }
                             }
-                                .font(.caption).accessibilityIdentifier("translation-detail-\(region.id)")
+                                .font(.caption).accessibilityIdentifier(expanded ? "translation-full-detail-\(region.id)" : "translation-detail-\(region.id)")
                         }
                         .padding(14)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -242,7 +242,7 @@ struct PageTranslationView: View {
                     }
                 }.padding(14)
             }
-            .accessibilityIdentifier("translation-page-text")
+            .accessibilityIdentifier(expanded ? "translation-full-page-text" : "translation-page-text")
             .onChange(of: store.selectedID) { _, id in
                 if let id { withAnimation(reduceMotion ? nil : AppMotion.value) { proxy.scrollTo(id, anchor: .center) } }
             }
