@@ -65,28 +65,22 @@ final class TranslationScrollView: UIScrollView, UIScrollViewDelegate {
         pinchGestureRecognizer?.isEnabled = !selecting
         for button in regionButtons { button.removeFromSuperview() }
         regionButtons.removeAll()
-        if mode != .original && !selecting {
+        if !selecting {
             for (index, region) in regions.enumerated() {
                 let button = TranslationRegionButton(type: .custom)
                 let box = region.box.pixels(in: image.size)
-                let fittedFont = TranslationTypography.font(for: region.translated, in: box.size, imageWidth: image.size.width)
-                let showText = mode == .chinese && !region.translated.isEmpty && fittedFont != nil
-                let fontSize = max(30, image.size.width * 0.026)
-                let title = showText ? region.translated : "\(index + 1)"
-                button.setTitle(title, for: .normal)
-                button.titleLabel?.font = showText ? fittedFont : .systemFont(ofSize: fontSize, weight: .medium)
-                button.titleLabel?.numberOfLines = showText ? 0 : 1
-                button.titleLabel?.adjustsFontSizeToFitWidth = false
-                button.titleLabel?.lineBreakMode = .byTruncatingTail
-                button.backgroundColor = showText ? .white : UIColor.systemBlue.withAlphaComponent(0.88)
-                button.setTitleColor(showText ? .black : .white, for: .normal)
-                let badgeSide = fontSize * 1.8
-                button.frame = showText ? box : CGRect(x: box.minX, y: box.minY, width: badgeSide, height: badgeSide)
-                button.layer.cornerRadius = 6
-                button.layer.borderWidth = region.id == selectedID ? 6 : 2
-                button.layer.borderColor = (region.id == selectedID ? UIColor.systemOrange : UIColor.systemBlue).cgColor
-                button.accessibilityLabel = "区域 \(index + 1)，\(region.translated.isEmpty ? region.source : region.translated)"
-                button.accessibilityHint = "点按查看原文与完整译文"
+                let selected = region.id == selectedID
+                button.frame = box
+                // The image remains intact. Full translations live in a readable
+                // sheet and the page transcript, independent of OCR box size.
+                button.backgroundColor = selected ? UIColor.systemOrange.withAlphaComponent(0.16)
+                    : mode == .original ? .clear : UIColor.systemBlue.withAlphaComponent(0.06)
+                button.layer.cornerRadius = 8
+                button.layer.borderWidth = mode == .original && !selected ? 0 : selected ? 5 : 2
+                button.layer.borderColor = (selected ? UIColor.systemOrange : UIColor.systemBlue).cgColor
+                button.accessibilityLabel = "段落 \(index + 1)，\(region.source)"
+                button.accessibilityHint = "点按查看此段的完整中文翻译"
+                button.accessibilityIdentifier = "translation-region-\(region.id)"
                 button.addAction(UIAction { [weak self] _ in self?.onSelect?(region.id) }, for: .touchUpInside)
                 page.addSubview(button); regionButtons.append(button)
             }
@@ -150,28 +144,10 @@ final class TranslationScrollView: UIScrollView, UIScrollViewDelegate {
 
 private final class TranslationRegionButton: UIButton {
     override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
-        // Keep small numbered regions tappable even while the full page is fitted.
+        // Keep small paragraph regions tappable even while the full page is fitted.
         let scale = max(0.01, abs(superview?.transform.a ?? 1))
         let minimumSide = 44 / scale
         return bounds.insetBy(dx: min(0, (bounds.width - minimumSide) / 2),
                               dy: min(0, (bounds.height - minimumSide) / 2)).contains(point)
-    }
-}
-
-enum TranslationTypography {
-    static func font(for text: String, in size: CGSize, imageWidth: CGFloat) -> UIFont? {
-        guard !text.isEmpty, size.width > 12, size.height > 12 else { return nil }
-        let minimum = max(22, imageWidth * 0.022)
-        var pointSize = max(minimum, imageWidth * 0.036)
-        while pointSize >= minimum {
-            let font = UIFont.systemFont(ofSize: pointSize, weight: .medium)
-            let bounds = (text as NSString).boundingRect(
-                with: CGSize(width: size.width - 12, height: .greatestFiniteMagnitude),
-                options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: [.font: font], context: nil
-            )
-            if ceil(bounds.height) <= size.height - 12 { return font }
-            pointSize -= 2
-        }
-        return nil
     }
 }

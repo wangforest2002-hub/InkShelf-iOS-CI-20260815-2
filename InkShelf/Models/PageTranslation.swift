@@ -27,11 +27,12 @@ struct TranslationRegion: Identifiable, Codable, Equatable, Sendable {
     var confidence: Float
     var isVertical: Bool
     var isEdited = false
-    var needsReview: Bool { confidence < 0.65 || translated.isEmpty }
+    var needsRetranslation: Bool? = nil
+    var needsReview: Bool { confidence < 0.65 || translated.isEmpty || needsRetranslation == true }
 }
 
 struct PageTranslationDocument: Codable, Sendable {
-    var schema = 1
+    var schema = 2
     var regions: [TranslationRegion]
     var modelID: String?
     var updatedAt = Date()

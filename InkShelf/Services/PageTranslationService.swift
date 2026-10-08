@@ -71,22 +71,13 @@ actor PageTranslationService {
                                      confidence: candidate.confidence,
                                      isVertical: mapped.height * image.size.height > mapped.width * image.size.width * 1.2)
         }
-        // A strict total ordering, unlike a fuzzy comparator which can be non-transitive.
-        // Region selection/correction remains available for complex cross-panel layouts.
-        let predominantlyVertical = regions.filter(\.isVertical).count > regions.count / 2
-        return regions.sorted {
-            if predominantlyVertical {
-                if $0.box.x != $1.box.x { return $0.box.x > $1.box.x }
-            }
-            if $0.box.y != $1.box.y { return $0.box.y < $1.box.y }
-            return $0.box.x > $1.box.x
-        }
+        return TranslationParagraphs.group(regions, imageSize: image.size)
     }
 
     func load(key: String) -> PageTranslationDocument? {
         guard let url = try? fileURL(key: key), let data = try? Data(contentsOf: url),
               let document = try? JSONDecoder().decode(PageTranslationDocument.self, from: data),
-              document.schema == 1 else { return nil }
+              (1...2).contains(document.schema) else { return nil }
         return document
     }
 

@@ -18,8 +18,10 @@ struct PageTranslationView: View {
     @State private var isSelecting = false
     @State private var manualSelection = false
     @State private var editing: TranslationRegion?
+    @State private var paragraphEditing: TranslationRegion?
     @State private var showingSettings = false
-    @State private var compactPanel = false
+    @State private var showingParagraph = false
+    @State private var showingFullPage = false
     @State private var previewOriginal = false
     @State private var exportURL: URL?
     @State private var exporting = false
@@ -37,38 +39,40 @@ struct PageTranslationView: View {
                 VStack(spacing: 0) {
                     controls
                     if let image = store.image {
-                        HStack(spacing: 0) {
-                            TranslationCanvas(image: image, regions: store.regions,
-                                              mode: previewOriginal || isSelecting ? .original : mode,
-                                              selectedID: store.selectedID, isSelecting: isSelecting,
-                                              onSelect: { id in
-                                store.select(id)
-                                if !wide { compactPanel = true }
-                            }, onRegion: { box in
-                                isSelecting = false
-                                if manualSelection {
-                                    store.addManual(box: box); mode = .comparison
-                                    if !wide { compactPanel = true }
-                                } else { store.recognize(selection: box) }
-                            })
-                            if wide && mode != .original {
-                                regionList.frame(width: min(360, proxy.size.width * 0.32))
-                            }
-                        }
+                        TranslationCanvas(image: image, regions: store.regions,
+                                          mode: previewOriginal || isSelecting ? .original : mode,
+                                          selectedID: store.selectedID, isSelecting: isSelecting,
+                                          onSelect: { id in
+                            store.select(id); showingParagraph = true
+                        }, onRegion: { box in
+                            isSelecting = false
+                            if manualSelection {
+                                store.addManual(box: box); mode = .comparison
+                                editing = store.selectedRegion
+                            } else { store.recognize(selection: box) }
+                        })
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                     } else {
                         ContentUnavailableView("日文图片翻译", systemImage: "character.bubble",
                                                description: Text(store.status))
                             .frame(maxHeight: .infinity)
                     }
                     statusBar
-                    if !wide && !store.regions.isEmpty {
-                        Button { compactPanel = true } label: {
-                            Label("原文与译文 · \(store.completedCount)/\(store.regions.count)", systemImage: "text.bubble")
-                                .frame(maxWidth: .infinity, minHeight: 44)
+                    if !store.regions.isEmpty && !previewOriginal && !isSelecting {
+                        VStack(spacing: 0) {
+                            HStack {
+                                Label(mode == .original ? "本页原文" : "本页完整译文", systemImage: "text.alignleft")
+                                    .font(.subheadline.weight(.semibold))
+                                Spacer()
+                                Button("展开") { showingFullPage = true }
+                                    .accessibilityIdentifier("translation-full-page")
+                            }.padding(.horizontal, 16).padding(.vertical, 10)
+                            Divider()
+                            regionList
                         }
-                        .buttonStyle(.bordered)
-                        .padding(.horizontal)
+                        .frame(height: min(wide ? 340 : 300, max(170, proxy.size.height * 0.40)))
                     }
+
                 }
                 .background(Color(.systemGroupedBackground))
             }
@@ -85,24 +89,52 @@ struct PageTranslationView: View {
                         Button("框选并手动添加", systemImage: "pencil.and.outline") {
                             manualSelection = true; isSelecting = true
                         }.disabled(store.image == nil || store.isBusy)
-                        Button("导出当前中文预览", systemImage: "square.and.arrow.up") { exportPreview() }
+                        Button("导出原图与段落译文", systemImage: "square.and.arrow.up") { exportPreview() }
                             .disabled(store.completedCount == 0 || exporting || store.isBusy)
-                        if let exportURL { ShareLink("分享图片与完整译文", items: [exportURL, exportURL.deletingPathExtension().appendingPathExtension("txt")]) }
+                        if let exportURL { ShareLink("分享原图与完整译文", items: [exportURL, exportURL.deletingPathExtension().appendingPathExtension("txt")]) }
                     } label: { Image(systemName: "ellipsis.circle") }
                 }
             }
             .task(id: selectedPage) {
-                isSelecting = false; exportURL = nil; exporting = false; exportGeneration = UUID()
+                isSelecting = false; showingParagraph = false; showingFullPage = false; editing = nil; exportURL = nil; exporting = false; exportGeneration = UUID()
                 guard let input = pages.first(where: { $0.page == selectedPage }) else { return }
                 store.open(source: input.source, page: input.page, bookID: book.id)
             }
         }
         .onDisappear { store.cancel() }
-        .sheet(isPresented: $compactPanel) {
+        .sheet(isPresented: $showingParagraph) {
             NavigationStack {
-                regionList.navigationTitle("原文与译文")
-                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { compactPanel = false } } }
+                ScrollView {
+                    if let region = store.selectedRegion {
+                        paragraphDetail(region).padding(20)
+                    }
+                }
+                .navigationTitle("这段的翻译")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar { ToolbarItem(placement: .confirmationAction) {
+                    Button("完成") { showingParagraph = false }
+                } }
+                .safeAreaInset(edge: .bottom) {
+                    if let error = store.error { Text(error).font(.footnote).foregroundStyle(.orange).padding() }
+                    if store.isBusy { ProgressView("正在翻译这段…").padding() }
+                }
+                .sheet(item: $paragraphEditing) { region in
+                    TranslationEditor(region: region) { source, translated in
+                        store.edit(id: region.id, source: source, translated: translated)
+                    }
+                }
             }.presentationDetents([.medium, .large])
+        }
+        .sheet(isPresented: $showingFullPage) {
+            NavigationStack {
+                regionList.navigationTitle("本页完整译文")
+                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { showingFullPage = false } } }
+            }.presentationDetents([.large])
+        }
+        .sheet(item: $editing) { region in
+            TranslationEditor(region: region) { source, translated in
+                store.edit(id: region.id, source: source, translated: translated)
+            }
         }
         .sheet(isPresented: $showingSettings) { NavigationStack { TranslationSettingsView() } }
     }
@@ -134,7 +166,7 @@ struct PageTranslationView: View {
                         manualSelection = false; isSelecting.toggle()
                     }.disabled(store.image == nil || store.isBusy)
                     Button("翻译本页", systemImage: "character.bubble.fill") { store.translate() }
-                        .disabled(store.regions.isEmpty || store.isBusy || store.completedCount == store.regions.count)
+                        .disabled(store.regions.isEmpty || store.isBusy || store.pendingCount == 0)
                         .accessibilityIdentifier("translation-start")
                     if store.isBusy { Button("暂停", systemImage: "pause.fill") { store.cancel() } }
                 }.buttonStyle(.bordered).font(.subheadline)
@@ -155,7 +187,7 @@ struct PageTranslationView: View {
             }
             if let error = store.error { Text(error).font(.caption).foregroundStyle(.orange) }
             if let exportURL {
-                ShareLink("分享中文预览与完整译文", items: [exportURL, exportURL.deletingPathExtension().appendingPathExtension("txt")]).font(.caption)
+                ShareLink("分享原图与完整译文", items: [exportURL, exportURL.deletingPathExtension().appendingPathExtension("txt")]).font(.caption)
             }
         }.padding(12).frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -164,51 +196,87 @@ struct PageTranslationView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 12) {
-                    Text("原图不改写 · 点选区域进行校对")
+                    Text(mode == .original ? "点原图中的段落，查看对应译文" : "点原图段落查看译文；这里可连续阅读全页")
                         .font(.caption).foregroundStyle(.secondary)
-                    if store.regions.isEmpty {
-                        ContentUnavailableView("先识别日文", systemImage: "viewfinder",
-                                               description: Text("文字会按区域列在这里。遇到小字或竖排漏字，可以框选重识别。"))
-                    }
                     ForEach(Array(store.regions.enumerated()), id: \.element.id) { index, region in
-                        VStack(alignment: .leading, spacing: 10) {
+                        VStack(alignment: .leading, spacing: 8) {
                             HStack {
-                                Button { store.select(region.id) } label: {
-                                    Label("区域 \(index + 1)", systemImage: "scope")
+                                Text("段落 \(index + 1)").font(.caption.weight(.semibold)).foregroundStyle(AppTheme.accent)
+                                Spacer()
+                                if region.needsRetranslation == true {
+                                    Text("已合并 · 建议重译").font(.caption2).foregroundStyle(.orange)
+                                } else if !region.isEdited && region.confidence < 0.65 {
+                                    Text("请核对原文").font(.caption2).foregroundStyle(.orange)
                                 }
-                                Spacer()
-                                if region.isEdited { Text("已校对").font(.caption2).foregroundStyle(AppTheme.mint) }
-                                else if region.confidence < 0.65 { Text("请核对原文").font(.caption2).foregroundStyle(.orange) }
-                            }.font(.caption.weight(.semibold))
-                            Text(region.source.isEmpty ? "尚未填写原文" : region.source)
-                                .font(.subheadline).foregroundStyle(.secondary).textSelection(.enabled)
-                            Text(region.translated.isEmpty ? "等待翻译" : region.translated)
-                                .font(.body).textSelection(.enabled)
-                            HStack {
-                                Button("校对") { editing = region }
-                                Button(region.translated.isEmpty ? "翻译此处" : "重译") {
-                                    store.select(region.id); store.translate(selectedOnly: true)
-                                }.disabled(region.source.isEmpty)
-                                Spacer()
-                                Button(role: .destructive) { store.remove(id: region.id) } label: { Image(systemName: "trash") }
-                            }.font(.caption).buttonStyle(.bordered).disabled(store.isBusy)
+                            }
+                            if mode != .chinese {
+                                Text(region.source.isEmpty ? "尚未填写原文" : region.source)
+                                    .font(mode == .original ? .body : .subheadline)
+                                    .foregroundStyle(.secondary).textSelection(.enabled)
+                            }
+                            if mode != .original {
+                                Text(region.translated.isEmpty ? "尚未翻译 · 点此段翻译" : region.translated)
+                                    .font(.body).lineSpacing(5).textSelection(.enabled)
+                                    .accessibilityIdentifier("translation-text-\(region.id)")
+                            }
+                            Button("查看这段") { store.select(region.id); showingParagraph = true }
+                                .font(.caption).accessibilityIdentifier("translation-detail-\(region.id)")
                         }
                         .padding(14)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                         .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
                         .overlay { RoundedRectangle(cornerRadius: 16).stroke(region.id == store.selectedID ? AppTheme.accent : .clear, lineWidth: 2) }
                         .id(region.id)
                     }
                 }.padding(14)
             }
+            .accessibilityIdentifier("translation-page-text")
             .onChange(of: store.selectedID) { _, id in
                 if let id { withAnimation(reduceMotion ? nil : AppMotion.value) { proxy.scrollTo(id, anchor: .center) } }
             }
         }.background(Color(.systemGroupedBackground))
-        .sheet(item: $editing) { region in
-            TranslationEditor(region: region) { source, translated in
-                store.edit(id: region.id, source: source, translated: translated)
+    }
+
+    private func paragraphDetail(_ region: TranslationRegion) -> some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Label("日文原文", systemImage: "text.bubble").font(.caption).foregroundStyle(.secondary)
+            Text(region.source.isEmpty ? "尚未填写原文" : region.source)
+                .font(.body).textSelection(.enabled)
+            Divider()
+            Label("中文译文", systemImage: "character.bubble.fill").font(.caption).foregroundStyle(AppTheme.accent)
+            Text(region.translated.isEmpty ? "尚未翻译，点下方按钮翻译这一段。" : region.translated)
+                .font(.title3).lineSpacing(6).textSelection(.enabled)
+                .accessibilityIdentifier("translation-selected-text")
+            if region.needsRetranslation == true {
+                Text("这段由多行合并，旧译文已保留。建议重译，让句意更连贯。")
+                    .font(.footnote).foregroundStyle(.orange)
             }
-        }
+            if !region.isEdited && region.confidence < 0.65 {
+                Text("这段识别置信度较低，请先核对日文，避免漏字影响翻译。")
+                    .font(.footnote).foregroundStyle(.orange)
+            }
+            HStack {
+                Button(region.translated.isEmpty ? "翻译这段" : "重新翻译", systemImage: "character.bubble") {
+                    store.translate(selectedOnly: true)
+                }.disabled(region.source.isEmpty || store.isBusy)
+                Button("校对", systemImage: "pencil") {
+                    paragraphEditing = region
+                }.disabled(store.isBusy)
+            }.buttonStyle(.bordered)
+            if let index = store.regions.firstIndex(where: { $0.id == region.id }) {
+                Menu("合并相邻段落", systemImage: "rectangle.3.group") {
+                    if index > 0 {
+                        Button("与上一段合并") { store.mergeSelected(with: store.regions[index - 1].id) }
+                    }
+                    if index + 1 < store.regions.count {
+                        Button("与下一段合并") { store.mergeSelected(with: store.regions[index + 1].id) }
+                    }
+                }.disabled(store.isBusy || store.regions.count < 2)
+            }
+            Button("删除这段", role: .destructive) {
+                store.remove(id: region.id); showingParagraph = false
+            }.font(.footnote).disabled(store.isBusy)
+        }.frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func exportPreview() {
@@ -220,34 +288,39 @@ struct PageTranslationView: View {
         Task {
             let result = await Task.detached(priority: .utility) {
                 let format = UIGraphicsImageRendererFormat(); format.scale = 1; format.opaque = true
-                // Keep the export bounded. Long translations are also included as a
-                // UTF-8 companion file through the share sheet below.
-                let rendered = UIGraphicsImageRenderer(size: image.size, format: format).image { context in
+                let width = image.size.width
+                let font = UIFont.systemFont(ofSize: max(24, width * 0.028))
+                let style = NSMutableParagraphStyle(); style.lineSpacing = font.pointSize * 0.25
+                let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: UIColor.black, .paragraphStyle: style]
+                let paragraphs = regions.enumerated().map { index, region in
+                    "段落 \(index + 1)\n\(region.translated.isEmpty ? "尚未翻译" : region.translated)"
+                }
+                let heights = paragraphs.map {
+                    ceil(($0 as NSString).boundingRect(with: CGSize(width: width - 64, height: .greatestFiniteMagnitude),
+                                                       options: [.usesLineFragmentOrigin, .usesFontLeading],
+                                                       attributes: attributes, context: nil).height) + 32
+                }
+                // The image export gets a readable transcript below the source,
+                // never number-only substitutes. The TXT always contains all text.
+                let appendix = min(10_000, heights.reduce(64, +))
+                let rendered = UIGraphicsImageRenderer(size: CGSize(width: width, height: image.size.height + appendix), format: format).image { context in
+                    UIColor.white.setFill(); context.fill(CGRect(x: 0, y: 0, width: width, height: image.size.height + appendix))
                     image.draw(in: CGRect(origin: .zero, size: image.size))
-                    for (index, region) in regions.enumerated() where !region.translated.isEmpty {
-                        let rect = region.box.pixels(in: image.size)
-                        let font = TranslationTypography.font(for: region.translated, in: rect.size, imageWidth: image.size.width)
-                        let style = NSMutableParagraphStyle(); style.alignment = .center
-                        if let font {
-                            UIColor.white.setFill(); context.fill(rect)
-                            (region.translated as NSString).draw(in: rect.insetBy(dx: 6, dy: 6), withAttributes: [
-                                .font: font, .foregroundColor: UIColor.black, .paragraphStyle: style
-                            ])
-                        } else {
-                            let side = max(30, image.size.width * 0.04)
-                            let badge = CGRect(x: rect.minX, y: rect.minY, width: side, height: side)
-                            UIColor.systemBlue.setFill(); context.fill(badge)
-                            ("\(index + 1)" as NSString).draw(in: badge, withAttributes: [
-                                .font: UIFont.systemFont(ofSize: side * 0.7), .foregroundColor: UIColor.white, .paragraphStyle: style
-                            ])
+                    var y = image.size.height + 32
+                    for index in paragraphs.indices {
+                        guard y + heights[index] < image.size.height + appendix - 16 else {
+                            ("更多内容请查看随附的完整译文 TXT" as NSString).draw(at: CGPoint(x: 32, y: y), withAttributes: attributes)
+                            break
                         }
+                        (paragraphs[index] as NSString).draw(in: CGRect(x: 32, y: y, width: width - 64, height: heights[index]), withAttributes: attributes)
+                        y += heights[index]
                     }
                 }
                 guard let data = rendered.pngData() else { return Optional<URL>.none }
                 let url = FileManager.default.temporaryDirectory.appendingPathComponent("中文预览-第\(page + 1)页-\(UUID().uuidString.prefix(6)).png")
                 do {
                     try data.write(to: url)
-                    let text = regions.enumerated().filter { !$0.element.translated.isEmpty }.map {
+                    let text = regions.enumerated().map {
                         "[\($0.offset + 1)] \($0.element.source)\n\($0.element.translated)"
                     }.joined(separator: "\n\n")
                     try text.write(to: url.deletingPathExtension().appendingPathExtension("txt"), atomically: true, encoding: .utf8)
@@ -308,7 +381,7 @@ struct TranslationSettingsView: View {
             }
             Section("译文与原图") {
                 Text("识别结果、译文和手动校对自动保存。图片内容改变后会建立新的翻译记录。")
-                Text("中文模式是可关闭的文字覆盖层；复杂背景建议使用对照模式。放不下的长句以编号标记，完整译文可在对照面板查看；导出包含当前清晰预览与完整译文文本，原文件始终保留。")
+                Text("点击原图中的段落查看对应译文；下方始终可查看整页文字。中文模式连续显示中文，对照模式同时显示日文与中文，长译文不会因识别框太小而隐藏。导出附带完整原文与译文文本。")
                 Text("竖排、小字、振假名或拟声字可能需要框选重识别和校对。")
             }.font(.footnote)
         }.navigationTitle("图片翻译").navigationBarTitleDisplayMode(.inline)

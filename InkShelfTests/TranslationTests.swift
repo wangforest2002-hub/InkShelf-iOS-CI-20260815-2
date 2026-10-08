@@ -3,6 +3,90 @@ import UIKit
 @testable import InkShelf
 
 final class TranslationTests: XCTestCase {
+    func testWrappedDialogueBecomesOneParagraphWithoutJoiningSeparateBubblesOrRuby() {
+        let lines = [
+            line("second", "帰ろう。", 0.23, 0.159, 0.34, 0.045),
+            line("first", "今日は一緒に", 0.20, 0.10, 0.40, 0.045),
+            line("other", "寄り道しない？", 0.20, 0.35, 0.45, 0.045),
+            line("ruby", "いっしょ", 0.33, 0.078, 0.08, 0.013),
+            line("neighbor", "また明日。", 0.70, 0.10, 0.25, 0.045)
+        ]
+        let result = TranslationParagraphs.group(lines, imageSize: CGSize(width: 1000, height: 1400))
+        XCTAssertEqual(result.count, 4)
+        let paragraph = result.first { $0.id == "first" }
+        XCTAssertEqual(paragraph?.source, "今日は一緒に\n帰ろう。")
+        XCTAssertEqual(paragraph?.box.rect.maxY ?? 0, 0.204, accuracy: 0.0001)
+        XCTAssertTrue(result.contains { $0.id == "ruby" && $0.source == "いっしょ" })
+        XCTAssertTrue(result.contains { $0.id == "neighbor" && $0.source == "また明日。" })
+    }
+
+    func testVerticalColumnsReadFromRightToLeftWithUnevenTops() {
+        var right = line("right", "今日は", 0.65, 0.10, 0.04, 0.30)
+        var left = line("left", "帰ろう。", 0.595, 0.105, 0.04, 0.28)
+        right.isVertical = true; left.isVertical = true
+        let separate = line("below", "またね。", 0.60, 0.65, 0.25, 0.04)
+        let result = TranslationParagraphs.group([left, separate, right], imageSize: CGSize(width: 1000, height: 1400))
+        XCTAssertEqual(result.count, 2)
+        XCTAssertEqual(result.first?.source, "今日は\n帰ろう。")
+        XCTAssertEqual(result.first?.id, "right")
+    }
+
+    func testLegacyLineTranslationsArePreservedAndMarkedForParagraphRetranslation() throws {
+        var first = line("first", "一緒に", 0.20, 0.10, 0.40, 0.045)
+        var second = line("second", "帰ろう。", 0.20, 0.16, 0.40, 0.045)
+        var edited = line("corrected", "明日ね。", 0.20, 0.22, 0.40, 0.045)
+        first.translated = "一起"; second.translated = "回家吧。"
+        edited.translated = "明天见。"; edited.isEdited = true
+        let legacy = PageTranslationDocument(schema: 1, regions: [first, second, edited])
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(legacy)) as? [String: Any])
+        var records = try XCTUnwrap(json["regions"] as? [[String: Any]])
+        for index in records.indices { records[index].removeValue(forKey: "needsRetranslation") }
+        json["regions"] = records
+        let decoded = try JSONDecoder().decode(PageTranslationDocument.self, from: JSONSerialization.data(withJSONObject: json))
+        let grouped = TranslationParagraphs.group(decoded.regions, imageSize: CGSize(width: 1000, height: 1400))
+        XCTAssertEqual(grouped.count, 2)
+        XCTAssertEqual(grouped[0].translated, "一起\n回家吧。")
+        XCTAssertEqual(grouped[0].needsRetranslation, true)
+        XCTAssertEqual(grouped[1], edited)
+        let roundTrip = try JSONDecoder().decode(PageTranslationDocument.self, from: JSONEncoder().encode(PageTranslationDocument(regions: grouped)))
+        XCTAssertEqual(roundTrip.schema, 2)
+        XCTAssertEqual(roundTrip.regions, grouped)
+    }
+
+    func testContextPrioritizesNeighborsAndExcludesStaleTranslation() {
+        var page = (0..<9).map { index -> TranslationRegion in
+            var r = region("\(index)"); r.source = "\(index)あいうえ"; return r
+        }
+        page[5].translated = "旧译文"; page[5].needsRetranslation = true
+        let input = TranslationRequestInput(targets: [page[4]], page: page, contextBudget: 10)
+        XCTAssertEqual(input.targets.map(\.id), ["4"])
+        XCTAssertEqual(input.context.map(\.id), ["3", "5"])
+        XCTAssertNil(input.context.last?.previousTranslation)
+        XCTAssertEqual(input.targets[0].text, "4あいうえ")
+    }
+
+    @MainActor
+    func testActualMultilineJapaneseOCRProducesOneDialogueParagraph() async throws {
+        let format = UIGraphicsImageRendererFormat(); format.scale = 1; format.opaque = true
+        let image = UIGraphicsImageRenderer(size: CGSize(width: 1200, height: 800), format: format).image { context in
+            UIColor.white.setFill(); context.fill(CGRect(x: 0, y: 0, width: 1200, height: 800))
+            let attributes: [NSAttributedString.Key: Any] = [.font: UIFont.systemFont(ofSize: 64), .foregroundColor: UIColor.black]
+            ("今日は一緒に" as NSString).draw(at: CGPoint(x: 120, y: 180), withAttributes: attributes)
+            ("帰ろう。" as NSString).draw(at: CGPoint(x: 120, y: 265), withAttributes: attributes)
+            ("また明日。" as NSString).draw(at: CGPoint(x: 120, y: 530), withAttributes: attributes)
+        }
+        let result = try await PageTranslationService.shared.recognize(image: image)
+        XCTAssertEqual(result.count, 2)
+        XCTAssertTrue(result[0].source.contains("一緒"))
+        XCTAssertTrue(result[0].source.contains("帰ろう"))
+        XCTAssertTrue(result[1].source.contains("明日"))
+    }
+
+    private func line(_ id: String, _ source: String, _ x: Double, _ y: Double, _ width: Double, _ height: Double) -> TranslationRegion {
+        TranslationRegion(id: id, box: TranslationBox(CGRect(x: x, y: y, width: width, height: height)),
+                          source: source, confidence: 0.95, isVertical: false)
+    }
+
     func testOldLibraryWithoutCoverFocusRemainsReadable() throws {
         let book = Book(title: "旧书", kind: .imageCollection, sourceFileName: "old", contentRelativePath: "old/pages", pageCount: 2, fileSize: 0)
         let data = try JSONEncoder().encode(book)
@@ -11,12 +95,6 @@ final class TranslationTests: XCTestCase {
         let restored = try JSONDecoder().decode(Book.self, from: JSONSerialization.data(withJSONObject: json))
         XCTAssertEqual(restored.id, book.id)
         XCTAssertNil(restored.coverFocus)
-    }
-
-    func testLongTranslationFallsBackToMarkerInsteadOfClipping() {
-        XCTAssertNil(TranslationTypography.font(for: String(repeating: "很长的译文", count: 50),
-                                                in: CGSize(width: 80, height: 30), imageWidth: 1000))
-        XCTAssertNotNil(TranslationTypography.font(for: "一起回家吧", in: CGSize(width: 500, height: 180), imageWidth: 1000))
     }
 
     func testDeletingBookTranslationRecordsKeepsOtherBookAndRejectsLateSave() async throws {

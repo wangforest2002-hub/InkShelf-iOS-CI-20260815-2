@@ -13,6 +13,11 @@ on:
         required: false
         type: boolean
         default: false
+      translation_preview:
+        description: Capture only paragraph interaction and full-page translation UI
+        required: false
+        type: boolean
+        default: false
       verify_translation:
         description: Run focused translation checks without page-turn tests
         required: false
@@ -180,7 +185,7 @@ jobs:
 
       - name: Verify translation geometry, persistence, and local Japanese OCR
         if: ${{ inputs.verify_translation == true }}
-        timeout-minutes: 6
+        timeout-minutes: 10
         run: |
           xcodebuild test-without-building \
             -project InkShelf.xcodeproj \
@@ -197,6 +202,10 @@ jobs:
         run: |
           set -o pipefail
           CAPTURE_STATUS=0
+          PREVIEW_TEST="InkShelfUITests/AppearancePreviewUITests"
+          if [ "${{ inputs.translation_preview }}" = "true" ]; then
+            PREVIEW_TEST="InkShelfUITests/TranslationInteractionUITests"
+          fi
           for DESTINATION in "$DEVICE_ID" "$IPAD_DEVICE_ID"; do
             xcrun simctl shutdown all 2>/dev/null || true
             xcrun simctl boot "$DESTINATION"
@@ -209,7 +218,7 @@ jobs:
               -destination "platform=iOS Simulator,id=$DESTINATION" \
               -derivedDataPath build-simulator \
               -resultBundlePath "appearance-$DESTINATION.xcresult" \
-              -only-testing:InkShelfUITests/AppearancePreviewUITests \
+              -only-testing:"$PREVIEW_TEST" \
               -parallel-testing-enabled NO || CAPTURE_STATUS=$?
             xcrun xcresulttool export attachments \
               --path "appearance-$DESTINATION.xcresult" \
@@ -319,8 +328,8 @@ jobs:
         run: |
           APP_PATH="build/Build/Products/Release-iphoneos/InkShelf.app"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$APP_PATH/Info.plist")" = "二次元小家"
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Info.plist")" = "3.0.0"
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_PATH/Info.plist")" = "32"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Info.plist")" = "3.0.1"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_PATH/Info.plist")" = "33"
           /usr/libexec/PlistBuddy -c 'Print :CFBundleIcons' "$APP_PATH/Info.plist" >/dev/null
           find "$APP_PATH" -maxdepth 1 -type f \( -name 'AppIcon*.png' -o -name 'Assets.car' \) | grep -q .
           test -d "$APP_PATH/RealESRGANAnimeSharp.mlmodelc"
@@ -407,8 +416,8 @@ jobs:
           SIGNED_VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Info.plist")
           SIGNED_BUILD=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_PATH/Info.plist")
           test "$SIGNED_BUNDLE_ID" = "com.inkshelf.reader"
-          test "$SIGNED_VERSION" = "3.0.0"
-          test "$SIGNED_BUILD" = "32"
+          test "$SIGNED_VERSION" = "3.0.1"
+          test "$SIGNED_BUILD" = "33"
           mkdir -p SignedPackage/Payload
           cp -R "$APP_PATH" SignedPackage/Payload/
           (cd SignedPackage && ditto -c -k --sequesterRsrc --keepParent Payload "$GITHUB_WORKSPACE/InkShelf-signed.ipa")

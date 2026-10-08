@@ -271,7 +271,7 @@ struct SettingsView: View {
 
     private var aboutSection: some View {
         Section {
-                    LabeledContent("二次元小家", value: "3.0.0 · 正式版")
+                    LabeledContent("二次元小家", value: "3.0.1 · 正式版")
 
                     LabeledContent("界面材质") {
                         Text(materialLabel)
