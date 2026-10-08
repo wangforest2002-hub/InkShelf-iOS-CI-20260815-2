@@ -22,6 +22,7 @@ struct PageTranslationView: View {
     @State private var showingSettings = false
     @State private var showingParagraph = false
     @State private var showingFullPage = false
+    @State private var showingFullPageParagraph = false
     @State private var previewOriginal = false
     @State private var exportURL: URL?
     @State private var exporting = false
@@ -68,7 +69,7 @@ struct PageTranslationView: View {
                                     .accessibilityIdentifier("translation-full-page")
                             }.padding(.horizontal, 16).padding(.vertical, 10)
                             Divider()
-                            regionList
+                            regionList()
                         }
                         .frame(height: min(wide ? 340 : 300, max(170, proxy.size.height * 0.40)))
                     }
@@ -103,6 +104,27 @@ struct PageTranslationView: View {
         }
         .onDisappear { store.cancel() }
         .sheet(isPresented: $showingParagraph) {
+            paragraphSheet { showingParagraph = false }
+        }
+        .sheet(isPresented: $showingFullPage) {
+            NavigationStack {
+                regionList(expanded: true).navigationTitle("本页完整译文")
+                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { showingFullPage = false } } }
+            }
+            .sheet(isPresented: $showingFullPageParagraph) {
+                paragraphSheet { showingFullPageParagraph = false }
+            }
+            .presentationDetents([.large])
+        }
+        .sheet(item: $editing) { region in
+            TranslationEditor(region: region) { source, translated in
+                store.edit(id: region.id, source: source, translated: translated)
+            }
+        }
+        .sheet(isPresented: $showingSettings) { NavigationStack { TranslationSettingsView() } }
+    }
+
+    private func paragraphSheet(close: @escaping () -> Void) -> some View {
             NavigationStack {
                 ScrollView {
                     if let region = store.selectedRegion {
@@ -112,7 +134,7 @@ struct PageTranslationView: View {
                 .navigationTitle("这段的翻译")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .confirmationAction) {
-                    Button("完成") { showingParagraph = false }
+                    Button("完成") { close() }
                 } }
                 .safeAreaInset(edge: .bottom) {
                     if let error = store.error { Text(error).font(.footnote).foregroundStyle(.orange).padding() }
@@ -124,19 +146,6 @@ struct PageTranslationView: View {
                     }
                 }
             }.presentationDetents([.medium, .large])
-        }
-        .sheet(isPresented: $showingFullPage) {
-            NavigationStack {
-                regionList.navigationTitle("本页完整译文")
-                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { showingFullPage = false } } }
-            }.presentationDetents([.large])
-        }
-        .sheet(item: $editing) { region in
-            TranslationEditor(region: region) { source, translated in
-                store.edit(id: region.id, source: source, translated: translated)
-            }
-        }
-        .sheet(isPresented: $showingSettings) { NavigationStack { TranslationSettingsView() } }
     }
 
     private var controls: some View {
@@ -192,7 +201,7 @@ struct PageTranslationView: View {
         }.padding(12).frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private var regionList: some View {
+    private func regionList(expanded: Bool = false) -> some View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 12) {
@@ -214,12 +223,15 @@ struct PageTranslationView: View {
                                     .font(mode == .original ? .body : .subheadline)
                                     .foregroundStyle(.secondary).textSelection(.enabled)
                             }
-                            if mode != .original {
+                            if mode != .original || expanded {
                                 Text(region.translated.isEmpty ? "尚未翻译 · 点此段翻译" : region.translated)
                                     .font(.body).lineSpacing(5).textSelection(.enabled)
                                     .accessibilityIdentifier("translation-text-\(region.id)")
                             }
-                            Button("查看这段") { store.select(region.id); showingParagraph = true }
+                            Button("查看这段") {
+                                store.select(region.id)
+                                if expanded { showingFullPageParagraph = true } else { showingParagraph = true }
+                            }
                                 .font(.caption).accessibilityIdentifier("translation-detail-\(region.id)")
                         }
                         .padding(14)
@@ -274,7 +286,7 @@ struct PageTranslationView: View {
                 }.disabled(store.isBusy || store.regions.count < 2)
             }
             Button("删除这段", role: .destructive) {
-                store.remove(id: region.id); showingParagraph = false
+                store.remove(id: region.id); showingParagraph = false; showingFullPageParagraph = false
             }.font(.footnote).disabled(store.isBusy)
         }.frame(maxWidth: .infinity, alignment: .leading)
     }

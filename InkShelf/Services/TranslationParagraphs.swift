@@ -22,7 +22,14 @@ enum TranslationParagraphs {
         }
         var groups: [Int: [TranslationRegion]] = [:]
         for index in lines.indices { groups[root(index), default: []].append(lines[index]) }
-        return ordered(groups.values.map { merge(ordered($0)) })
+        return ordered(groups.values.map { lines in
+            let sorted = lines.allSatisfy(\.isVertical) ? lines.sorted {
+                if $0.box.x != $1.box.x { return $0.box.x > $1.box.x }
+                if $0.box.y != $1.box.y { return $0.box.y < $1.box.y }
+                return $0.id < $1.id
+            } : ordered(lines)
+            return merge(sorted)
+        })
     }
 
     static func ordered(_ regions: [TranslationRegion]) -> [TranslationRegion] {

@@ -21,8 +21,8 @@ final class TranslationTests: XCTestCase {
     }
 
     func testVerticalColumnsReadFromRightToLeftWithUnevenTops() {
-        var right = line("right", "今日は", 0.65, 0.10, 0.04, 0.30)
-        var left = line("left", "帰ろう。", 0.595, 0.105, 0.04, 0.28)
+        var right = line("right", "今日は", 0.65, 0.075, 0.04, 0.30)
+        var left = line("left", "帰ろう。", 0.595, 0.060, 0.04, 0.28)
         right.isVertical = true; left.isVertical = true
         let separate = line("below", "またね。", 0.60, 0.65, 0.25, 0.04)
         let result = TranslationParagraphs.group([left, separate, right], imageSize: CGSize(width: 1000, height: 1400))
