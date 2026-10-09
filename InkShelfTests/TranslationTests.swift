@@ -3,6 +3,86 @@ import UIKit
 @testable import InkShelf
 
 final class TranslationTests: XCTestCase {
+    @MainActor
+    func testOneActionRecognizesThenReachesUploadGateWithoutSelectingARegion() async throws {
+        let defaults = UserDefaults.standard
+        let previous = defaults.object(forKey: "ai.includeOCRText")
+        defaults.set(false, forKey: "ai.includeOCRText")
+        defer {
+            if let previous { defaults.set(previous, forKey: "ai.includeOCRText") }
+            else { defaults.removeObject(forKey: "ai.includeOCRText") }
+        }
+        let url = try workflowPage()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let bookID = UUID()
+        let store = PageTranslationStore()
+        store.open(source: .image(url), page: 0, bookID: bookID, automaticallyTranslate: true)
+        await waitForWorkflow(store)
+        XCTAssertFalse(store.regions.isEmpty)
+        XCTAssertTrue(store.regions.map(\.source).joined().contains("一緒"))
+        XCTAssertNil(store.selectedID)
+        XCTAssertTrue(store.error?.contains("文字上传已关闭") == true)
+        XCTAssertEqual(store.completedCount, 0)
+        try await PageTranslationService.shared.removeRecords(bookID: bookID)
+    }
+
+    @MainActor
+    func testAutomaticTranslationReusesCorrectedCacheWithoutNewRecognitionOrUpload() async throws {
+        let url = try workflowPage()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let bookID = UUID()
+        let prepared = try await PageTranslationService.shared.prepare(source: .image(url), page: 0, bookID: bookID)
+        var corrected = region("manually-corrected")
+        corrected.source = "こんにちは"; corrected.translated = "你好。"; corrected.isEdited = true
+        try await PageTranslationService.shared.save(PageTranslationDocument(regions: [corrected]), key: prepared.key)
+        let store = PageTranslationStore()
+        store.open(source: .image(url), page: 0, bookID: bookID, automaticallyTranslate: true)
+        await waitForWorkflow(store)
+        XCTAssertEqual(store.regions, [corrected])
+        XCTAssertNil(store.error)
+        XCTAssertEqual(store.pendingCount, 0)
+        try await PageTranslationService.shared.removeRecords(bookID: bookID)
+    }
+
+    @MainActor
+    func testStoppingBeforePreparationPreventsAutomaticRecognitionAndTranslation() async throws {
+        let url = try workflowPage()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let bookID = UUID()
+        let store = PageTranslationStore()
+        store.open(source: .image(url), page: 0, bookID: bookID, automaticallyTranslate: true)
+        store.cancel()
+        try await Task.sleep(nanoseconds: 200_000_000)
+        XCTAssertFalse(store.isBusy)
+        XCTAssertTrue(store.regions.isEmpty)
+        XCTAssertNil(store.error)
+        XCTAssertNil(store.image)
+        try await PageTranslationService.shared.removeRecords(bookID: bookID)
+    }
+
+    @MainActor
+    private func workflowPage() throws -> URL {
+        let format = UIGraphicsImageRendererFormat(); format.scale = 1; format.opaque = true
+        let image = UIGraphicsImageRenderer(size: CGSize(width: 1200, height: 600), format: format).image { context in
+            UIColor.white.setFill(); context.fill(CGRect(x: 0, y: 0, width: 1200, height: 600))
+            ("今日は一緒に帰ろう。" as NSString).draw(at: CGPoint(x: 120, y: 180), withAttributes: [
+                .font: UIFont.systemFont(ofSize: 64), .foregroundColor: UIColor.black
+            ])
+        }
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("translation-workflow-\(UUID()).png")
+        try XCTUnwrap(image.pngData()).write(to: url)
+        return url
+    }
+
+    @MainActor
+    private func waitForWorkflow(_ store: PageTranslationStore) async {
+        for _ in 0..<400 {
+            if !store.isBusy { break }
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
+        XCTAssertFalse(store.isBusy, "Translation pipeline did not settle")
+    }
+
     func testWrappedDialogueBecomesOneParagraphWithoutJoiningSeparateBubblesOrRuby() {
         let lines = [
             line("second", "帰ろう。", 0.23, 0.159, 0.34, 0.045),

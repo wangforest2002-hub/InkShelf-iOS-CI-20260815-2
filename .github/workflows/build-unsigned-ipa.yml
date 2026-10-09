@@ -328,8 +328,8 @@ jobs:
         run: |
           APP_PATH="build/Build/Products/Release-iphoneos/InkShelf.app"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$APP_PATH/Info.plist")" = "二次元小家"
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Info.plist")" = "3.0.1"
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_PATH/Info.plist")" = "33"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Info.plist")" = "3.0.2"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_PATH/Info.plist")" = "34"
           /usr/libexec/PlistBuddy -c 'Print :CFBundleIcons' "$APP_PATH/Info.plist" >/dev/null
           find "$APP_PATH" -maxdepth 1 -type f \( -name 'AppIcon*.png' -o -name 'Assets.car' \) | grep -q .
           test -d "$APP_PATH/RealESRGANAnimeSharp.mlmodelc"
@@ -416,8 +416,8 @@ jobs:
           SIGNED_VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Info.plist")
           SIGNED_BUILD=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_PATH/Info.plist")
           test "$SIGNED_BUNDLE_ID" = "com.inkshelf.reader"
-          test "$SIGNED_VERSION" = "3.0.1"
-          test "$SIGNED_BUILD" = "33"
+          test "$SIGNED_VERSION" = "3.0.2"
+          test "$SIGNED_BUILD" = "34"
           mkdir -p SignedPackage/Payload
           cp -R "$APP_PATH" SignedPackage/Payload/
           (cd SignedPackage && ditto -c -k --sequesterRsrc --keepParent Payload "$GITHUB_WORKSPACE/InkShelf-signed.ipa")

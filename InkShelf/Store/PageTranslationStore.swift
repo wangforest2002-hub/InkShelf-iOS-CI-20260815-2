@@ -20,7 +20,7 @@ final class PageTranslationStore {
     var pendingCount: Int { regions.filter { !$0.source.isEmpty && ($0.translated.isEmpty || $0.needsRetranslation == true) }.count }
     var selectedRegion: TranslationRegion? { regions.first { $0.id == selectedID } }
 
-    func open(source: AIPageSource, page: Int, bookID: UUID) {
+    func open(source: AIPageSource, page: Int, bookID: UUID, automaticallyTranslate: Bool = false) {
         cancel()
         let token = generation
         image = nil; regions = []; key = nil; selectedID = nil; error = nil; modelID = nil
@@ -35,6 +35,12 @@ final class PageTranslationStore {
 #if DEBUG && targetEnvironment(simulator)
                 if ProcessInfo.processInfo.arguments.contains("INKSHELF_UI_TEST_APPEARANCE") {
                     regions = AppearancePreviewFixture.translationRegions
+                    if ProcessInfo.processInfo.arguments.contains("INKSHELF_UI_TEST_TRANSLATION_EMPTY") {
+                        regions = []
+                        isBusy = false; status = "准备翻译本页"
+                        if automaticallyTranslate { translatePage() }
+                        return
+                    }
                     if ProcessInfo.processInfo.arguments.contains("INKSHELF_UI_TEST_TRANSLATION_TIGHT_BOXES") {
                         // Reproduce a real line-height OCR box that could not fit
                         // Chinese in 3.0.0. These are UI fixtures, not cloud results.
@@ -53,9 +59,10 @@ final class PageTranslationStore {
                     status = "已恢复 \(completedCount) / \(regions.count) 处译文"
                     if saved.schema == 1 { persist() }
                 } else {
-                    status = "点“识别本页”或框选一处日文"
+                    status = "点“翻译本页”，自动识别并翻译"
                 }
                 isBusy = false
+                if automaticallyTranslate && (regions.isEmpty || pendingCount > 0) { translatePage() }
             } catch {
                 guard isCurrent(token) else { return }
                 self.error = error.localizedDescription; isBusy = false; status = "画面准备失败"
@@ -63,7 +70,15 @@ final class PageTranslationStore {
         }
     }
 
-    func recognize(selection: TranslationBox? = nil) {
+    /// One action owns the complete pipeline. Cached translations are reused;
+    /// stopping or changing page invalidates recognition before it can start AI.
+    func translatePage() {
+        guard image != nil, !isBusy else { return }
+        if regions.isEmpty { recognize(translateAfter: true) }
+        else { translate() }
+    }
+
+    func recognize(selection: TranslationBox? = nil, translateAfter: Bool = false) {
         guard let image, !isBusy else { return }
         begin(status: selection == nil ? "正在识别本页日文…" : "正在识别框选区域…")
         let token = generation
@@ -81,9 +96,10 @@ final class PageTranslationStore {
                     regions = found
                 }
                 selectedID = nil
-                status = found.isEmpty ? "没有识别到文字，可扩大框选范围或手动添加" : "已识别 \(regions.count) 处文字，可以校对或翻译"
+                status = found.isEmpty ? "没有识别到可翻译的文字，请检查页面清晰度后重试" : "已识别 \(regions.count) 段文字"
                 isBusy = false
                 persist()
+                if translateAfter && !found.isEmpty { translate() }
             } catch {
                 guard isCurrent(token) else { return }
                 self.error = error.localizedDescription; isBusy = false; status = "识别未完成"
@@ -98,7 +114,7 @@ final class PageTranslationStore {
         }
         guard !candidates.isEmpty else { status = "没有待翻译的文字"; return }
         guard candidates.allSatisfy({ $0.source.count <= 4_000 }) else {
-            error = "某段文字过长，请框选较短段落后单独翻译。"; return
+            error = "某段文字过长，请在校对中缩短为完整段落后重译。"; return
         }
         let defaults = UserDefaults.standard
         guard defaults.object(forKey: "ai.includeOCRText") as? Bool ?? true else {
@@ -147,7 +163,10 @@ final class PageTranslationStore {
         }
     }
 
-    func select(_ id: String?) { selectedID = id }
+    func select(_ id: String?) {
+        if selectedID != id { error = nil }
+        selectedID = id
+    }
 
     func edit(id: String, source: String, translated: String) {
         guard !isBusy, let index = regions.firstIndex(where: { $0.id == id }) else { return }

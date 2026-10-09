@@ -1,12 +1,77 @@
 import XCTest
 
-/// Focused translation UI checks; deliberately performs no page-turn gestures.
+/// Translation interactions only; no reader page-turn gestures.
 final class TranslationInteractionUITests: XCTestCase {
-    func testParagraphTapAndFullPageChineseRemainReadable() throws {
+    func testCachedTranslationHasOneActionAndInlineParagraphs() throws {
         continueAfterFailure = false
+        let app = openTranslation(arguments: ["INKSHELF_UI_TEST_TRANSLATION_TIGHT_BOXES"])
+        XCTAssertTrue(app.staticTexts["translation-text-preview-1"].waitForExistence(timeout: 15))
+        XCTAssertEqual(app.staticTexts["translation-text-preview-1"].label, "今天一起回家吧。")
+        XCTAssertFalse(app.segmentedControls["translation-mode"].exists)
+        XCTAssertFalse(app.buttons["识别本页"].exists)
+        XCTAssertFalse(app.buttons["框选识别"].exists)
+        XCTAssertEqual(app.buttons["translation-start"].label, "翻译完成")
+        capture("translation-01-page")
+
+        app.buttons["translation-region-preview-1"].tap()
+        let selected = app.staticTexts["translation-selected-text"]
+        XCTAssertTrue(selected.waitForExistence(timeout: 5))
+        XCTAssertEqual(selected.label, "今天一起回家吧。")
+        XCTAssertTrue(app.buttons["translation-close"].isHittable)
+        XCTAssertFalse(app.navigationBars["这段的翻译"].exists)
+        capture("translation-02-inline-paragraph")
+        app.buttons["translation-next-paragraph"].tap()
+        XCTAssertEqual(selected.label, "要不要稍微绕个路？")
+        app.buttons["translation-previous-paragraph"].tap()
+        XCTAssertEqual(selected.label, "今天一起回家吧。")
+
+        app.segmentedControls["translation-scope"].buttons["整页译文"].tap()
+        app.buttons["translation-full-page"].tap()
+        XCTAssertTrue(app.navigationBars["整页译文"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["translation-full-text-preview-2"].exists)
+        XCTAssertTrue(app.staticTexts["translation-full-text-preview-3"].exists)
+        capture("translation-03-full-page")
+        app.descendants(matching: .any)["translation-full-detail-preview-2"].firstMatch.tap()
+        XCTAssertTrue(selected.waitForExistence(timeout: 5))
+        XCTAssertEqual(selected.label, "要不要稍微绕个路？")
+        XCTAssertTrue(app.buttons["translation-close"].isHittable)
+
+        app.buttons["translation-paragraph-tools"].tap()
+        app.buttons["校对原文与译文"].tap()
+        XCTAssertTrue(app.textViews["translation-editor-source"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.textViews["translation-editor-source"].value as? String, "少しだけ、寄り道しない？")
+        app.buttons["translation-editor-cancel"].tap()
+        XCTAssertTrue(selected.waitForExistence(timeout: 5))
+        app.buttons["translation-retranslate-paragraph"].tap()
+        XCTAssertTrue(app.buttons["translation-error-settings"].waitForExistence(timeout: 5))
+        app.buttons["translation-error-settings"].tap()
+        XCTAssertTrue(app.navigationBars["翻译设置"].waitForExistence(timeout: 5))
+        app.buttons["translation-settings-close"].tap()
+        app.buttons["translation-close"].tap()
+        XCTAssertTrue(app.buttons["reader-close"].waitForExistence(timeout: 5))
+        app.terminate()
+    }
+
+    func testOpeningTranslationAutomaticallyRecognizesWithoutPositionSelection() throws {
+        continueAfterFailure = false
+        let app = openTranslation(arguments: ["INKSHELF_UI_TEST_TRANSLATION_EMPTY"])
+        // No button or region is tapped after entering the workspace. Vision
+        // must run and the pipeline must reach the credential check itself.
+        XCTAssertTrue(app.buttons["translation-error-settings"].waitForExistence(timeout: 25))
+        XCTAssertTrue(app.segmentedControls["translation-scope"].exists)
+        XCTAssertGreaterThan(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "translation-region-")).count, 0)
+        XCTAssertFalse(app.segmentedControls["translation-mode"].exists)
+        XCTAssertFalse(app.buttons["识别本页"].exists)
+        XCTAssertFalse(app.buttons["框选识别"].exists)
+        XCTAssertEqual(app.buttons["translation-start"].label, "重试翻译")
+        capture("translation-04-automatic-ocr")
+        app.terminate()
+    }
+
+    private func openTranslation(arguments: [String]) -> XCUIApplication {
         XCUIDevice.shared.orientation = .portrait
         let app = XCUIApplication()
-        app.launchArguments = ["INKSHELF_UI_TEST_APPEARANCE", "INKSHELF_UI_TEST_TRANSLATION_TIGHT_BOXES"]
+        app.launchArguments = ["INKSHELF_UI_TEST_APPEARANCE"] + arguments
         app.launch()
         let resume = app.buttons["library-continue-reading"]
         XCTAssertTrue(resume.waitForExistence(timeout: 20))
@@ -15,40 +80,8 @@ final class TranslationInteractionUITests: XCTestCase {
         let translate = app.buttons["reader-translate"]
         XCTAssertTrue(translate.waitForExistence(timeout: 10))
         translate.tap()
-        let paragraph = app.buttons["translation-region-preview-1"]
-        XCTAssertTrue(paragraph.waitForExistence(timeout: 15))
-        XCTAssertTrue(app.staticTexts["translation-text-preview-1"].waitForExistence(timeout: 5))
-        XCTAssertEqual(app.staticTexts["translation-text-preview-1"].label, "今天一起回家吧。")
-        capture("translation-01-comparison")
-        paragraph.tap()
-        let selected = app.staticTexts["translation-selected-text"]
-        XCTAssertTrue(selected.waitForExistence(timeout: 5))
-        XCTAssertEqual(selected.label, "今天一起回家吧。")
-        capture("translation-02-paragraph")
-        app.buttons["重新翻译"].tap()
-        XCTAssertTrue(app.staticTexts["请先在翻译与陪读设置中填写 API 密钥。识别文字可以离线使用。"].waitForExistence(timeout: 5))
-        app.buttons["translation-paragraph-close"].tap()
-        app.segmentedControls["translation-mode"].buttons["中文"].tap()
-        XCTAssertTrue(app.staticTexts["translation-text-preview-1"].waitForExistence(timeout: 5))
-        XCTAssertEqual(app.staticTexts["translation-text-preview-1"].label, "今天一起回家吧。")
-        capture("translation-03-chinese")
-        app.buttons["translation-full-page"].tap()
-        XCTAssertTrue(app.navigationBars["本页完整译文"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["translation-full-text-preview-2"].exists)
-        XCTAssertTrue(app.staticTexts["translation-full-text-preview-3"].exists)
-        capture("translation-04-full-page")
-        app.buttons["translation-full-detail-preview-2"].tap()
-        XCTAssertTrue(selected.waitForExistence(timeout: 5))
-        XCTAssertEqual(selected.label, "要不要稍微绕个路？")
-        app.buttons["translation-paragraph-close"].tap()
-        XCTAssertTrue(app.navigationBars["本页完整译文"].waitForExistence(timeout: 5))
-        app.buttons["translation-full-close"].tap()
-        app.segmentedControls["translation-mode"].buttons["原图"].tap()
-        XCTAssertTrue(app.buttons["translation-region-preview-1"].exists)
-        app.buttons["translation-region-preview-1"].tap()
-        XCTAssertTrue(selected.waitForExistence(timeout: 5))
-        XCTAssertEqual(selected.label, "今天一起回家吧。")
-        app.terminate()
+        XCTAssertTrue(app.buttons["translation-close"].waitForExistence(timeout: 10))
+        return app
     }
 
     private func capture(_ name: String) {
